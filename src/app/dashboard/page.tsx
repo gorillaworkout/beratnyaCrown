@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Image from "next/image";
 import {
   collection,
   onSnapshot,
@@ -742,17 +743,29 @@ export default function DashboardPage() {
         <header
           className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-6 ${glassCardClass}`}
         >
-          <div>
-            <p className="text-sm uppercase tracking-[0.24em] text-slate-300">
-              BeratnyaCrown
-            </p>
-            <h1 className="text-2xl font-semibold">Dashboard Catatan Berat</h1>
-            <p className="text-sm text-slate-300">
-              Update terakhir: {lastUpdated ? formatDate(lastUpdated) : "Belum ada data"}
-            </p>
-            <p className="text-xs text-slate-400">
-              {isAdmin ? "Mode Admin Aktif" : "Mode Publik (Read-only)"}
-            </p>
+          <div className="flex items-center gap-4">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
+              <Image
+                src="/logo_flyer.png"
+                alt="BeratnyaCrown"
+                width={40}
+                height={40}
+                className="h-10 w-10 object-contain"
+                priority
+              />
+            </div>
+            <div>
+              <p className="text-sm uppercase tracking-[0.24em] text-slate-300">
+                BeratnyaCrown
+              </p>
+              <h1 className="text-2xl font-semibold">Dashboard Catatan Berat</h1>
+              <p className="text-sm text-slate-300">
+                Update terakhir: {lastUpdated ? formatDate(lastUpdated) : "Belum ada data"}
+              </p>
+              <p className="text-xs text-slate-400">
+                {isAdmin ? "Mode Admin Aktif" : "Mode Publik (Read-only)"}
+              </p>
+            </div>
           </div>
           <Button
             variant="outline"
