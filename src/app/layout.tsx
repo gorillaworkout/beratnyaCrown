@@ -1,14 +1,18 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
-const siteUrl = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
+const siteUrl =
+  process.env.NEXT_PUBLIC_BASE_URL ??
+  (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+const ogImageUrl = new URL("/logo_flyer.png", siteUrl);
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "BeratnyaCrown",
   description: "Pencatatan berat flyer flyer gendut q",
   icons: {
-    icon: "/logo_flyer.png",
+    icon: [{ url: "/logo_flyer.png", type: "image/png" }],
     shortcut: "/logo_flyer.png",
     apple: "/logo_flyer.png"
   },
@@ -20,7 +24,9 @@ export const metadata: Metadata = {
     url: "/",
     images: [
       {
-        url: "/logo_flyer.png",
+        url: ogImageUrl,
+        width: 1200,
+        height: 630,
         alt: "BeratnyaCrown"
       }
     ]
@@ -29,7 +35,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "BeratnyaCrown",
     description: "Pencatatan berat flyer flyer gendut q",
-    images: ["/logo_flyer.png"]
+    images: [ogImageUrl.toString()]
   }
 };
 
