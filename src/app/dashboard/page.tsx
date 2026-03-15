@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import {
   collection,
+  getDocs,
   onSnapshot,
   orderBy,
   query
@@ -156,6 +157,15 @@ type WeightLog = {
   weight: number;
   trainingDate: Date | null;
   createdAt: Date | null;
+};
+
+type PenaltyInfo = {
+  athleteId: string;
+  athleteName: string;
+  currentWeight: number;
+  goalWeight: number | null;
+  streak: number;
+  penalty: PenaltyPlan | null;
 };
 
 const sortWeightLogs = (logs: WeightLog[]) =>
@@ -336,6 +346,10 @@ export default function DashboardPage() {
   const [isSeedingLogs, setIsSeedingLogs] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const [penaltyInfos, setPenaltyInfos] = useState<PenaltyInfo[]>([]);
+  const [penaltyLoading, setPenaltyLoading] = useState(false);
+  const [allAthleteLogs, setAllAthleteLogs] = useState<Record<string, WeightLog[]>>({});
+  const [allLogsLoading, setAllLogsLoading] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -407,6 +421,89 @@ export default function DashboardPage() {
       setSelectedAthleteId("");
     }
   }, [athletes, selectedAthleteId]);
+
+
+  // Load all weight logs + compute penalties for all athletes
+  useEffect(() => {
+    if (!athletes.length) {
+      setAllAthleteLogs({});
+      setPenaltyInfos([]);
+      return;
+    }
+    let cancelled = false;
+    setAllLogsLoading(true);
+    setPenaltyLoading(true);
+
+    const loadAll = async () => {
+      const result: Record<string, WeightLog[]> = {};
+      const infos: PenaltyInfo[] = [];
+
+      await Promise.all(
+        athletes.map(async (athlete) => {
+          try {
+            const logsQuery = query(collection(db, "athletes", athlete.id, "weights"));
+            const snapshot = await getDocs(logsQuery);
+            const logs = sortWeightLogs(
+              snapshot.docs.map((docSnap) => {
+                const docData = docSnap.data();
+                return {
+                  id: docSnap.id,
+                  weight: Number(docData.weight ?? 0),
+                  trainingDate: normalizeTrainingDate(docData.trainingDate),
+                  createdAt: toDate(docData.createdAt),
+                } as WeightLog;
+              })
+            );
+            result[athlete.id] = logs;
+
+            // Compute penalty
+            const effectiveLogs = logs.length > 0 ? logs : [
+              { id: "current", weight: athlete.currentWeight, trainingDate: athlete.trainingDate, createdAt: athlete.updatedAt },
+              ...(athlete.previousWeight !== null ? [{ id: "previous", weight: athlete.previousWeight, trainingDate: null, createdAt: null }] : []),
+            ] as WeightLog[];
+            const streak = getNoProgressStreak(effectiveLogs, athlete.goalWeight);
+            if (streak > 0) {
+              infos.push({
+                athleteId: athlete.id,
+                athleteName: athlete.name,
+                currentWeight: athlete.currentWeight,
+                goalWeight: athlete.goalWeight,
+                streak,
+                penalty: getPenaltyForStreak(streak),
+              });
+            }
+          } catch (err) {
+            console.error(`Failed to load logs for ${athlete.name}:`, err);
+            result[athlete.id] = [];
+          }
+        })
+      );
+
+      if (!cancelled) {
+        setAllAthleteLogs(result);
+        setAllLogsLoading(false);
+        infos.sort((a, b) => b.streak - a.streak);
+        setPenaltyInfos(infos);
+        setPenaltyLoading(false);
+      }
+    };
+
+    loadAll();
+    return () => { cancelled = true; };
+  }, [athletes]);
+
+  // Get unique training dates across all athletes (sorted newest first), max 5
+  const allTrainingDates = useMemo(() => {
+    const dateSet = new Set<string>();
+    Object.values(allAthleteLogs).forEach((logs) => {
+      logs.forEach((log) => {
+        if (log.trainingDate) {
+          dateSet.add(formatDateValue(log.trainingDate));
+        }
+      });
+    });
+    return Array.from(dateSet).sort((a, b) => b.localeCompare(a)).slice(0, 5);
+  }, [allAthleteLogs]);
 
   useEffect(() => {
     if (detailAthleteId && !athletes.find((athlete) => athlete.id === detailAthleteId)) {
@@ -968,117 +1065,186 @@ export default function DashboardPage() {
           </Card>
         )}
 
+        {/* Excel-style Comparison Table */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <CardTitle>Daftar Perbandingan Berat Athlete</CardTitle>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>📋 Daftar Perbandingan Berat Athlete</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Menampilkan 5 data timbang terbaru. Klik athlete untuk detail lengkap.
+                </CardDescription>
+              </div>
+              {lastUpdated && (
+                <Badge className="bg-cyan-500/25 text-cyan-100 text-sm px-3 py-1">
+                  📅 {formatDate(lastUpdated)}
+                </Badge>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
-            <Table className="min-w-[920px] text-slate-100">
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-slate-300">Atlet</TableHead>
-                  <TableHead className="text-slate-300">Tanggal Latihan</TableHead>
-                  <TableHead className="text-slate-300">Goal</TableHead>
-                  <TableHead className="text-slate-300">Berat Saat Ini</TableHead>
-                  <TableHead className="text-slate-300">Berat Sebelumnya</TableHead>
-                  <TableHead className="text-slate-300">Perubahan</TableHead>
-                  <TableHead className="text-slate-300">Status</TableHead>
-                  <TableHead className="text-slate-300">Catatan</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loading ? (
-                  <TableRow className="hover:bg-white/5">
-                    <TableCell colSpan={8} className="text-center text-sm text-slate-300">
-                      Memuat data...
-                    </TableCell>
-                  </TableRow>
-                ) : athletes.length === 0 ? (
-                  <TableRow className="hover:bg-white/5">
-                    <TableCell colSpan={8} className="text-center text-sm text-slate-300">
-                      Belum ada data athlete.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  athletes.map((athlete) => {
-                    const previous = athlete.previousWeight;
-                    const delta = previous !== null ? athlete.currentWeight - previous : null;
-                    const improved = previous !== null && athlete.currentWeight < previous;
-                    const stable = previous !== null && athlete.currentWeight === previous;
-                    const goalWeight = athlete.goalWeight ?? null;
-                    const needsPenalty =
-                      goalWeight === null
-                        ? true
-                        : previous === null
-                          ? false
-                          : Math.abs(athlete.currentWeight - goalWeight) >=
-                            Math.abs(previous - goalWeight);
-                    const isSelected = athlete.id === detailAthleteId;
-
-                    return (
-                      <TableRow
-                        key={athlete.id}
-                        className={`cursor-pointer hover:bg-white/5 ${isSelected ? "bg-white/10" : ""}`}
-                        onClick={() => setDetailAthleteId(athlete.id)}
-                        role="button"
-                        tabIndex={0}
-                        onKeyDown={(event) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            setDetailAthleteId(athlete.id);
-                          }
-                        }}
-                      >
-                        <TableCell>
-                          <div className="font-medium">{athlete.name}</div>
-                        </TableCell>
-                        <TableCell>
-                          {athlete.trainingDate ? formatDate(athlete.trainingDate) : "Belum ada"}
-                        </TableCell>
-                        <TableCell>
-                          {goalWeight !== null ? `${goalWeight.toFixed(1)} kg` : "Belum diatur"}
-                        </TableCell>
-                        <TableCell>{athlete.currentWeight.toFixed(1)} kg</TableCell>
-                        <TableCell>
-                          {previous === null ? "Belum ada data" : `${previous.toFixed(1)} kg`}
-                        </TableCell>
-                        <TableCell>
-                          {delta === null ? "-" : `${delta > 0 ? "+" : ""}${delta.toFixed(1)} kg`}
-                        </TableCell>
-                        <TableCell>
-                          {previous === null ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-slate-500/40 text-slate-100"
-                            >
-                              Data Baru
-                            </Badge>
-                          ) : improved ? (
-                            <Badge className="bg-emerald-500/80 text-emerald-50">Turun</Badge>
-                          ) : stable ? (
-                            <Badge
-                              variant="secondary"
-                              className="bg-slate-500/40 text-slate-100"
-                            >
-                              Stagnan
-                            </Badge>
-                          ) : (
-                            <Badge variant="destructive">Naik</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-slate-300">
-                          {goalWeight === null
-                            ? missingGoalNote
-                            : needsPenalty
-                              ? noProgressNote
-                              : keepTrainingNote}
+            {allLogsLoading ? (
+              <p className="text-sm text-slate-300">Memuat data timbang...</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table className="min-w-[600px] text-slate-100">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-slate-300 sticky left-0 bg-black/80 backdrop-blur-sm z-10 min-w-[120px]">Atlet</TableHead>
+                      <TableHead className="text-slate-300 text-center">Goal</TableHead>
+                      {allTrainingDates.map((dateStr) => {
+                        const d = new Date(`${dateStr}T00:00:00`);
+                        return (
+                          <TableHead key={dateStr} className="text-slate-300 text-center min-w-[80px]">
+                            <div className="text-xs">{d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</div>
+                            <div className="text-[10px] text-slate-400">{d.getFullYear()}</div>
+                          </TableHead>
+                        );
+                      })}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={allTrainingDates.length + 3} className="text-center text-sm text-slate-300">
+                          Memuat data...
                         </TableCell>
                       </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+                    ) : athletes.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={allTrainingDates.length + 3} className="text-center text-sm text-slate-300">
+                          Belum ada data athlete.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      athletes.map((athlete, idx) => {
+                        const previous = athlete.previousWeight;
+                        const improved = previous !== null && athlete.currentWeight < previous;
+                        const stable = previous !== null && athlete.currentWeight === previous;
+                        const goalWeight = athlete.goalWeight ?? null;
+                        const isSelected = athlete.id === detailAthleteId;
+                        const logs = allAthleteLogs[athlete.id] ?? [];
+
+                        return (
+                          <TableRow
+                            key={athlete.id}
+                            className={`cursor-pointer hover:bg-white/10 transition-colors ${isSelected ? "bg-white/15" : idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.06]"}`}
+                            onClick={() => setDetailAthleteId(athlete.id)}
+                            role="button"
+                            tabIndex={0}
+                            onKeyDown={(event) => {
+                              if (event.key === "Enter" || event.key === " ") {
+                                event.preventDefault();
+                                setDetailAthleteId(athlete.id);
+                              }
+                            }}
+                          >
+                            <TableCell className="sticky left-0 bg-black/80 backdrop-blur-sm z-10 font-medium">
+                              {athlete.name}
+                            </TableCell>
+                            <TableCell className="text-center text-xs">
+                              {goalWeight !== null ? `${goalWeight.toFixed(1)}` : "-"}
+                            </TableCell>
+                            {allTrainingDates.map((dateStr) => {
+                              const log = logs.find((l) => l.trainingDate && formatDateValue(l.trainingDate) === dateStr);
+                              const logIdx = log ? logs.indexOf(log) : -1;
+                              const prevLog = logIdx >= 0 && logIdx < logs.length - 1 ? logs[logIdx + 1] : null;
+                              const logDelta = log && prevLog ? log.weight - prevLog.weight : null;
+                              return (
+                                <TableCell key={dateStr} className="text-center">
+                                  {log ? (
+                                    <div>
+                                      <span className="font-semibold text-sm">{log.weight.toFixed(1)}</span>
+                                      {logDelta !== null && (
+                                        <div className={`text-[10px] ${logDelta < 0 ? "text-emerald-400" : logDelta > 0 ? "text-rose-400" : "text-slate-400"}`}>
+                                          {logDelta > 0 ? "+" : ""}{logDelta.toFixed(1)}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-600">-</span>
+                                  )}
+                                </TableCell>
+                              );
+                            })}
+
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Penalty Summary Table */}
+        <Card className={glassCardClass}>
+          <CardHeader>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <CardTitle>⚠️ Daftar Athlete Kena Hukuman</CardTitle>
+                <CardDescription className="text-slate-300">
+                  Athlete yang tidak menunjukkan progres menuju goal berat.
+                </CardDescription>
+              </div>
+              <Badge className={penaltyInfos.length > 0 ? "bg-rose-500/30 text-rose-100" : "bg-emerald-500/30 text-emerald-100"}>
+                {penaltyLoading ? "Memuat..." : `${penaltyInfos.length} athlete`}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {penaltyLoading ? (
+              <p className="text-sm text-slate-300">Memuat data hukuman...</p>
+            ) : penaltyInfos.length === 0 ? (
+              <p className="text-sm text-emerald-300">✅ Semua athlete menunjukkan progres!</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table className="min-w-[650px] text-slate-100">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="text-slate-300 w-10">No</TableHead>
+                      <TableHead className="text-slate-300">Nama</TableHead>
+                      <TableHead className="text-slate-300">Berat</TableHead>
+                      <TableHead className="text-slate-300">Goal</TableHead>
+                      <TableHead className="text-slate-300">Streak</TableHead>
+                      <TableHead className="text-slate-300">Level</TableHead>
+                      <TableHead className="text-slate-300">Detail Hukuman</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {penaltyInfos.map((info, i) => (
+                      <TableRow key={info.athleteId} className={`hover:bg-white/10 ${i % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.06]"}`}>
+                        <TableCell className="text-sm">{i + 1}</TableCell>
+                        <TableCell className="font-medium">{info.athleteName}</TableCell>
+                        <TableCell>{info.currentWeight.toFixed(1)} kg</TableCell>
+                        <TableCell>{info.goalWeight !== null ? `${info.goalWeight.toFixed(1)} kg` : "-"}</TableCell>
+                        <TableCell>
+                          <Badge variant="destructive" className="text-xs">{info.streak}x</Badge>
+                        </TableCell>
+                        <TableCell>
+                          {info.penalty ? (
+                            <Badge className="bg-amber-500/30 text-amber-100 text-xs">Level {info.penalty.level}</Badge>
+                          ) : "-"}
+                        </TableCell>
+                        <TableCell className="text-xs text-slate-300 max-w-[200px]">
+                          {info.penalty ? (
+                            <div>
+                              <span className="font-medium text-slate-200">{info.penalty.duration}</span>
+                              {" • "}{info.penalty.rounds}
+                              <br />
+                              {info.penalty.exercises.slice(0, 3).join(", ")}
+                              {info.penalty.exercises.length > 3 && ` +${info.penalty.exercises.length - 3} lagi`}
+                            </div>
+                          ) : "-"}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
           </CardContent>
         </Card>
 
