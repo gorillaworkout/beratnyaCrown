@@ -659,29 +659,27 @@ export default function JadwalPage() {
               </div>
             </div>
 
-            {/* Export buttons row */}
+            {/* Subscribe & Export buttons */}
             <div className="flex flex-wrap gap-2">
+              <a
+                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin + "/api/calendar" : "/api/calendar")}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
+              >
+                <Calendar className="h-3.5 w-3.5 text-cyan-400" />
+                Subscribe Google Calendar
+              </a>
+              <a
+                href={typeof window !== "undefined" ? window.location.origin.replace(/^https?/, "webcal") + "/api/calendar" : "webcal:///api/calendar"}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
+              >
+                <Calendar className="h-3.5 w-3.5 text-emerald-400" />
+                Subscribe Apple Calendar
+              </a>
               <Button variant="outline" size="sm" onClick={downloadICS} className="border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs">
                 <Download className="h-3 w-3 mr-1" /> Download .ics
               </Button>
-              {schedule
-                .filter((s) => s.date >= todayStr)
-                .slice(0, 3)
-                .map((s) => {
-                  const d = new Date(s.date + "T00:00:00");
-                  return (
-                    <a
-                      key={s.date}
-                      href={getGoogleCalendarUrl(s)}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-white/10 transition"
-                    >
-                      <Calendar className="h-3 w-3" />
-                      GCal {d.getDate()}/{d.getMonth() + 1}
-                    </a>
-                  );
-                })}
             </div>
 
             {/* Day Headers */}
