@@ -349,6 +349,21 @@ export default function JadwalPage() {
     setCurrentMonth(today.getMonth());
   };
 
+  // ─── Calendar Sync Trigger ────────────────────────────────────────────────
+
+  const triggerCalendarSync = async () => {
+    try {
+      const adminKey = "dupoin123"; // matches ADMIN_PASSWORD
+      await fetch("/api/calendar/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key: adminKey }),
+      });
+    } catch {
+      // Silent fail — calendar sync is best-effort
+    }
+  };
+
   // ─── Custom Date Management ──────────────────────────────────────────────
 
   const addCustomDate = async () => {
@@ -359,10 +374,12 @@ export default function JadwalPage() {
     });
     setNewCustomDate("");
     setNewCustomLabel("");
+    triggerCalendarSync();
   };
 
   const removeCustomDate = async (id: string) => {
     await deleteDoc(doc(db, "crown-custom-dates", id));
+    triggerCalendarSync();
   };
 
   // ─── Jersey Override Management ──────────────────────────────────────────
@@ -383,6 +400,7 @@ export default function JadwalPage() {
       { [dateStr]: nextIndex },
       { merge: true }
     );
+    triggerCalendarSync();
   };
 
   const randomizeAll = async () => {
@@ -399,6 +417,7 @@ export default function JadwalPage() {
     }
 
     await setDoc(doc(db, "crown-jersey-overrides", "overrides"), overrides);
+    triggerCalendarSync();
   };
 
   // ─── Event Management ────────────────────────────────────────────────────
@@ -413,10 +432,12 @@ export default function JadwalPage() {
     });
     setNewEventName("");
     setNewEventDate("");
+    triggerCalendarSync();
   };
 
   const removeEvent = async (id: string) => {
     await deleteDoc(doc(db, "crown-events", id));
+    triggerCalendarSync();
   };
 
   // ─── Countdown ───────────────────────────────────────────────────────────
@@ -662,20 +683,20 @@ export default function JadwalPage() {
             {/* Subscribe & Export buttons */}
             <div className="flex flex-wrap gap-2">
               <a
-                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(typeof window !== "undefined" ? window.location.origin + "/api/calendar" : "/api/calendar")}`}
+                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID || "")}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-medium text-white hover:from-cyan-500 hover:to-blue-500 transition shadow-lg shadow-cyan-500/20"
               >
-                <Calendar className="h-3.5 w-3.5 text-cyan-400" />
-                Subscribe Google Calendar
+                <Calendar className="h-3.5 w-3.5" />
+                Subscribe ke Google Calendar
               </a>
               <a
                 href={typeof window !== "undefined" ? window.location.origin.replace(/^https?/, "webcal") + "/api/calendar" : "webcal:///api/calendar"}
                 className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
               >
                 <Calendar className="h-3.5 w-3.5 text-emerald-400" />
-                Subscribe Apple Calendar
+                Apple Calendar
               </a>
               <Button variant="outline" size="sm" onClick={downloadICS} className="border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs">
                 <Download className="h-3 w-3 mr-1" /> Download .ics
