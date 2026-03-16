@@ -12,35 +12,76 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import {
   ChevronLeft,
   ChevronRight,
   Plus,
   Calendar,
-  RefreshCw,
   X,
   Sparkles,
+  Download,
 } from "lucide-react";
+import { useAuth } from "@/lib/auth-context";
+import { db } from "@/lib/firebase";
+import {
+  collection,
+  getDocs,
+  addDoc,
+  deleteDoc,
+  doc,
+  setDoc,
+  onSnapshot,
+} from "firebase/firestore";
 
-const glassCardClass =
-  "border-white/10 bg-white/5 backdrop-blur-md shadow-xl";
+// ─── Constants ───────────────────────────────────────────────────────────────
 
-// Jersey colors with emoji + gradient for visual punch
+const glassCardClass = "border-white/10 bg-white/5 backdrop-blur-md shadow-xl";
+
 const JERSEY_COLORS = [
-  { name: "Merah", hex: "#ef4444", bg: "bg-red-500", emoji: "🔴", gradient: "from-red-500 to-red-700" },
-  { name: "Biru", hex: "#3b82f6", bg: "bg-blue-500", emoji: "🔵", gradient: "from-blue-500 to-blue-700" },
-  { name: "Pink", hex: "#ec4899", bg: "bg-pink-500", emoji: "🩷", gradient: "from-pink-500 to-pink-700" },
-  { name: "Ungu", hex: "#8b5cf6", bg: "bg-violet-500", emoji: "🟣", gradient: "from-violet-500 to-violet-700" },
-  { name: "Hijau", hex: "#22c55e", bg: "bg-green-500", emoji: "🟢", gradient: "from-green-500 to-green-700" },
-  { name: "Hitam", hex: "#374151", bg: "bg-gray-700", emoji: "⚫", gradient: "from-gray-600 to-gray-800" },
-] as const;
+  {
+    name: "Merah",
+    hex: "#ef4444",
+    bg: "bg-red-500",
+    emoji: "🔴",
+    gradient: "from-red-500 to-red-600",
+  },
+  {
+    name: "Biru",
+    hex: "#3b82f6",
+    bg: "bg-blue-500",
+    emoji: "🔵",
+    gradient: "from-blue-500 to-blue-600",
+  },
+  {
+    name: "Pink",
+    hex: "#ec4899",
+    bg: "bg-pink-500",
+    emoji: "🩷",
+    gradient: "from-pink-500 to-pink-600",
+  },
+  {
+    name: "Ungu",
+    hex: "#8b5cf6",
+    bg: "bg-violet-500",
+    emoji: "🟣",
+    gradient: "from-violet-500 to-violet-600",
+  },
+  {
+    name: "Hijau",
+    hex: "#22c55e",
+    bg: "bg-green-500",
+    emoji: "🟢",
+    gradient: "from-green-500 to-green-600",
+  },
+  {
+    name: "Hitam",
+    hex: "#374151",
+    bg: "bg-gray-700",
+    emoji: "⚫",
+    gradient: "from-gray-700 to-gray-800",
+  },
+];
+
+// ─── Types ───────────────────────────────────────────────────────────────────
 
 type JerseyColor = (typeof JERSEY_COLORS)[number];
 
@@ -52,26 +93,51 @@ type ScheduleEntry = {
   jerseyColor: JerseyColor;
 };
 
-// Seed-based random so colors are stable per date, avoids repeating previous color
-function getJerseyForDate(dateStr: string, prevColorIdx?: number): JerseyColor {
+type CrownEvent = {
+  id?: string;
+  name: string;
+  date: string;
+  emoji: string;
+  color: string;
+};
+
+type CustomDate = {
+  id?: string;
+  date: string;
+  label: string;
+};
+
+// ─── Helper Functions ────────────────────────────────────────────────────────
+
+function getJerseyForDate(
+  dateStr: string,
+  index: number,
+  prevColorIndex: number | null
+): number {
+  // Seed-based hash from date string
   let hash = 0;
   for (let i = 0; i < dateStr.length; i++) {
-    hash = (hash << 5) - hash + dateStr.charCodeAt(i);
-    hash |= 0;
+    const char = dateStr.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash; // Convert to 32-bit integer
   }
-  let idx = Math.abs(hash) % JERSEY_COLORS.length;
-  // If same as previous, shift to next
-  if (prevColorIdx !== undefined && idx === prevColorIdx) {
-    idx = (idx + 1) % JERSEY_COLORS.length;
+  hash = Math.abs(hash + index * 7);
+
+  let colorIndex = hash % JERSEY_COLORS.length;
+
+  // Avoid repeating previous color
+  if (prevColorIndex !== null && colorIndex === prevColorIndex) {
+    colorIndex = (colorIndex + 1) % JERSEY_COLORS.length;
   }
-  return JERSEY_COLORS[idx];
+
+  return colorIndex;
 }
 
-function getDaysInMonth(year: number, month: number) {
+function getDaysInMonth(year: number, month: number): number {
   return new Date(year, month + 1, 0).getDate();
 }
 
-function formatMonthYear(year: number, month: number) {
+function formatMonthYear(year: number, month: number): string {
   return new Date(year, month).toLocaleDateString("id-ID", {
     month: "long",
     year: "numeric",
@@ -79,562 +145,659 @@ function formatMonthYear(year: number, month: number) {
 }
 
 const DAY_NAMES_ID = [
-  "Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu",
+  "Minggu",
+  "Senin",
+  "Selasa",
+  "Rabu",
+  "Kamis",
+  "Jumat",
+  "Sabtu",
 ];
-const SHORT_DAY_NAMES = ["Min", "Sen", "Sel", "Rab", "Kam", "Jum", "Sab"];
 
-// Regular training days: 0=Sunday, 3=Wednesday, 6=Saturday
-const REGULAR_DAYS = new Set([0, 3, 6]);
+const SHORT_DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 
-// Training starts from April 1, 2026
+const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
+
 const TRAINING_START = new Date(2026, 3, 1); // April 1, 2026
 
-// Events / Competitions
-type CrownEvent = {
-  name: string;
-  date: string; // YYYY-MM-DD
-  emoji: string;
-  color: string; // gradient
-};
-
-const EVENTS_KEY = "beratnya-events";
-
-const DEFAULT_EVENTS: CrownEvent[] = [
+const DEFAULT_EVENTS: Omit<CrownEvent, "id">[] = [
   {
-    name: "Kejurda (Kejuaraan Daerah)",
+    name: "Kejurda",
     date: "2026-05-31",
     emoji: "🏆",
     color: "from-amber-500 to-yellow-600",
   },
   {
-    name: "Kejurnas (Kejuaraan Nasional)",
+    name: "Kejurnas",
     date: "2026-07-26",
     emoji: "🥇",
     color: "from-violet-500 to-purple-600",
   },
 ];
 
-const STORAGE_KEY = "beratnya-custom-dates";
-const JERSEY_OVERRIDE_KEY = "beratnya-jersey-overrides";
+// ─── Component ───────────────────────────────────────────────────────────────
 
 export default function JadwalPage() {
-  const today = new Date();
-  const [currentYear, setCurrentYear] = useState(today.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(today.getMonth());
-  const [customDates, setCustomDates] = useState<string[]>([]);
-  const [jerseyOverrides, setJerseyOverrides] = useState<Record<string, number>>({});
+  const { user, loading: authLoading } = useAuth();
+  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+
+  // ─── State ───────────────────────────────────────────────────────────────
+
+  const now = new Date();
+  const [currentYear, setCurrentYear] = useState(now.getFullYear());
+  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
+  const [customDates, setCustomDates] = useState<CustomDate[]>([]);
+  const [jerseyOverrides, setJerseyOverrides] = useState<
+    Record<string, number>
+  >({});
+  const [events, setEvents] = useState<CrownEvent[]>([]);
   const [newCustomDate, setNewCustomDate] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [events, setEvents] = useState<CrownEvent[]>(DEFAULT_EVENTS);
+  const [newCustomLabel, setNewCustomLabel] = useState("");
   const [newEventName, setNewEventName] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
+  const [firestoreLoading, setFirestoreLoading] = useState(true);
+
+  // ─── Firestore Listeners ─────────────────────────────────────────────────
 
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) setCustomDates(JSON.parse(saved));
-      const savedEvents = localStorage.getItem(EVENTS_KEY);
-      if (savedEvents) setEvents(JSON.parse(savedEvents));
-      const savedJerseys = localStorage.getItem(JERSEY_OVERRIDE_KEY);
-      if (savedJerseys) setJerseyOverrides(JSON.parse(savedJerseys));
-      fetch("/api/admin/session")
-        .then((r) => r.json())
-        .then((d) => setIsAdmin(!!d.isAdmin))
-        .catch(() => {});
-    } catch {}
-  }, []);
+    if (authLoading) return;
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(customDates));
-  }, [customDates]);
+    let firstSnapshot = true;
 
-  useEffect(() => {
-    localStorage.setItem(JERSEY_OVERRIDE_KEY, JSON.stringify(jerseyOverrides));
-  }, [jerseyOverrides]);
+    // Listen to crown-events
+    const unsubEvents = onSnapshot(
+      collection(db, "crown-events"),
+      async (snapshot) => {
+        if (snapshot.empty && firstSnapshot) {
+          // Seed default events
+          for (const evt of DEFAULT_EVENTS) {
+            await addDoc(collection(db, "crown-events"), evt);
+          }
+        } else {
+          const evts: CrownEvent[] = snapshot.docs.map((d) => ({
+            id: d.id,
+            ...(d.data() as Omit<CrownEvent, "id">),
+          }));
+          setEvents(evts);
+        }
+        if (firstSnapshot) {
+          firstSnapshot = false;
+        }
+      }
+    );
 
-  useEffect(() => {
-    localStorage.setItem(EVENTS_KEY, JSON.stringify(events));
-  }, [events]);
+    // Listen to crown-custom-dates
+    const unsubCustomDates = onSnapshot(
+      collection(db, "crown-custom-dates"),
+      (snapshot) => {
+        const dates: CustomDate[] = snapshot.docs.map((d) => ({
+          id: d.id,
+          date: d.data().date as string,
+          label: d.data().label as string,
+        }));
+        setCustomDates(dates);
+      }
+    );
+
+    // Listen to jersey overrides
+    const unsubOverrides = onSnapshot(
+      doc(db, "crown-jersey-overrides", "overrides"),
+      (snapshot) => {
+        if (snapshot.exists()) {
+          setJerseyOverrides(snapshot.data() as Record<string, number>);
+        } else {
+          setJerseyOverrides({});
+        }
+        setFirestoreLoading(false);
+      }
+    );
+
+    return () => {
+      unsubEvents();
+      unsubCustomDates();
+      unsubOverrides();
+    };
+  }, [authLoading]);
+
+  // ─── Schedule Memo ───────────────────────────────────────────────────────
 
   const schedule = useMemo(() => {
     const entries: ScheduleEntry[] = [];
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+    const customDateSet = new Set(customDates.map((cd) => cd.date));
+
+    let prevColorIndex: number | null = null;
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const d = new Date(currentYear, currentMonth, day);
-      const dayOfWeek = d.getDay();
+      const date = new Date(currentYear, currentMonth, day);
       const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const isRegular = REGULAR_DAYS.has(dayOfWeek);
-      const isCustom = customDates.includes(dateStr);
+      const dayOfWeek = date.getDay();
+      const dayName = DAY_NAMES_ID[dayOfWeek];
 
-      // Skip dates before training start
-      if (d < TRAINING_START && !isCustom) continue;
+      const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
+      const isCustom = customDateSet.has(dateStr);
 
       if (isRegular || isCustom) {
-        const colorIdx = jerseyOverrides[dateStr];
-        const prevEntry = entries.length > 0 ? entries[entries.length - 1] : null;
-        const prevColorIdx = prevEntry ? JERSEY_COLORS.indexOf(prevEntry.jerseyColor) : undefined;
-        const jersey = colorIdx !== undefined ? JERSEY_COLORS[colorIdx] : getJerseyForDate(dateStr, prevColorIdx);
+        let colorIndex: number;
+        if (jerseyOverrides[dateStr] !== undefined) {
+          colorIndex = jerseyOverrides[dateStr];
+        } else {
+          colorIndex = getJerseyForDate(dateStr, entries.length, prevColorIndex);
+        }
+
         entries.push({
           date: dateStr,
-          dayName: DAY_NAMES_ID[dayOfWeek],
+          dayName,
           isRegular,
-          isCustom: isCustom && !isRegular,
-          jerseyColor: jersey,
+          isCustom,
+          jerseyColor: JERSEY_COLORS[colorIndex],
         });
+
+        prevColorIndex = colorIndex;
       }
     }
+
     return entries;
   }, [currentYear, currentMonth, customDates, jerseyOverrides]);
 
+  // ─── Calendar Grid Memo ──────────────────────────────────────────────────
+
   const calendarGrid = useMemo(() => {
-    const firstDay = new Date(currentYear, currentMonth, 1).getDay();
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    const weeks: (null | { day: number; dateStr: string; entry?: ScheduleEntry })[][] = [];
-    let week: (null | { day: number; dateStr: string; entry?: ScheduleEntry })[] = [];
+    // Monday-start offset: JS getDay() gives 0=Sun, we want Mon=0
+    const firstDayOffset =
+      (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7;
 
-    for (let i = 0; i < firstDay; i++) week.push(null);
+    const grid: (number | null)[] = [];
 
+    // Leading empty cells
+    for (let i = 0; i < firstDayOffset; i++) {
+      grid.push(null);
+    }
+
+    // Days of month
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
-      const entry = schedule.find((s) => s.date === dateStr);
-      week.push({ day, dateStr, entry });
-      if (week.length === 7) {
-        weeks.push(week);
-        week = [];
-      }
+      grid.push(day);
     }
-    if (week.length > 0) {
-      while (week.length < 7) week.push(null);
-      weeks.push(week);
-    }
-    return weeks;
-  }, [currentYear, currentMonth, schedule]);
+
+    return grid;
+  }, [currentYear, currentMonth]);
+
+  // ─── Navigation ──────────────────────────────────────────────────────────
 
   const prevMonth = () => {
-    if (currentMonth === 0) { setCurrentYear(currentYear - 1); setCurrentMonth(11); }
-    else setCurrentMonth(currentMonth - 1);
+    if (currentMonth === 0) {
+      setCurrentMonth(11);
+      setCurrentYear((y) => y - 1);
+    } else {
+      setCurrentMonth((m) => m - 1);
+    }
   };
 
   const nextMonth = () => {
-    if (currentMonth === 11) { setCurrentYear(currentYear + 1); setCurrentMonth(0); }
-    else setCurrentMonth(currentMonth + 1);
+    if (currentMonth === 11) {
+      setCurrentMonth(0);
+      setCurrentYear((y) => y + 1);
+    } else {
+      setCurrentMonth((m) => m + 1);
+    }
   };
 
   const goToday = () => {
+    const today = new Date();
     setCurrentYear(today.getFullYear());
     setCurrentMonth(today.getMonth());
   };
 
-  const addCustomDate = () => {
-    if (newCustomDate && !customDates.includes(newCustomDate)) {
-      setCustomDates([...customDates, newCustomDate].sort());
-      setNewCustomDate("");
-    }
-  };
+  // ─── Custom Date Management ──────────────────────────────────────────────
 
-  const removeCustomDate = (dateStr: string) => {
-    setCustomDates(customDates.filter((d) => d !== dateStr));
-  };
-
-  const cycleJersey = (dateStr: string) => {
-    const current = jerseyOverrides[dateStr];
-    const nextIdx = current !== undefined ? (current + 1) % JERSEY_COLORS.length : 1;
-    setJerseyOverrides({ ...jerseyOverrides, [dateStr]: nextIdx });
-  };
-
-  const randomizeAll = () => {
-    const overrides: Record<string, number> = {};
-    schedule.forEach((entry) => {
-      overrides[entry.date] = Math.floor(Math.random() * JERSEY_COLORS.length);
+  const addCustomDate = async () => {
+    if (!newCustomDate) return;
+    await addDoc(collection(db, "crown-custom-dates"), {
+      date: newCustomDate,
+      label: newCustomLabel || "Latihan Tambahan",
     });
-    setJerseyOverrides({ ...jerseyOverrides, ...overrides });
+    setNewCustomDate("");
+    setNewCustomLabel("");
   };
 
-  const addEvent = () => {
-    if (newEventName && newEventDate) {
-      setEvents([...events, {
-        name: newEventName,
-        date: newEventDate,
-        emoji: "🏆",
-        color: "from-cyan-500 to-blue-600",
-      }].sort((a, b) => a.date.localeCompare(b.date)));
-      setNewEventName("");
-      setNewEventDate("");
+  const removeCustomDate = async (id: string) => {
+    await deleteDoc(doc(db, "crown-custom-dates", id));
+  };
+
+  // ─── Jersey Override Management ──────────────────────────────────────────
+
+  const cycleJersey = async (dateStr: string) => {
+    const currentIndex = jerseyOverrides[dateStr];
+    const entry = schedule.find((s) => s.date === dateStr);
+    if (!entry) return;
+
+    const currentColorIndex = JERSEY_COLORS.indexOf(entry.jerseyColor);
+    const nextIndex =
+      currentIndex !== undefined
+        ? (currentIndex + 1) % JERSEY_COLORS.length
+        : (currentColorIndex + 1) % JERSEY_COLORS.length;
+
+    await setDoc(
+      doc(db, "crown-jersey-overrides", "overrides"),
+      { [dateStr]: nextIndex },
+      { merge: true }
+    );
+  };
+
+  const randomizeAll = async () => {
+    const overrides: Record<string, number> = {};
+    let prevIdx: number | null = null;
+
+    for (const entry of schedule) {
+      let idx = Math.floor(Math.random() * JERSEY_COLORS.length);
+      if (prevIdx !== null && idx === prevIdx) {
+        idx = (idx + 1) % JERSEY_COLORS.length;
+      }
+      overrides[entry.date] = idx;
+      prevIdx = idx;
     }
+
+    await setDoc(doc(db, "crown-jersey-overrides", "overrides"), overrides);
   };
 
-  const removeEvent = (idx: number) => {
-    setEvents(events.filter((_, i) => i !== idx));
+  // ─── Event Management ────────────────────────────────────────────────────
+
+  const addEvent = async () => {
+    if (!newEventName || !newEventDate) return;
+    await addDoc(collection(db, "crown-events"), {
+      name: newEventName,
+      date: newEventDate,
+      emoji: "🏆",
+      color: "from-amber-500 to-yellow-600",
+    });
+    setNewEventName("");
+    setNewEventDate("");
   };
 
-  const getCountdown = (dateStr: string) => {
-    const target = new Date(`${dateStr}T00:00:00`);
-    const now = new Date();
-    const diff = target.getTime() - now.getTime();
-    if (diff <= 0) return "Sudah lewat";
-    const days = Math.ceil(diff / (1000 * 60 * 60 * 24));
-    if (days === 1) return "Besok!";
-    if (days <= 7) return `${days} hari lagi`;
-    const weeks = Math.floor(days / 7);
-    return `${days} hari (${weeks} minggu)`;
+  const removeEvent = async (id: string) => {
+    await deleteDoc(doc(db, "crown-events", id));
   };
 
-  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+  // ─── Countdown ───────────────────────────────────────────────────────────
+
+  const getCountdown = (dateStr: string): string => {
+    const target = new Date(dateStr + "T00:00:00");
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const diffMs = target.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays < 0) return "Sudah lewat";
+    if (diffDays === 0) return "Hari ini!";
+    if (diffDays === 1) return "Besok!";
+    return `${diffDays} hari lagi`;
+  };
+
+  // ─── ICS Download ────────────────────────────────────────────────────────
+
+  const downloadICS = () => {
+    const lines: string[] = [
+      "BEGIN:VCALENDAR",
+      "VERSION:2.0",
+      "PRODID:-//Crown Allstar//Jadwal//ID",
+      "CALSCALE:GREGORIAN",
+      "METHOD:PUBLISH",
+    ];
+
+    for (const entry of schedule) {
+      const dateCompact = entry.date.replace(/-/g, "");
+      const uid = `crown-${entry.date}@crownallstar.id`;
+
+      lines.push("BEGIN:VEVENT");
+      lines.push(`DTSTART;VALUE=DATE:${dateCompact}`);
+      lines.push(`SUMMARY:Latihan Crown Allstar`);
+      lines.push(`DESCRIPTION:Jersey: ${entry.jerseyColor.name}`);
+      lines.push(`UID:${uid}`);
+      lines.push("END:VEVENT");
+    }
+
+    lines.push("END:VCALENDAR");
+
+    const blob = new Blob([lines.join("\r\n")], {
+      type: "text/calendar;charset=utf-8",
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `jadwal-crown-${formatMonthYear(currentYear, currentMonth).replace(/\s+/g, "-")}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // ─── Google Calendar URL ─────────────────────────────────────────────────
+
+  const getGoogleCalendarUrl = (entry: ScheduleEntry): string => {
+    const dateCompact = entry.date.replace(/-/g, "");
+    // For all-day event, end date is the next day
+    const endDate = new Date(entry.date + "T00:00:00");
+    endDate.setDate(endDate.getDate() + 1);
+    const endCompact = `${endDate.getFullYear()}${String(endDate.getMonth() + 1).padStart(2, "0")}${String(endDate.getDate()).padStart(2, "0")}`;
+
+    const params = new URLSearchParams({
+      action: "TEMPLATE",
+      text: "Latihan Crown Allstar",
+      dates: `${dateCompact}/${endCompact}`,
+      details: `Jersey: ${entry.jerseyColor.name} ${entry.jerseyColor.emoji}`,
+    });
+
+    return `https://calendar.google.com/calendar/render?${params.toString()}`;
+  };
+
+  // ─── Computed Values ─────────────────────────────────────────────────────
+
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
   const totalSessions = schedule.length;
   const regularCount = schedule.filter((s) => s.isRegular).length;
-  const customCount = schedule.filter((s) => s.isCustom).length;
+  const customCount = schedule.filter((s) => s.isCustom && !s.isRegular).length;
   const todayEntry = schedule.find((s) => s.date === todayStr);
 
-  return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-4 text-slate-100 sm:p-6">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+  // ─── Loading State ───────────────────────────────────────────────────────
 
+  if (authLoading || firestoreLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-12 w-12 animate-spin rounded-full border-4 border-white/20 border-t-white/80" />
+          <p className="text-sm text-white/60">Memuat jadwal...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
+      <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
-        <header className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-6 ${glassCardClass}`}>
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 shadow-lg shadow-cyan-500/20">
-              <Calendar className="h-6 w-6 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-white sm:text-2xl">Jadwal Latihan</h1>
-              <p className="text-sm text-slate-400">Rabu • Sabtu • Minggu + Latihan Tambahan</p>
-            </div>
+        <div className="text-center space-y-2 py-6">
+          <div className="flex items-center justify-center gap-3">
+            <Calendar className="h-8 w-8 text-cyan-400" />
+            <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+              Jadwal Latihan
+            </h1>
           </div>
-        </header>
+          <p className="text-slate-400 text-sm">Rabu • Sabtu • Minggu + Latihan Tambahan</p>
+        </div>
 
         {/* Summary Cards */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className={glassCardClass}>
-            <CardContent className="flex flex-col items-center gap-1 p-4">
-              <span className="text-3xl font-bold text-cyan-400">{totalSessions}</span>
-              <span className="text-xs text-slate-400">Total Latihan</span>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider">Total Latihan</p>
+              <p className="text-3xl font-bold text-cyan-400 mt-1">{totalSessions}</p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
-            <CardContent className="flex flex-col items-center gap-1 p-4">
-              <span className="text-3xl font-bold text-emerald-400">{regularCount}</span>
-              <span className="text-xs text-slate-400">Rutin</span>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider">Rutin</p>
+              <p className="text-3xl font-bold text-emerald-400 mt-1">{regularCount}</p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
-            <CardContent className="flex flex-col items-center gap-1 p-4">
-              <span className="text-3xl font-bold text-amber-400">{customCount}</span>
-              <span className="text-xs text-slate-400">Tambahan</span>
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider">Tambahan</p>
+              <p className="text-3xl font-bold text-amber-400 mt-1">{customCount}</p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
-            <CardContent className="flex flex-col items-center gap-1 p-4">
+            <CardContent className="p-4 text-center">
+              <p className="text-xs text-slate-400 uppercase tracking-wider">Hari Ini</p>
               {todayEntry ? (
-                <>
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${todayEntry.jerseyColor.gradient} shadow-lg`}
-                  >
-                    <span className="text-lg">👕</span>
-                  </div>
-                  <span className="text-xs text-slate-400">
-                    Hari Ini: <span className="font-semibold text-white">{todayEntry.jerseyColor.name}</span>
-                  </span>
-                </>
+                <div className="mt-1">
+                  <span className="text-3xl">👕</span>
+                  <p className="text-xs mt-1" style={{ color: todayEntry.jerseyColor.hex }}>
+                    {todayEntry.jerseyColor.name}
+                  </p>
+                </div>
               ) : (
-                <>
-                  <span className="text-3xl">😴</span>
-                  <span className="text-xs text-slate-400">Hari Ini Libur</span>
-                </>
+                <p className="text-3xl mt-1">😴 <span className="text-sm text-slate-500">Libur</span></p>
               )}
             </CardContent>
           </Card>
         </div>
 
-
-        {/* Upcoming Events */}
+        {/* Events & Lomba Card */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <CardTitle className="text-white">🏆 Event & Lomba</CardTitle>
-            <CardDescription className="text-slate-400">
-              Countdown menuju kompetisi
-            </CardDescription>
+            <CardTitle className="text-white flex items-center gap-2">
+              <span>🏆</span> Events & Lomba
+            </CardTitle>
+            <CardDescription className="text-slate-400">Acara mendatang dan countdown</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {events.map((evt, i) => {
-              const d = new Date(`${evt.date}T00:00:00`);
-              const isPast = d < today;
+            {events.length === 0 && (
+              <p className="text-slate-500 text-sm text-center py-4">Belum ada event</p>
+            )}
+            {events.map((ev) => {
+              const countdown = getCountdown(ev.date);
+              const evDate = new Date(ev.date + "T00:00:00");
+              const isPast = evDate < now;
               return (
-                <div
-                  key={i}
-                  className={`flex items-center gap-4 rounded-xl border p-4 transition-all ${
-                    isPast
-                      ? "border-white/5 bg-white/[0.02] opacity-50"
-                      : "border-white/10 bg-white/[0.04]"
-                  }`}
-                >
-                  <div
-                    className={`flex h-14 w-14 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br ${evt.color} shadow-lg`}
-                  >
-                    <span className="text-2xl">{evt.emoji}</span>
+                <div key={ev.id || ev.date} className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">{ev.emoji || "🏅"}</span>
+                    <div>
+                      <p className="font-semibold text-white">{ev.name}</p>
+                      <p className="text-xs text-slate-400">
+                        {evDate.toLocaleDateString("id-ID", {
+                          weekday: "long", year: "numeric", month: "long", day: "numeric",
+                        })}
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-white">{evt.name}</p>
-                    <p className="text-sm text-slate-400">
-                      {d.toLocaleDateString("id-ID", {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                        year: "numeric",
-                      })}
-                    </p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1">
-                    <Badge
-                      className={`text-xs ${
-                        isPast
-                          ? "bg-slate-500/30 text-slate-300"
-                          : "bg-amber-500/20 text-amber-200"
-                      }`}
-                    >
-                      {isPast ? "Selesai" : getCountdown(evt.date)}
+                  <div className="flex items-center gap-2">
+                    <Badge className={
+                      isPast
+                        ? "bg-slate-600 text-slate-300"
+                        : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                    }>
+                      {countdown}
                     </Badge>
-                    {isAdmin && (
-                      <button
-                        onClick={() => removeEvent(i)}
-                        className="text-[10px] text-slate-600 hover:text-rose-400 transition-colors"
-                      >
-                        hapus
-                      </button>
+                    {isAdmin && ev.id && (
+                      <Button variant="ghost" size="sm" onClick={() => removeEvent(ev.id!)} className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                        <X className="h-3 w-3" />
+                      </Button>
                     )}
                   </div>
                 </div>
               );
             })}
-
             {isAdmin && (
-              <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
+              <div className="flex gap-2 mt-3 pt-3 border-t border-white/10">
                 <Input
+                  type="text"
                   placeholder="Nama event..."
                   value={newEventName}
                   onChange={(e) => setNewEventName(e.target.value)}
-                  className="max-w-[200px] border-white/20 bg-white/5 text-white text-sm"
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 flex-1"
                 />
                 <Input
                   type="date"
                   value={newEventDate}
                   onChange={(e) => setNewEventDate(e.target.value)}
-                  className="max-w-[170px] border-white/20 bg-white/5 text-white [color-scheme:dark] text-sm"
+                  className="bg-white/5 border-white/10 text-white w-40 [color-scheme:dark]"
                 />
-                <Button
-                  onClick={addEvent}
-                  disabled={!newEventName || !newEventDate}
-                  className="bg-cyan-600 hover:bg-cyan-700 text-white text-sm"
-                >
-                  <Plus className="mr-1 h-4 w-4" /> Tambah
+                <Button onClick={addEvent} size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white">
+                  <Plus className="h-4 w-4" />
                 </Button>
               </div>
             )}
           </CardContent>
         </Card>
 
-        {/* Calendar View */}
+        {/* Calendar View Card */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="flex items-center gap-2">
-                <Button variant="ghost" size="sm" onClick={prevMonth} className="text-slate-300 hover:bg-white/10 hover:text-white">
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-                <CardTitle className="min-w-[200px] text-center text-xl">
-                  {formatMonthYear(currentYear, currentMonth)}
-                </CardTitle>
-                <Button variant="ghost" size="sm" onClick={nextMonth} className="text-slate-300 hover:bg-white/10 hover:text-white">
-                  <ChevronRight className="h-5 w-5" />
-                </Button>
-              </div>
+            <CardTitle className="text-white">📅 Kalender</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {/* Month Navigation */}
+            <div className="flex items-center justify-between">
+              <Button variant="ghost" size="sm" onClick={prevMonth} className="text-slate-300 hover:text-white hover:bg-white/10">
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+              <h3 className="text-lg font-bold text-white">{formatMonthYear(currentYear, currentMonth)}</h3>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={goToday} className="text-xs text-slate-300 hover:bg-white/10">
+                <Button variant="ghost" size="sm" onClick={goToday} className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 text-xs">
                   Hari Ini
                 </Button>
                 {isAdmin && (
-                  <Button variant="ghost" size="sm" onClick={randomizeAll} className="text-xs text-slate-300 hover:bg-white/10">
-                    <Sparkles className="mr-1 h-3 w-3" /> Acak Warna
+                  <Button variant="ghost" size="sm" onClick={randomizeAll} className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 text-xs">
+                    <Sparkles className="h-3 w-3 mr-1" /> Acak Warna
                   </Button>
                 )}
+                <Button variant="ghost" size="sm" onClick={nextMonth} className="text-slate-300 hover:text-white hover:bg-white/10">
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <div className="min-w-[500px]">
-                {/* Day headers */}
-                <div className="mb-3 grid grid-cols-7 gap-2">
-                  {SHORT_DAY_NAMES.map((d, i) => (
-                    <div
-                      key={d}
-                      className={`py-2 text-center text-xs font-bold uppercase tracking-wider ${
-                        REGULAR_DAYS.has(i) ? "text-cyan-400" : "text-slate-600"
-                      }`}
+
+            {/* Export buttons row */}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={downloadICS} className="border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs">
+                <Download className="h-3 w-3 mr-1" /> Download .ics
+              </Button>
+              {schedule
+                .filter((s) => s.date >= todayStr)
+                .slice(0, 3)
+                .map((s) => {
+                  const d = new Date(s.date + "T00:00:00");
+                  return (
+                    <a
+                      key={s.date}
+                      href={getGoogleCalendarUrl(s)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 rounded-md border border-white/10 px-2 py-1 text-xs text-slate-300 hover:text-white hover:bg-white/10 transition"
                     >
-                      {d}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Calendar grid */}
-                <div className="space-y-2">
-                  {calendarGrid.map((week, wi) => (
-                    <div key={wi} className="grid grid-cols-7 gap-2">
-                      {week.map((cell, ci) => {
-                        if (!cell) {
-                          return <div key={`empty-${wi}-${ci}`} className="aspect-square" />;
-                        }
-
-                        const isToday = cell.dateStr === todayStr;
-                        const hasTraining = !!cell.entry;
-                        const isPast = new Date(`${cell.dateStr}T23:59:59`) < today;
-
-                        return (
-                          <div
-                            key={cell.dateStr}
-                            className={`relative flex aspect-square flex-col items-center justify-center rounded-xl transition-all duration-200 ${
-                              hasTraining
-                                ? isToday
-                                  ? "ring-2 ring-cyan-400 ring-offset-1 ring-offset-black shadow-lg shadow-cyan-500/20"
-                                  : "hover:scale-105 hover:shadow-lg"
-                                : ""
-                            } ${hasTraining && isAdmin ? "cursor-pointer active:scale-95" : ""}`}
-                            style={
-                              hasTraining
-                                ? {
-                                    background: `linear-gradient(135deg, ${cell.entry!.jerseyColor.hex}dd, ${cell.entry!.jerseyColor.hex}88)`,
-                                  }
-                                : {}
-                            }
-                            onClick={() => {
-                              if (hasTraining && isAdmin) cycleJersey(cell.dateStr);
-                            }}
-                          >
-                            {/* Date number */}
-                            <span
-                              className={`text-sm font-bold ${
-                                hasTraining
-                                  ? "text-white drop-shadow-md"
-                                  : isPast
-                                    ? "text-slate-700"
-                                    : "text-slate-500"
-                              }`}
-                            >
-                              {cell.day}
-                            </span>
-
-                            {/* Jersey emoji for training days */}
-                            {hasTraining && (
-                              <span className="text-lg leading-none drop-shadow-md">👕</span>
-                            )}
-
-                            {/* Custom training dot */}
-                            {cell.entry?.isCustom && (
-                              <div className="absolute -right-0.5 -top-0.5 flex h-3 w-3 items-center justify-center rounded-full bg-amber-400 shadow">
-                                <Plus className="h-2 w-2 text-amber-900" />
-                              </div>
-                            )}
-
-                            {/* Today indicator */}
-                            {isToday && !hasTraining && (
-                              <div className="absolute bottom-1 h-1 w-4 rounded-full bg-cyan-400" />
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Legend */}
-                <div className="mt-5 flex flex-wrap items-center gap-4 rounded-xl border border-white/5 bg-white/[0.02] px-4 py-3 text-xs text-slate-400">
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded bg-gradient-to-br from-cyan-400/40 to-cyan-600/40 ring-1 ring-cyan-400" />
-                    <span>Hari Ini</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="h-4 w-4 rounded bg-gradient-to-br from-blue-500 to-blue-700" />
-                    <span>Latihan Rutin</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="relative h-4 w-4 rounded bg-gradient-to-br from-green-500 to-green-700">
-                      <div className="absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-amber-400" />
-                    </div>
-                    <span>Latihan Tambahan</span>
-                  </div>
-                  {isAdmin && (
-                    <span className="ml-auto text-slate-500">Klik tanggal untuk ganti warna</span>
-                  )}
-                </div>
-              </div>
+                      <Calendar className="h-3 w-3" />
+                      GCal {d.getDate()}/{d.getMonth() + 1}
+                    </a>
+                  );
+                })}
             </div>
-          </CardContent>
-        </Card>
 
-        {/* Schedule List */}
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-white">📋 Jadwal Bulan Ini</CardTitle>
-                <CardDescription className="text-slate-400">
-                  {totalSessions} sesi latihan • {formatMonthYear(currentYear, currentMonth)}
-                </CardDescription>
-              </div>
+            {/* Day Headers */}
+            <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold">
+              {SHORT_DAY_NAMES.map((d, i) => (
+                <div key={d} className={[2, 5, 6].includes(i) ? "text-cyan-400" : "text-slate-600"}>
+                  {d}
+                </div>
+              ))}
             </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {schedule.map((entry, i) => {
-                const isToday = entry.date === todayStr;
-                const d = new Date(`${entry.date}T00:00:00`);
+
+            {/* Calendar Grid */}
+            <div className="grid grid-cols-7 gap-1">
+              {calendarGrid.map((cell, idx) => {
+                if (cell === null) {
+                  return <div key={`empty-${idx}`} className="aspect-square" />;
+                }
+
+                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
+                const entry = schedule.find((s) => s.date === dateStr);
+                const isToday = dateStr === todayStr;
+                const isTraining = !!entry;
+                const isPast = dateStr < todayStr;
+
                 return (
                   <div
-                    key={entry.date}
-                    className={`flex items-center gap-3 rounded-xl border p-3 transition-all ${
-                      isToday
-                        ? "border-cyan-400/40 bg-cyan-400/5 shadow-lg shadow-cyan-500/10"
-                        : "border-white/5 bg-white/[0.02] hover:bg-white/[0.06]"
-                    }`}
+                    key={dateStr}
+                    onClick={() => isAdmin && isTraining ? cycleJersey(dateStr) : undefined}
+                    className={`
+                      aspect-square rounded-xl flex flex-col items-center justify-center relative text-xs transition-all
+                      ${isTraining
+                        ? `bg-gradient-to-br ${entry!.jerseyColor.gradient} shadow-lg ${isAdmin ? "cursor-pointer hover:scale-105" : ""}`
+                        : isPast
+                          ? "text-slate-700"
+                          : "text-slate-500"
+                      }
+                      ${isToday ? "ring-2 ring-cyan-400 ring-offset-1 ring-offset-transparent" : ""}
+                    `}
                   >
-                    {/* Color block */}
-                    <div
-                      className={`flex h-12 w-12 flex-shrink-0 flex-col items-center justify-center rounded-xl bg-gradient-to-br ${entry.jerseyColor.gradient} shadow-md`}
-                    >
-                      <span className="text-[10px] font-bold uppercase text-white/80">
-                        {d.toLocaleDateString("id-ID", { month: "short" })}
-                      </span>
-                      <span className="text-lg font-black leading-none text-white">
-                        {d.getDate()}
-                      </span>
-                    </div>
-
-                    {/* Info */}
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="font-semibold text-white">{entry.dayName}</span>
-                        {isToday && (
-                          <Badge className="bg-cyan-500/30 text-cyan-200 text-[10px] px-1.5 py-0">
-                            HARI INI
-                          </Badge>
-                        )}
-                        {entry.isCustom && (
-                          <Badge className="bg-amber-500/30 text-amber-200 text-[10px] px-1.5 py-0">
-                            EXTRA
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-lg leading-none">👕</span>
-                        <span className="text-sm text-slate-300">{entry.jerseyColor.name}</span>
-                      </div>
-                    </div>
+                    {isTraining && <span className="text-sm leading-none">👕</span>}
+                    <span className={`font-bold ${isTraining ? "text-white" : ""}`}>{cell}</span>
+                    {entry?.isCustom && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    )}
                   </div>
                 );
               })}
             </div>
 
+            {/* Legend */}
+            <div className="flex flex-wrap gap-4 text-xs text-slate-400 pt-2 border-t border-white/10">
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full ring-2 ring-cyan-400" />
+                <span>Hari Ini</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-600" />
+                <span>Latihan Rutin</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-amber-400" />
+                <span>Latihan Tambahan</span>
+              </div>
+              {isAdmin && (
+                <span className="ml-auto text-slate-600">Klik tanggal untuk ganti warna</span>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Schedule List Card */}
+        <Card className={glassCardClass}>
+          <CardHeader>
+            <CardTitle className="text-white">📋 Daftar Jadwal</CardTitle>
+            <CardDescription className="text-slate-400">
+              {totalSessions} sesi latihan • {formatMonthYear(currentYear, currentMonth)}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {schedule.map((entry) => {
+                const isEntryToday = entry.date === todayStr;
+                const d = new Date(entry.date + "T00:00:00");
+
+                return (
+                  <div
+                    key={entry.date}
+                    className={`flex items-center gap-3 rounded-xl p-3 transition-all ${
+                      isEntryToday ? "bg-cyan-500/10 ring-1 ring-cyan-500/30" : "bg-white/5"
+                    }`}
+                  >
+                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${entry.jerseyColor.gradient} flex flex-col items-center justify-center shrink-0`}>
+                      <span className="text-[10px] uppercase text-white/80 leading-none">
+                        {d.toLocaleDateString("id-ID", { month: "short" })}
+                      </span>
+                      <span className="text-lg font-bold text-white leading-none">{d.getDate()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-white text-sm">{entry.dayName}</p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {isEntryToday && (
+                          <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] px-1.5">HARI INI</Badge>
+                        )}
+                        {entry.isCustom && (
+                          <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-1.5">EXTRA</Badge>
+                        )}
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <span className="text-lg">👕</span>
+                      <p className="text-[10px]" style={{ color: entry.jerseyColor.hex }}>{entry.jerseyColor.name}</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
             {schedule.length === 0 && (
               <p className="py-8 text-center text-sm text-slate-500">
                 Tidak ada jadwal latihan bulan ini.
@@ -643,14 +806,12 @@ export default function JadwalPage() {
           </CardContent>
         </Card>
 
-        {/* Admin: Custom Dates Manager */}
+        {/* Admin Custom Dates Manager Card */}
         {isAdmin && (
           <Card className={glassCardClass}>
             <CardHeader>
-              <CardTitle className="text-white">⚙️ Kelola Jadwal Tambahan</CardTitle>
-              <CardDescription className="text-slate-400">
-                Tambah latihan di luar hari Rabu, Sabtu, Minggu (untuk persiapan lomba).
-              </CardDescription>
+              <CardTitle className="text-white">⚙️ Kelola Latihan Tambahan</CardTitle>
+              <CardDescription className="text-slate-400">Tambah atau hapus tanggal latihan tambahan</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="flex gap-2">
@@ -658,62 +819,71 @@ export default function JadwalPage() {
                   type="date"
                   value={newCustomDate}
                   onChange={(e) => setNewCustomDate(e.target.value)}
-                  className="max-w-[200px] border-white/20 bg-white/5 text-white [color-scheme:dark]"
+                  className="bg-white/5 border-white/10 text-white w-44 [color-scheme:dark]"
                 />
-                <Button onClick={addCustomDate} disabled={!newCustomDate} className="bg-cyan-600 hover:bg-cyan-700 text-white">
-                  <Plus className="mr-1 h-4 w-4" /> Tambah
+                <Input
+                  type="text"
+                  placeholder="Label (opsional)..."
+                  value={newCustomLabel}
+                  onChange={(e) => setNewCustomLabel(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 flex-1"
+                />
+                <Button onClick={addCustomDate} size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
+                  <Plus className="h-4 w-4 mr-1" /> Tambah
                 </Button>
               </div>
-
-              {customDates.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {customDates.map((dateStr) => {
-                    const d = new Date(`${dateStr}T00:00:00`);
-                    return (
-                      <Badge
-                        key={dateStr}
-                        className="flex items-center gap-1 bg-amber-500/20 text-amber-200 px-3 py-1.5 text-xs"
-                      >
-                        {d.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
-                        <button
-                          onClick={() => removeCustomDate(dateStr)}
-                          className="ml-1 rounded-full p-0.5 hover:bg-white/20 transition-colors"
-                        >
-                          <X className="h-3 w-3" />
-                        </button>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )}
+              <div className="flex flex-wrap gap-2">
+                {customDates.map((cd) => (
+                  <Badge
+                    key={cd.id}
+                    className="bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 py-1.5 px-3"
+                  >
+                    <span>
+                      {new Date(cd.date + "T00:00:00").toLocaleDateString("id-ID", {
+                        weekday: "short", day: "numeric", month: "short",
+                      })}
+                      {cd.label ? ` — ${cd.label}` : ""}
+                    </span>
+                    {cd.id && (
+                      <button onClick={() => removeCustomDate(cd.id!)} className="ml-1 text-red-400 hover:text-red-300">
+                        <X className="h-3 w-3" />
+                      </button>
+                    )}
+                  </Badge>
+                ))}
+                {customDates.length === 0 && (
+                  <p className="text-slate-500 text-sm">Belum ada latihan tambahan</p>
+                )}
+              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* Color Legend */}
+        {/* Color Legend Card */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <CardTitle className="text-white">🎨 Pilihan Warna Kaos</CardTitle>
+            <CardTitle className="text-white">🎨 Warna Jersey</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-              {JERSEY_COLORS.map((c) => (
-                <div
-                  key={c.name}
-                  className="flex flex-col items-center gap-2 rounded-xl border border-white/10 bg-white/[0.03] p-4 transition-all hover:bg-white/[0.08]"
-                >
-                  <div
-                    className={`flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br ${c.gradient} shadow-lg`}
-                  >
-                    <span className="text-2xl">👕</span>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              {JERSEY_COLORS.map((color, i) => (
+                <div key={i} className="flex items-center gap-2 bg-white/5 rounded-xl p-3">
+                  <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${color.gradient} shadow-lg`} />
+                  <div>
+                    <span className="text-lg">👕</span>
+                    <p className="text-xs text-slate-300">{color.name}</p>
                   </div>
-                  <span className="text-sm font-medium text-white">{c.name}</span>
                 </div>
               ))}
             </div>
           </CardContent>
         </Card>
+
+        {/* Footer */}
+        <div className="text-center text-xs text-slate-600 pb-4">
+          👑 Crown Allstar Cheerleading
+        </div>
       </div>
-    </main>
+    </div>
   );
 }
