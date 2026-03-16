@@ -127,6 +127,9 @@ export async function POST(request: Request) {
     let updated = 0;
     let deleted = 0;
 
+    // Helper to avoid rate limits
+    const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
     // 4. Upsert training events
     const activeIds = new Set<string>();
 
@@ -169,6 +172,7 @@ export async function POST(request: Request) {
         });
         created++;
       }
+      await sleep(150); // Rate limit protection
     }
 
     // 5. Upsert competition events
@@ -200,6 +204,7 @@ export async function POST(request: Request) {
         });
         created++;
       }
+      await sleep(150); // Rate limit protection
     }
 
     // 6. Delete events that no longer exist
@@ -207,6 +212,7 @@ export async function POST(request: Request) {
       if (!activeIds.has(crownId)) {
         await calendar.events.delete({ calendarId, eventId });
         deleted++;
+        await sleep(150);
       }
     }
 
