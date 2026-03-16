@@ -843,8 +843,8 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
               <Image
-                src="/logo_flyer.png"
-                alt="BeratnyaCrown"
+                src="/crown-logo.jpg"
+                alt="Crown Allstar"
                 width={40}
                 height={40}
                 className="h-10 w-10 object-contain"
@@ -853,7 +853,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <p className="text-sm uppercase tracking-[0.24em] text-slate-300">
-                BeratnyaCrown
+                Crown Allstar
               </p>
               <h1 className="text-2xl font-semibold">Dashboard Catatan Berat</h1>
               <p className="text-sm text-slate-300">

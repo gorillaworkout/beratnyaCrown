@@ -63,15 +63,15 @@ export function Sidebar() {
         <div className="flex items-center gap-3 border-b border-white/10 p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10">
             <Image
-              src="/logo_flyer.png"
-              alt="BeratnyaCrown"
+              src="/crown-logo.jpg"
+              alt="Crown Allstar"
               width={32}
               height={32}
               className="rounded-lg"
             />
           </div>
           <div>
-            <h1 className="text-base font-bold text-white">BeratnyaCrown</h1>
+            <h1 className="text-base font-bold text-white">Crown Allstar</h1>
             <p className="text-xs text-slate-400">Crown Allstar</p>
           </div>
         </div>

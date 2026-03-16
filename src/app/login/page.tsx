@@ -39,15 +39,15 @@ export default function LoginPage() {
         <div className="mb-8 flex flex-col items-center gap-4">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-lg shadow-cyan-500/10">
             <Image
-              src="/logo_flyer.png"
-              alt="BeratnyaCrown"
+              src="/crown-logo.jpg"
+              alt="Crown Allstar"
               width={56}
               height={56}
               className="rounded-xl"
             />
           </div>
           <div className="text-center">
-            <h1 className="text-2xl font-bold text-white">BeratnyaCrown</h1>
+            <h1 className="text-2xl font-bold text-white">Crown Allstar</h1>
             <p className="mt-1 text-sm text-slate-400">
               Crown Allstar Cheerleading
             </p>

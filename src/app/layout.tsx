@@ -6,19 +6,19 @@ const siteUrl =
   process.env.NEXT_PUBLIC_BASE_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-const ogImageUrl = new URL("/logo_flyer.png", siteUrl);
+const ogImageUrl = new URL("/crown-logo.jpg", siteUrl);
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: "BeratnyaCrown",
+  title: "Crown Allstar",
   description: "Pencatatan berat flyer flyer gendut q",
   icons: {
-    icon: [{ url: "/logo_flyer.png", type: "image/png" }],
-    shortcut: "/logo_flyer.png",
-    apple: "/logo_flyer.png"
+    icon: [{ url: "/crown-logo.jpg", type: "image/jpeg" }],
+    shortcut: "/crown-logo.jpg",
+    apple: "/crown-logo.jpg"
   },
   openGraph: {
-    title: "BeratnyaCrown",
+    title: "Crown Allstar",
     description: "Pencatatan berat flyer flyer gendut q",
     type: "website",
     locale: "id_ID",
@@ -28,13 +28,13 @@ export const metadata: Metadata = {
         url: ogImageUrl,
         width: 1200,
         height: 630,
-        alt: "BeratnyaCrown"
+        alt: "Crown Allstar"
       }
     ]
   },
   twitter: {
     card: "summary_large_image",
-    title: "BeratnyaCrown",
+    title: "Crown Allstar",
     description: "Pencatatan berat flyer flyer gendut q",
     images: [ogImageUrl.toString()]
   }
