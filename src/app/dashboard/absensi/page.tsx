@@ -66,6 +66,7 @@ type AttendanceRecord = {
   lat: number;
   lng: number;
   distance: number;
+  locationName?: string;
 };
 
 // --- Constants ---
@@ -102,6 +103,7 @@ function parseRecord(d: { id: string; data: () => Record<string, unknown> }): At
     lat: (data.lat as number) ?? 0,
     lng: (data.lng as number) ?? 0,
     distance: (data.distance as number) ?? 0,
+    locationName: (data.locationName as string) || undefined,
   };
 }
 
@@ -547,6 +549,56 @@ export default function AbsensiPage() {
             )}
           </CardContent>
         </Card>
+
+        {/* Riwayat Personal */}
+        {user && (
+          <Card className={glassCardClass}>
+            <CardHeader>
+              <CardTitle className="text-white">📝 Riwayat Kehadiran Kamu</CardTitle>
+              <CardDescription className="text-slate-400">
+                Data absensi bulan ini ({now.toLocaleDateString("id-ID", { month: "long", year: "numeric" })})
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              {loading ? (
+                <p className="text-sm text-slate-400">Memuat...</p>
+              ) : (() => {
+                const personalRecords = monthRecords.filter(r => r.athleteUid === user.uid).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0));
+                if (personalRecords.length === 0) {
+                  return <p className="py-4 text-center text-sm text-slate-500">Kamu belum ada data absensi bulan ini.</p>;
+                }
+                return (
+                  <div className="overflow-x-auto">
+                    <Table className="min-w-[400px] text-slate-100">
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead className="text-slate-300">Tanggal</TableHead>
+                          <TableHead className="text-slate-300">Jam</TableHead>
+                          <TableHead className="text-slate-300">Lokasi</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {personalRecords.map((r, i) => (
+                          <TableRow key={r.id} className={`${i % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.06]"} hover:bg-white/10`}>
+                            <TableCell className="font-medium text-white">
+                              {new Date(r.date + "T00:00:00").toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}
+                            </TableCell>
+                            <TableCell className="text-sm text-slate-300">
+                              {r.timestamp ? r.timestamp.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) : "-"}
+                            </TableCell>
+                            <TableCell className="text-sm text-cyan-400">
+                              {r.locationName || "Crown Allstar Cheerleading"}
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                );
+              })()}
+            </CardContent>
+          </Card>
+        )}
       </div>
     </main>
   );
