@@ -329,7 +329,7 @@ export default function InfoDashboardPage() {
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="text-slate-300">A.N. QRIS</span>
-                    <span className="font-semibold text-white">Bayu Darmawan</span>
+                    <span className="font-semibold text-white">Warung Crown</span>
                   </div>
                 </div>
               </CardContent>
@@ -414,13 +414,9 @@ export default function InfoDashboardPage() {
                     <span className="text-slate-300">Tanggal Pelaksanaan</span>
                     <span className="font-semibold text-white">31 Mei 2026</span>
                   </div>
-                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">Lokasi</span>
-                    <span className="font-semibold text-white">GOR Pajajaran Bandung</span>
-                  </div>
                   <div className="flex justify-between pt-1 text-sm">
-                    <span className="text-slate-300">Biaya Pendaftaran</span>
-                    <span className="font-semibold text-white">Rp 100.000 / atlet</span>
+                    <span className="text-slate-300">Status</span>
+                    <span className="font-semibold text-amber-400">Persiapan Tim</span>
                   </div>
                 </div>
               </CardContent>
