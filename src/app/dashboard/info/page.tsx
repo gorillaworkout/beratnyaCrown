@@ -305,29 +305,31 @@ export default function InfoDashboardPage() {
             <Card className={glassCardClass}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Iuran Latihan Bulanan</CardTitle>
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Wajib</Badge>
+                  <CardTitle className="text-lg">Metode Pembayaran</CardTitle>
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Official</Badge>
                 </div>
                 <CardDescription className="text-slate-400">
-                  Pembayaran uang kas dan latihan rutin
+                  QRIS untuk pembayaran uang kas bulanan dan iuran ke Crown
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <div className="flex justify-center mb-4">
+                  <div className="bg-white p-2 rounded-xl">
+                    <img 
+                      src="/qris-crown.jpg" 
+                      alt="QRIS Bayu Darmawan" 
+                      className="w-full max-w-[200px] h-auto rounded"
+                    />
+                  </div>
+                </div>
                 <div className="space-y-3">
-                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">Nominal</span>
+                  <div className="flex justify-between border-t border-white/10 pt-3 pb-2 text-sm">
+                    <span className="text-slate-300">Iuran Latihan</span>
                     <span className="font-semibold text-white">Rp 150.000 / bulan</span>
                   </div>
-                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">Jatuh Tempo</span>
-                    <span className="font-semibold text-white">Tanggal 10 setiap bulan</span>
-                  </div>
                   <div className="flex justify-between pt-1 text-sm">
-                    <span className="text-slate-300">Rekening</span>
-                    <div className="text-right">
-                      <span className="font-semibold text-white block">BCA 1234567890</span>
-                      <span className="text-xs text-slate-400">a.n. Crown Allstar</span>
-                    </div>
+                    <span className="text-slate-300">A.N. QRIS</span>
+                    <span className="font-semibold text-white">Bayu Darmawan</span>
                   </div>
                 </div>
               </CardContent>
@@ -336,26 +338,53 @@ export default function InfoDashboardPage() {
             <Card className={glassCardClass}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Pemesanan Kostum 2026</CardTitle>
-                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Proses</Badge>
+                  <CardTitle className="text-lg">Biaya Kompetisi (Kejurda & Kejurnas)</CardTitle>
+                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Cicilan</Badge>
                 </div>
                 <CardDescription className="text-slate-400">
-                  Seragam tanding untuk musim kompetisi 2026
+                  Estimasi rincian biaya kompetisi dan termin pembayaran
                 </CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-3">
-                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">Total Biaya</span>
-                    <span className="font-semibold text-white">Rp 850.000</span>
+                <div className="space-y-4">
+                  <div className="bg-black/20 rounded-lg p-3 border border-white/5 space-y-2">
+                    <h4 className="font-semibold text-white text-sm mb-2">Total Biaya per Atlet (Basic)</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putra (Cowo)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.625.000</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putri (Cewe)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.675.000</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mt-1">*Belum termasuk GS (Tambahan +Rp50.000 untuk atlet putri jika ada additional div)</p>
                   </div>
-                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">DP (Minimal 50%)</span>
-                    <span className="font-semibold text-white">Rp 425.000</span>
-                  </div>
-                  <div className="flex justify-between pt-1 text-sm">
-                    <span className="text-slate-300">Batas Pelunasan</span>
-                    <span className="font-semibold text-rose-400">30 April 2026</span>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-white text-sm mt-4">Termin Pembayaran</h4>
+                    {[
+                      { date: "30 Januari", amount: "Rp 350.000", status: "passed" },
+                      { date: "28 Februari", amount: "Rp 350.000", status: "passed" },
+                      { date: "30 Maret", amount: "Rp 350.000", status: "upcoming" },
+                      { date: "30 April", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Mei", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Juni", amount: "Rp 200.000", status: "upcoming", note: "Cewe +50k, Cowo/Cewe add div sisa" },
+                    ].map((termin, i) => (
+                      <div key={i} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2">
+                          {termin.status === "passed" ? (
+                            <Check className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+                          )}
+                          <span className={`text-sm ${termin.status === "passed" ? "text-slate-400 line-through decoration-slate-500" : "text-slate-200"}`}>{termin.date}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-medium ${termin.status === "passed" ? "text-slate-500" : "text-white"}`}>{termin.amount}</span>
+                          {termin.note && <div className="text-[10px] text-amber-400/80 mt-0.5">{termin.note}</div>}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </CardContent>
@@ -401,17 +430,17 @@ export default function InfoDashboardPage() {
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Kejurnas ICA 2026</CardTitle>
-                  <Badge className="bg-slate-500/20 text-slate-300 border border-slate-500/30">TBA</Badge>
+                  <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">Upcoming</Badge>
                 </div>
                 <CardDescription className="text-slate-400">
-                  Kejuaraan Nasional Cheerleading (TBC)
+                  Kejuaraan Nasional Cheerleading
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3">
                   <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
-                    <span className="text-slate-300">Estimasi Pelaksanaan</span>
-                    <span className="font-semibold text-white">Juli / Agustus 2026</span>
+                    <span className="text-slate-300">Tanggal Pelaksanaan</span>
+                    <span className="font-semibold text-white">5 Juli 2026</span>
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="text-slate-300">Status</span>
