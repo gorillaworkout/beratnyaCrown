@@ -1,15 +1,16 @@
 "use client";
 
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { auth, db } from "./firebase";
 import {
   User,
-  onAuthStateChanged,
-  signInWithPopup,
   GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
   signOut as firebaseSignOut,
+  onAuthStateChanged,
 } from "firebase/auth";
-import { doc, setDoc, getDoc, serverTimestamp } from "firebase/firestore";
-import { auth, db } from "@/lib/firebase";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 type AuthContextType = {
   user: User | null;
@@ -43,22 +44,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const athleteSnap = await getDoc(athleteRef);
           if (!athleteSnap.exists()) {
             await setDoc(athleteRef, {
-              uid: firebaseUser.uid,
-              name: firebaseUser.displayName || "",
-              email: firebaseUser.email || "",
-              photoURL: firebaseUser.photoURL || "",
-              createdAt: serverTimestamp(),
-              lastLogin: serverTimestamp(),
+              email: firebaseUser.email,
+              name: firebaseUser.displayName,
+              photoURL: firebaseUser.photoURL,
+              role: "athlete",
+              createdAt: new Date().toISOString(),
+              targetWeight: 0,
             });
-          } else {
-            await setDoc(
-              athleteRef,
-              { lastLogin: serverTimestamp() },
-              { merge: true }
-            );
           }
-        } catch (err) {
-          console.error("Failed to upsert athlete profile:", err);
+        } catch (error) {
+          console.error("Error upserting athlete:", error);
         }
       }
       setLoading(false);
@@ -69,8 +64,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
+    // Fallback logic for mobile browsers (especially Safari/iOS WebViews)
+    // If popup fails or we are in an environment that blocks popups/storage, use redirect.
     try {
-      await signInWithPopup(auth, provider);
+      const isMobileOrWebView = /iPhone|iPad|iPod|Android|webOS/i.test(navigator.userAgent);
+      if (isMobileOrWebView) {
+        // Redirect is safer on mobile browsers to avoid cross-origin storage issues
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (err: unknown) {
       const error = err as { code?: string };
       // Ignore cancelled-popup-request (React Strict Mode double-render)
@@ -79,6 +82,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         error.code === "auth/cancelled-popup-request" ||
         error.code === "auth/popup-closed-by-user"
       ) {
+        return;
+      }
+      // If popup was blocked, fallback to redirect
+      if (error.code === "auth/popup-blocked") {
+        await signInWithRedirect(auth, provider);
         return;
       }
       throw err;

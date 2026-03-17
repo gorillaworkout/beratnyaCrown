@@ -148,12 +148,9 @@ export async function GET() {
       const uid = `crown-training-${entry.date}@crownallstar.id`;
       
       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
-      if (entry.holidayName && entry.status === "libur") {
-         title = `Libur Nasional: ${entry.holidayName}`;
-      }
       
       let descParts = [];
-      if (entry.holidayName && entry.status !== "libur") {
+      if (entry.holidayName) {
          descParts.push(`⚠️ PERHATIAN: Hari ini bertepatan dengan Libur Nasional (${entry.holidayName}). Pastikan ada instruksi dari pelatih terkait libur/tidaknya latihan.`);
       }
       
