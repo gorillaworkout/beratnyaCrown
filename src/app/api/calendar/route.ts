@@ -40,7 +40,7 @@ function escapeICS(text: string): string {
   return text.replace(/[\\;,]/g, (m) => "\\" + m);
 }
 
-type ScheduleStatus = "latihan" | "libur" | "tambahan";
+type ScheduleStatus = "latihan" | "libur" | "tambahan" | "pembayaran";
 type ScheduleEntry = {
   date: string;
   status: ScheduleStatus;
@@ -138,7 +138,27 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
     }
   }
 
+
+  // Inject Payment Reminders (Cicilan Kejurda/Kejurnas)
+  const paymentDates = [
+    { date: "2026-03-30", amount: "Rp 350.000", note: "Termin 3" },
+    { date: "2026-04-30", amount: "Rp 200.000", note: "Termin 4" },
+    { date: "2026-05-30", amount: "Rp 200.000", note: "Termin 5" },
+    { date: "2026-06-30", amount: "Rp 200.000", note: "Termin 6 (Pelunasan + Add Div)" },
+  ];
+
+  for (const p of paymentDates) {
+    schedule.push({
+      date: p.date,
+      status: "pembayaran",
+      timeStart: "08:00",
+      timeEnd: "10:00",
+      note: `Tagihan ${p.note}: ${p.amount}`,
+    });
+  }
+
   return schedule;
+
 }
 
 export async function GET() {
@@ -166,12 +186,20 @@ export async function GET() {
       const dateCompact = entry.date.replace(/-/g, "");
       const uid = `crown-training-${entry.date}@crownallstar.id`;
       
+
       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
+      if (entry.status === "pembayaran") {
+        title = "Jatuh Tempo Cicilan Kompetisi";
+      }
+
       
-      // Inject EMOJI color into Title so users can see it at a glance
-      if (entry.shirtColor && entry.shirtColor.emoji) {
+
+      if (entry.status === "pembayaran") {
+        title = "💰 Jatuh Tempo Cicilan Kompetisi";
+      } else if (entry.shirtColor && entry.shirtColor.emoji) {
         title = `${entry.shirtColor.emoji} ${title}`;
       }
+
 
       let descParts = [];
       if (entry.holidayName) {
@@ -202,12 +230,17 @@ export async function GET() {
       lines.push(`SUMMARY:${escapeICS(title)}`);
       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
       
+
       // ADD COLOR/CATEGORY PROPERTY (supported by Apple Calendar/Outlook to some extent)
-      if (entry.shirtColor) {
+      if (entry.status === "pembayaran") {
+        lines.push('CATEGORIES:Pembayaran');
+        lines.push('COLOR:#fbbf24'); // amber color
+      } else if (entry.shirtColor) {
         lines.push(`CATEGORIES:${entry.shirtColor.name}`);
         // Apple specific color property
         lines.push(`COLOR:${entry.shirtColor.hex}`);
       }
+
       
       // ALARM / REMINDER: 3 Jam sebelum event
       lines.push("BEGIN:VALARM");
