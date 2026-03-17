@@ -1,14 +1,53 @@
 --- src/app/api/calendar/route.ts
 +++ src/app/api/calendar/route.ts
-@@ -128,8 +128,12 @@
-       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
-       
-       // Inject Apple Calendar specific color tag
-       if (entry.shirtColor) {
--         // STANDARD ICS COLOR
--         lines.push(`COLOR:${entry.shirtColor.hex}`);
-+         lines.push(`COLOR:${entry.shirtColor.hex.toUpperCase()}`);
-+         lines.push(`APPLE-CALENDAR-COLOR:${entry.shirtColor.hex.toUpperCase()}`);
-       }
+@@ -1,6 +1,7 @@
+ import { NextResponse } from "next/server";
+ import { adminDb } from "@/lib/firebase-admin";
++import { isHoliday } from "@/lib/holidays";
  
-       lines.push("LOCATION:Crown Allstar Cheerleading\\, Bandung");
+ const SHIRT_COLORS = [
+   { name: "Merah", hex: "#ef4444" },
+@@ -62,6 +63,7 @@
+       const dateStr = `${year}-${padDate(month + 1)}-${padDate(day)}`;
+       const dayOfWeek = date.getDay();
+       
++      const holidayName = isHoliday(dateStr);
+       const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
+       const customSchedule = customSchedules.get(dateStr);
+       const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
+@@ -79,7 +81,8 @@
+           timeStart: customSchedule.timeStart,
+           timeEnd: customSchedule.timeEnd,
+           note: customSchedule.note,
+-          shirtColor: currentShirtColor
++          shirtColor: currentShirtColor,
++          holidayName
+         });
+       } else if (isRegular) {
+         const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+@@ -89,7 +92,16 @@
+           status: "latihan",
+           timeStart: defaultTimeStart,
+           timeEnd: defaultTimeEnd,
+-          shirtColor: currentShirtColor
++          shirtColor: currentShirtColor,
++          holidayName
++        });
++      } else if (holidayName) {
++        entries.push({
++          date: dateStr,
++          status: "libur",
++          timeStart: undefined,
++          timeEnd: undefined,
++          holidayName
+         });
+       }
+     }
+@@ -124,6 +136,7 @@
+       
+       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
+       let descParts = [];
++      if (entry.holidayName) descParts.push(`⚠️ Perhatian: Tanggal merah (${entry.holidayName})`);
+       
+       if (entry.shirtColor) {
+         descParts.push(`👕 Jersey: ${entry.shirtColor.name}`);

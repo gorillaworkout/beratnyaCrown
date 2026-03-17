@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
+import { isHoliday } from "@/lib/holidays";
 
 const SHIRT_COLORS = [
   { name: "Merah", hex: "#ef4444" },
@@ -47,6 +48,7 @@ type ScheduleEntry = {
   timeEnd?: string;
   note?: string;
   shirtColor?: typeof SHIRT_COLORS[number];
+  holidayName?: string;
 };
 
 async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[]> {
@@ -72,6 +74,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
       const dateStr = `${year}-${padDate(month + 1)}-${padDate(day)}`;
       const dayOfWeek = date.getDay();
       
+      const holidayName = isHoliday(dateStr);
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
       const customSchedule = customSchedules.get(dateStr);
       const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
@@ -90,7 +93,8 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           timeStart: customSchedule.timeStart,
           timeEnd: customSchedule.timeEnd,
           note: customSchedule.note,
-          shirtColor: currentShirtColor
+          shirtColor: currentShirtColor,
+          holidayName: holidayName || undefined
         });
       } else if (isRegular) {
         const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
@@ -100,7 +104,14 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           status: "latihan",
           timeStart: defaultTimeStart,
           timeEnd: defaultTimeEnd,
-          shirtColor: currentShirtColor
+          shirtColor: currentShirtColor,
+          holidayName: holidayName || undefined
+        });
+      } else if (holidayName) {
+        entries.push({
+          date: dateStr,
+          status: "libur",
+          holidayName
         });
       }
     }
@@ -126,8 +137,8 @@ export async function GET() {
       "METHOD:PUBLISH",
       "X-WR-CALNAME:Crown Allstar - Jadwal Latihan",
       "X-WR-TIMEZONE:Asia/Jakarta",
-      "REFRESH-INTERVAL;VALUE=DURATION:PT6H", // Auto refresh setiap 6 jam
-      "X-PUBLISHED-TTL:PT6H",
+      "REFRESH-INTERVAL;VALUE=DURATION:PT1H", // Auto refresh setiap 1 jam
+      "X-PUBLISHED-TTL:PT1H",
     ];
 
     for (const entry of schedule) {
@@ -137,7 +148,14 @@ export async function GET() {
       const uid = `crown-training-${entry.date}@crownallstar.id`;
       
       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
+      if (entry.holidayName && entry.status === "libur") {
+         title = `Libur Nasional: ${entry.holidayName}`;
+      }
+      
       let descParts = [];
+      if (entry.holidayName && entry.status !== "libur") {
+         descParts.push(`⚠️ PERHATIAN: Hari ini bertepatan dengan Libur Nasional (${entry.holidayName}). Pastikan ada instruksi dari pelatih terkait libur/tidaknya latihan.`);
+      }
       
       if (entry.shirtColor) {
         descParts.push(`👕 Jersey: ${entry.shirtColor.name}`);
@@ -196,7 +214,7 @@ export async function GET() {
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
         "Content-Disposition": 'inline; filename="crown-jadwal.ics"',
-        "Cache-Control": "public, max-age=3600, s-maxage=3600",
+        "Cache-Control": "s-maxage=1800, stale-while-revalidate=1800",
         "Access-Control-Allow-Origin": "*",
       },
     });

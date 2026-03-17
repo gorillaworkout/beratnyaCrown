@@ -36,6 +36,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
+import { isHoliday } from "@/lib/holidays";
 import {
   collection,
   getDocs,
@@ -91,7 +92,7 @@ const SHIRT_COLORS = [
   { name: "Pink", hex: "#ec4899" },
 ];
 
-type ScheduleStatus = "latihan" | "libur" | "tambahan";
+type ScheduleStatus = "latihan" | "libur" | "tambahan" | "event";
 
 type ScheduleEntry = {
   id?: string;
@@ -103,6 +104,9 @@ type ScheduleEntry = {
   timeEnd?: string;
   note?: string;
   shirtColor?: typeof SHIRT_COLORS[number];
+  holidayName?: string | null;
+  eventName?: string;
+  eventEmoji?: string;
 };
 
 type CrownEvent = {
@@ -252,10 +256,18 @@ export default function JadwalPage() {
 
       // Check if there's custom schedule in Firestore
       const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      const holidayName = isHoliday(dateStr);
+
+      // Cek apakah ada event/lomba di hari ini
+      const isEventDay = events.find((e) => e.date === dateStr);
 
       let currentShirtColor = undefined;
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
-      const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
+      
+      // Hari Latihan = jika ada custom jadwal Latihan, atau (hari reguler, TIDAK ADA event, TIDAK ADA jadwal libur)
+      const isTrainingDay = 
+        (customSchedule?.status === "latihan" || customSchedule?.status === "tambahan") || 
+        (!customSchedule && isRegular && !isEventDay);
       
       if (isTrainingDay) {
         const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
@@ -269,7 +281,20 @@ export default function JadwalPage() {
           date: dateStr,
           dayName,
           isRegular: REGULAR_DAYS.has(dayOfWeek),
-          shirtColor: currentShirtColor
+          shirtColor: currentShirtColor,
+          holidayName,
+          eventName: isEventDay ? isEventDay.name : undefined,
+          eventEmoji: isEventDay ? isEventDay.emoji : undefined,
+        });
+      } else if (isEventDay) {
+        entries.push({
+          date: dateStr,
+          dayName,
+          isRegular: false, // Dianggap bukan hari latihan biasa
+          status: "event",
+          holidayName,
+          eventName: isEventDay.name,
+          eventEmoji: isEventDay.emoji,
         });
       } else {
         if (isRegular) {
@@ -285,7 +310,18 @@ export default function JadwalPage() {
             status: "latihan",
             timeStart: defaultTimeStart,
             timeEnd: defaultTimeEnd,
-            shirtColor: currentShirtColor
+            shirtColor: currentShirtColor,
+            holidayName
+          });
+        } else if (holidayName) {
+          // Tetap tampilkan hari libur nasional meskipun bukan jadwal reguler
+          entries.push({
+            date: dateStr,
+            dayName,
+            isRegular: false,
+            status: "libur",
+            shirtColor: undefined,
+            holidayName
           });
         }
       }
@@ -462,6 +498,8 @@ export default function JadwalPage() {
 
   // ─── Countdown ───────────────────────────────────────────────────────────
 
+  // ─── Countdown ───────────────────────────────────────────────────────────
+
   const getCountdown = (dateStr: string): string => {
     const target = new Date(dateStr + "T00:00:00");
     const today = new Date();
@@ -473,6 +511,43 @@ export default function JadwalPage() {
     if (diffDays === 0) return "Hari ini!";
     if (diffDays === 1) return "Besok!";
     return `${diffDays} hari lagi`;
+  };
+
+  const getTrainingSessionsUntil = (targetDateStr: string): number => {
+    const targetDate = new Date(targetDateStr + "T00:00:00");
+    const current = new Date();
+    current.setHours(0, 0, 0, 0);
+    
+    let count = 0;
+    
+    // Iterasi dari hari ini sampai sehari sebelum target date
+    while (current < targetDate) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+      const dayOfWeek = current.getDay();
+      
+      const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
+      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      const isEvent = events.some((e) => e.date === dateStr);
+      const holidayName = isHoliday(dateStr);
+      
+      // Logika "Hari Latihan" yang akurat
+      let isTrainingDay = false;
+      if (customSchedule) {
+        if (customSchedule.status === "latihan" || customSchedule.status === "tambahan") {
+          isTrainingDay = true;
+        }
+      } else if (isRegular && !isEvent) {
+        isTrainingDay = true;
+      }
+      
+      if (isTrainingDay) {
+        count++;
+      }
+      
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return count;
   };
 
   // ─── Loading State ───────────────────────────────────────────────────────
@@ -488,11 +563,33 @@ export default function JadwalPage() {
     );
   }
 
+  const getStatusColor = (entryObj?: ScheduleEntry) => {
+    if (!entryObj) return "";
+    if (entryObj.status === "libur") return "bg-gradient-to-br from-red-500 to-red-600";
+    if (entryObj.status === "event") return "bg-gradient-to-br from-indigo-500 to-purple-600";
+    if (entryObj.holidayName && entryObj.status !== "tambahan" && entryObj.status !== "latihan" && entryObj.status !== "event") return "bg-gradient-to-br from-zinc-600 to-zinc-800";
+    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
+    // Latihan Biasa -> ikuti warna baju
+    if (entryObj.shirtColor) {
+        switch(entryObj.shirtColor.name) {
+          case "Merah": return "bg-gradient-to-br from-red-500 to-red-700";
+          case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
+          case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
+          case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
+          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300"; // Teks jadi gelap untuk putih
+          case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
+        }
+    }
+    return "bg-gradient-to-br from-blue-500 to-blue-600";
+  };
+
   const todayStr = `${now.getFullYear()}-${String(
     now.getMonth() + 1
   ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const totalSessions = schedule.length;
-  const regularCount = schedule.filter((s) => s.isRegular).length;
+  const validSessions = schedule.filter(s => s.status !== "libur" && s.status !== "event");
+  const totalSessions = validSessions.length;
+  const regularCount = validSessions.filter((s) => s.isRegular).length;
+  const extraCount = validSessions.filter((s) => !s.isRegular && s.status === "tambahan").length;
   const todayEntry = schedule.find((s) => s.date === todayStr);
 
   return (
@@ -539,21 +636,21 @@ export default function JadwalPage() {
                 Tambahan
               </p>
               <p className="text-3xl font-bold text-amber-400 mt-1">
-                {totalSessions - regularCount}
+                {extraCount}
               </p>
             </CardContent>
           </Card>
-          <Card className={glassCardClass}>
+          <Card className={`${glassCardClass} ${todayEntry ? getStatusColor(todayEntry) : ''}`}>
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider">
+              <p className={`text-xs uppercase tracking-wider ${todayEntry?.shirtColor?.name === "Putih" ? "text-slate-600 font-bold" : "text-slate-400"}`}>
                 Hari Ini
               </p>
               {todayEntry ? (
                 <div className="mt-1">
-                  <p className="text-xl font-bold text-white">
+                  <p className={`text-xl font-bold ${todayEntry.shirtColor?.name === "Putih" ? "text-slate-900" : "text-white"}`}>
                     {todayEntry.timeStart}
                   </p>
-                  <p className="text-xs text-slate-400">
+                  <p className={`text-xs ${todayEntry.shirtColor?.name === "Putih" ? "text-slate-700" : "text-slate-400"}`}>
                     {todayEntry.status === "libur"
                       ? "Libur"
                       : todayEntry.status === "tambahan"
@@ -588,18 +685,19 @@ export default function JadwalPage() {
             )}
             {events.map((ev) => {
               const countdown = getCountdown(ev.date);
+              const sessionsLeft = getTrainingSessionsUntil(ev.date);
               const evDate = new Date(ev.date + "T00:00:00");
               const isPast = evDate < now;
               return (
                 <div
                   key={ev.id || ev.date}
-                  className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between bg-white/5 rounded-lg px-4 py-3 gap-3"
                 >
                   <div className="flex items-center gap-3">
-                    <span className="text-2xl">{ev.emoji || "🏅"}</span>
+                    <span className="text-3xl">{ev.emoji || "🏅"}</span>
                     <div>
-                      <p className="font-semibold text-white">{ev.name}</p>
-                      <p className="text-xs text-slate-400">
+                      <p className="font-semibold text-white text-lg">{ev.name}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">
                         {evDate.toLocaleDateString("id-ID", {
                           weekday: "long",
                           year: "numeric",
@@ -609,7 +707,12 @@ export default function JadwalPage() {
                       </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    {!isPast && sessionsLeft > 0 && (
+                      <Badge className="bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+                        {sessionsLeft}x Latihan Lagi
+                      </Badge>
+                    )}
                     <Badge
                       className={
                         isPast
@@ -624,7 +727,7 @@ export default function JadwalPage() {
                         variant="ghost"
                         size="sm"
                         onClick={() => removeEvent(ev.id!)}
-                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10 ml-2"
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -752,20 +855,27 @@ export default function JadwalPage() {
                 const isToday = dateStr === todayStr;
                 const isPast = dateStr < todayStr;
 
-                const getStatusColor = (status?: ScheduleStatus) => {
-                  switch (status) {
-                    case "latihan":
-                      return "bg-gradient-to-br from-blue-500 to-blue-600";
-                    case "libur":
-                      return "bg-gradient-to-br from-red-500 to-red-600";
-                    case "tambahan":
-                      return "bg-gradient-to-br from-amber-500 to-amber-600";
-                    default:
-                      return "";
-                  }
-                };
+  const getStatusColor = (entryObj?: ScheduleEntry) => {
+    if (!entryObj) return "";
+    if (entryObj.status === "libur") return "bg-gradient-to-br from-red-500 to-red-600";
+    if (entryObj.status === "event") return "bg-gradient-to-br from-indigo-500 to-purple-600";
+    if (entryObj.holidayName && entryObj.status !== "tambahan" && entryObj.status !== "latihan" && entryObj.status !== "event") return "bg-gradient-to-br from-zinc-600 to-zinc-800";
+    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
+    // Latihan Biasa -> ikuti warna baju
+    if (entryObj.shirtColor) {
+        switch(entryObj.shirtColor.name) {
+          case "Merah": return "bg-gradient-to-br from-red-500 to-red-700";
+          case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
+          case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
+          case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
+          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300"; // Teks jadi gelap untuk putih
+          case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
+        }
+    }
+    return "bg-gradient-to-br from-blue-500 to-blue-600";
+  };
 
-                const getStatusIcon = (status?: ScheduleStatus) => {
+                const getStatusIcon = (status?: ScheduleStatus, entryObj?: ScheduleEntry) => {
                   switch (status) {
                     case "latihan":
                       return "💪";
@@ -773,6 +883,8 @@ export default function JadwalPage() {
                       return "😴";
                     case "tambahan":
                       return "⚡";
+                    case "event":
+                      return entryObj?.eventEmoji || "🏆";
                     default:
                       return "";
                   }
@@ -786,9 +898,7 @@ export default function JadwalPage() {
                       aspect-square rounded-xl flex flex-col items-center justify-center relative text-xs transition-all
                       ${
                         entry
-                          ? `${getStatusColor(
-                              entry.status
-                            )} shadow-lg ${
+                          ? `${getStatusColor(entry)} shadow-lg ${
                               isAdmin ? "cursor-pointer hover:scale-105" : ""
                             }`
                           : isPast
@@ -803,19 +913,22 @@ export default function JadwalPage() {
                     `}
                   >
                     {entry && (
-                      <span className="text-sm leading-none">
-                        {getStatusIcon(entry.status)}
+                      <span className="text-sm leading-none md:block hidden">
+                        {getStatusIcon(entry.status, entry)}
                       </span>
                     )}
                     <span
-                      className={`font-bold ${entry ? "text-white" : ""}`}
+                      className={`font-bold ${entry && (!entry.shirtColor || entry.shirtColor.name !== "Putih") ? "text-white" : ""}`}
                     >
                       {cell}
                     </span>
                     {entry?.timeStart && (
-                      <span className="text-[8px] text-white/80">
+                      <span className={`text-[8px] ${entry.shirtColor?.name === "Putih" ? "text-slate-600 font-semibold" : "text-white/80"}`}>
                         {entry.timeStart}
                       </span>
+                    )}
+                    {entry?.holidayName && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-zinc-400 shadow-md shadow-zinc-400/50" title={entry.holidayName} />
                     )}
                   </div>
                 );
@@ -829,10 +942,6 @@ export default function JadwalPage() {
                 <span>Hari Ini</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-blue-500 to-blue-600" />
-                <span>Latihan Rutin</span>
-              </div>
-              <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-gradient-to-br from-red-500 to-red-600" />
                 <span>Libur</span>
               </div>
@@ -840,8 +949,25 @@ export default function JadwalPage() {
                 <div className="w-3 h-3 rounded-full bg-gradient-to-br from-amber-500 to-amber-600" />
                 <span>Latihan Extra</span>
               </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600" />
+                <span>Event / Lomba</span>
+              </div>
+              <div className="flex items-center gap-1.5 w-full mt-1">
+                <span className="text-slate-500 mr-1">Warna Latihan Rutin:</span>
+                <div className="w-3 h-3 rounded-full bg-red-600" title="Merah" />
+                <div className="w-3 h-3 rounded-full bg-slate-800" title="Hitam" />
+                <div className="w-3 h-3 rounded-full bg-blue-600" title="Biru" />
+                <div className="w-3 h-3 rounded-full bg-orange-600" title="Orange" />
+                <div className="w-3 h-3 rounded-full bg-slate-200 border border-slate-400" title="Putih" />
+                <div className="w-3 h-3 rounded-full bg-pink-600" title="Pink" />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-zinc-600 shadow-md shadow-zinc-600/50" />
+                <span>Tanggal Merah / Libur Nasional</span>
+              </div>
               {isAdmin && (
-                <span className="ml-auto text-slate-600">
+                <span className="ml-auto text-slate-600 w-full text-right">
                   Klik tanggal untuk edit
                 </span>
               )}
@@ -898,6 +1024,13 @@ export default function JadwalPage() {
                         border: "border-amber-500/30",
                         label: "Tambahan",
                       };
+                    case "event":
+                      return {
+                        bg: "bg-indigo-500/20",
+                        text: "text-indigo-400",
+                        border: "border-indigo-500/30",
+                        label: "Event",
+                      };
                   }
                 };
 
@@ -925,7 +1058,10 @@ export default function JadwalPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-white text-sm">
-                        {entry.dayName}
+                        {entry.status === "event" && entry.eventName ? entry.eventName : entry.dayName}
+                        {entry.holidayName && (
+                          <span className="ml-2 text-[10px] text-zinc-400 font-normal">({entry.holidayName})</span>
+                        )}
                       </p>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {isEntryToday && (
@@ -957,7 +1093,7 @@ export default function JadwalPage() {
                         </div>
                       ) : (
                         <p className="text-2xl">
-                          {entry.status === "libur" ? "😴" : "💪"}
+                          {entry.status === "libur" ? "😴" : entry.status === "event" ? (entry.eventEmoji || "🏆") : "💪"}
                         </p>
                       )}
                     </div>
@@ -1008,15 +1144,16 @@ export default function JadwalPage() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-white/10">
-                  <SelectItem value="latihan">Latihan Rutin</SelectItem>
-                  <SelectItem value="libur">Libur</SelectItem>
-                  <SelectItem value="tambahan">Latihan Tambahan</SelectItem>
+                <SelectContent className="bg-slate-800 border-white/10 text-white">
+                  <SelectItem value="latihan" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Latihan Rutin</SelectItem>
+                  <SelectItem value="libur" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Libur</SelectItem>
+                  <SelectItem value="tambahan" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Latihan Tambahan</SelectItem>
+                  <SelectItem value="event" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Event & Lomba</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {editForm.status !== "libur" && (
+            {editForm.status !== "libur" && editForm.status !== "event" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-slate-400 block mb-1.5">
@@ -1132,15 +1269,16 @@ export default function JadwalPage() {
                 <SelectTrigger className="bg-white/5 border-white/10 text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-white/10">
-                  <SelectItem value="latihan">Latihan Rutin</SelectItem>
-                  <SelectItem value="libur">Libur</SelectItem>
-                  <SelectItem value="tambahan">Latihan Tambahan</SelectItem>
+                <SelectContent className="bg-slate-800 border-white/10 text-white">
+                  <SelectItem value="latihan" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Latihan Rutin</SelectItem>
+                  <SelectItem value="libur" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Libur</SelectItem>
+                  <SelectItem value="tambahan" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Latihan Tambahan</SelectItem>
+                  <SelectItem value="event" className="focus:bg-slate-700 focus:text-white cursor-pointer focus:bg-white/10">Event & Lomba</SelectItem>
                 </SelectContent>
               </Select>
             </div>
 
-            {addForm.status !== "libur" && (
+            {addForm.status !== "libur" && addForm.status !== "event" && (
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-slate-400 block mb-1.5">
