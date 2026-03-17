@@ -23,6 +23,7 @@ import { db } from "@/lib/firebase";
 import { collection, onSnapshot, doc, deleteDoc, addDoc, updateDoc, orderBy, query } from "firebase/firestore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const glassCardClass =
   "border-white/10 bg-white/5 backdrop-blur-md shadow-xl text-slate-100 transition-all hover:bg-white/[0.07]";
@@ -358,6 +359,40 @@ export default function InfoDashboardPage() {
                       <span className="font-semibold text-amber-400">Rp 1.675.000</span>
                     </div>
                     <p className="text-xs text-slate-500 italic mt-1">*Belum termasuk GS (Tambahan +Rp50.000 untuk atlet putri jika ada additional div)</p>
+
+                    <Accordion type="single" collapsible className="w-full mt-4">
+                      <AccordionItem value="rincian" className="border-white/10 border-b-0">
+                        <AccordionTrigger className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:no-underline py-2">
+                          Lihat Rincian Penggunaan Dana
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2 pb-4 space-y-3">
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Transportasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Bus (1 unit x 2 hari)</span><span>Rp 4.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Akomodasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Hotel (14 room x 1 hari)</span><span>Rp 500.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Administrasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurda (40 pax)</span><span>Rp 200.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurnas (40 pax)</span><span>Rp 300.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Peralatan & Perlengkapan</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kostum Atlet (40 pax)</span><span>Rp 400.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kaos dan Celana (40 pax)</span><span>Rp 150.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>P3K (1 set)</span><span>Rp 1.000.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Properti (1 set)</span><span>Rp 1.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Konsumsi</span>
+                            <div className="flex justify-between text-xs text-slate-300"><span>Konsumsi (40 pax x 5 kali)</span><span>Rp 30.000</span></div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
                   </div>
 
                   <div className="space-y-2">
