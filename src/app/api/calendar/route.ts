@@ -1,37 +1,28 @@
 import { NextResponse } from "next/server";
 import { adminDb } from "@/lib/firebase-admin";
 
-// ─── Constants ─────────────────────────────────────────────────────────────
-
-const JERSEY_COLORS = [
-  { name: "Merah", emoji: "🔴" },
-  { name: "Biru", emoji: "🔵" },
-  { name: "Pink", emoji: "🩷" },
-  { name: "Ungu", emoji: "🟣" },
-  { name: "Hijau", emoji: "🟢" },
-  { name: "Hitam", emoji: "⚫" },
+const SHIRT_COLORS = [
+  { name: "Merah", hex: "#ef4444" },
+  { name: "Hitam", hex: "#374151" },
+  { name: "Biru", hex: "#3b82f6" },
+  { name: "Orange", hex: "#f97316" },
+  { name: "Putih", hex: "#f8fafc" },
+  { name: "Pink", hex: "#ec4899" },
 ];
 
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
 const TRAINING_START = new Date(2026, 3, 1); // April 1, 2026
 
-// ─── Helpers ───────────────────────────────────────────────────────────────
-
-function getJerseyForDate(
-  dateStr: string,
-  index: number,
-  prevColorIndex: number | null
-): number {
+function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
   let hash = 0;
   for (let i = 0; i < dateStr.length; i++) {
     const char = dateStr.charCodeAt(i);
     hash = (hash << 5) - hash + char;
     hash = hash & hash;
   }
-  hash = Math.abs(hash + index * 7);
-  let colorIndex = hash % JERSEY_COLORS.length;
-  if (prevColorIndex !== null && colorIndex === prevColorIndex) {
-    colorIndex = (colorIndex + 1) % JERSEY_COLORS.length;
+  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
+  if (colorIndex === prevColorIndex) {
+    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
   }
   return colorIndex;
 }
@@ -48,39 +39,28 @@ function escapeICS(text: string): string {
   return text.replace(/[\\;,]/g, (m) => "\\" + m);
 }
 
-// ─── Generate schedule for a range of months ───────────────────────────────
-
+type ScheduleStatus = "latihan" | "libur" | "tambahan";
 type ScheduleEntry = {
-  date: string; // YYYY-MM-DD
-  jerseyName: string;
-  jerseyEmoji: string;
-  isCustom: boolean;
-  customLabel?: string;
+  date: string;
+  status: ScheduleStatus;
+  timeStart?: string;
+  timeEnd?: string;
+  note?: string;
+  shirtColor?: typeof SHIRT_COLORS[number];
 };
 
-async function generateSchedule(
-  monthsAhead: number = 6
-): Promise<ScheduleEntry[]> {
-  // Fetch Firestore data
-  const [customDatesSnap, overridesSnap] = await Promise.all([
-    adminDb.collection("crown-custom-dates").get(),
-    adminDb.collection("crown-jersey-overrides").doc("overrides").get(),
-  ]);
-
-  const customDates = new Map<string, string>();
-  customDatesSnap.docs.forEach((doc) => {
-    const data = doc.data();
-    customDates.set(data.date as string, (data.label as string) || "Latihan Tambahan");
+async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[]> {
+  const customSchedulesSnap = await adminDb.collection("crown-schedules").get();
+  const customSchedules = new Map<string, any>();
+  customSchedulesSnap.docs.forEach((doc) => {
+    customSchedules.set(doc.data().date, doc.data());
   });
-
-  const overrides = (overridesSnap.exists ? overridesSnap.data() : {}) as Record<string, number>;
 
   const now = new Date();
   const startYear = now.getFullYear();
   const startMonth = now.getMonth();
-
   const entries: ScheduleEntry[] = [];
-  let prevColorIndex: number | null = null;
+  let prevColorIndex = -1;
 
   for (let offset = 0; offset < monthsAhead; offset++) {
     const month = (startMonth + offset) % 12;
@@ -91,29 +71,37 @@ async function generateSchedule(
       const date = new Date(year, month, day);
       const dateStr = `${year}-${padDate(month + 1)}-${padDate(day)}`;
       const dayOfWeek = date.getDay();
-
+      
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
-      const isCustom = customDates.has(dateStr);
+      const customSchedule = customSchedules.get(dateStr);
+      const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
+      
+      let currentShirtColor = undefined;
+      if (isTrainingDay) {
+        const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
+        currentShirtColor = SHIRT_COLORS[colorIndex];
+        prevColorIndex = colorIndex;
+      }
 
-      if (isRegular || isCustom) {
-        let colorIndex: number;
-        if (overrides[dateStr] !== undefined) {
-          colorIndex = overrides[dateStr];
-        } else {
-          colorIndex = getJerseyForDate(dateStr, entries.length, prevColorIndex);
-        }
-
-        const jersey = JERSEY_COLORS[colorIndex];
-
+      if (customSchedule) {
         entries.push({
           date: dateStr,
-          jerseyName: jersey.name,
-          jerseyEmoji: jersey.emoji,
-          isCustom,
-          customLabel: isCustom ? customDates.get(dateStr) : undefined,
+          status: customSchedule.status,
+          timeStart: customSchedule.timeStart,
+          timeEnd: customSchedule.timeEnd,
+          note: customSchedule.note,
+          shirtColor: currentShirtColor
         });
-
-        prevColorIndex = colorIndex;
+      } else if (isRegular) {
+        const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+        const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+        entries.push({
+          date: dateStr,
+          status: "latihan",
+          timeStart: defaultTimeStart,
+          timeEnd: defaultTimeEnd,
+          shirtColor: currentShirtColor
+        });
       }
     }
   }
@@ -121,13 +109,9 @@ async function generateSchedule(
   return entries;
 }
 
-// ─── Route Handler ─────────────────────────────────────────────────────────
-
 export async function GET() {
   try {
-    const schedule = await generateSchedule(6); // 6 months ahead
-
-    // Also fetch events
+    const schedule = await generateSchedule(6);
     const eventsSnap = await adminDb.collection("crown-events").get();
     const events = eventsSnap.docs.map((doc) => doc.data());
 
@@ -142,40 +126,53 @@ export async function GET() {
       "METHOD:PUBLISH",
       "X-WR-CALNAME:Crown Allstar - Jadwal Latihan",
       "X-WR-TIMEZONE:Asia/Jakarta",
-      "REFRESH-INTERVAL;VALUE=DURATION:PT6H",
+      "REFRESH-INTERVAL;VALUE=DURATION:PT6H", // Auto refresh setiap 6 jam
       "X-PUBLISHED-TTL:PT6H",
     ];
 
-    // Training sessions
     for (const entry of schedule) {
+      if (entry.status === "libur") continue;
+
       const dateCompact = entry.date.replace(/-/g, "");
       const uid = `crown-training-${entry.date}@crownallstar.id`;
-      const summary = entry.isCustom
-        ? `Latihan Tambahan: ${entry.customLabel || "Latihan"}`
-        : "Latihan Crown Allstar";
+      
+      let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
+      let descParts = [];
+      
+      if (entry.shirtColor) {
+        descParts.push(`👕 Jersey: ${entry.shirtColor.name}`);
+      }
+      if (entry.note) descParts.push(`📝 Catatan: ${entry.note}`);
+      
+      const description = descParts.join("\\n");
 
       lines.push("BEGIN:VEVENT");
-      lines.push(`DTSTART;VALUE=DATE:${dateCompact}`);
-      lines.push(`DTEND;VALUE=DATE:${dateCompact}`);
+      
+      if (entry.timeStart && entry.timeEnd) {
+        const startDateTime = `${dateCompact}T${entry.timeStart.replace(":", "")}00`;
+        const endDateTime = `${dateCompact}T${entry.timeEnd.replace(":", "")}00`;
+        lines.push(`DTSTART;TZID=Asia/Jakarta:${startDateTime}`);
+        lines.push(`DTEND;TZID=Asia/Jakarta:${endDateTime}`);
+      } else {
+        lines.push(`DTSTART;VALUE=DATE:${dateCompact}`);
+        lines.push(`DTEND;VALUE=DATE:${dateCompact}`);
+      }
+
       lines.push(`DTSTAMP:${timestamp}`);
       lines.push(`UID:${uid}`);
-      lines.push(`SUMMARY:${escapeICS(summary)}`);
-      lines.push(
-        `DESCRIPTION:${escapeICS(
-          `Jersey: ${entry.jerseyEmoji} ${entry.jerseyName}${entry.isCustom ? "\\nTipe: Latihan Tambahan" : "\\nTipe: Latihan Rutin (Rabu/Sabtu/Minggu)"}`
-        )}`
-      );
+      lines.push(`SUMMARY:${escapeICS(title)}`);
+      if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+      
+      // Inject Apple Calendar specific color tag
+      if (entry.shirtColor) {
+         lines.push(`COLOR:${entry.shirtColor.hex.toUpperCase()}`);
+      }
+
       lines.push("LOCATION:Crown Allstar Cheerleading\\, Bandung");
       lines.push("STATUS:CONFIRMED");
-      if (entry.isCustom) {
-        lines.push("CATEGORIES:Latihan Tambahan");
-      } else {
-        lines.push("CATEGORIES:Latihan Rutin");
-      }
       lines.push("END:VEVENT");
     }
 
-    // Competition events
     for (const event of events) {
       const dateCompact = (event.date as string).replace(/-/g, "");
       const uid = `crown-event-${event.date}@crownallstar.id`;
@@ -188,15 +185,13 @@ export async function GET() {
       lines.push(`SUMMARY:${escapeICS(`${event.emoji || "🏆"} ${event.name as string}`)}`);
       lines.push("DESCRIPTION:Kompetisi Crown Allstar Cheerleading");
       lines.push("STATUS:CONFIRMED");
-      lines.push("CATEGORIES:Kompetisi");
+      lines.push("COLOR:#f59e0b"); // Amber color for events
       lines.push("END:VEVENT");
     }
 
     lines.push("END:VCALENDAR");
 
-    const icsContent = lines.join("\r\n");
-
-    return new NextResponse(icsContent, {
+    return new NextResponse(lines.join("\r\n"), {
       status: 200,
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
@@ -207,9 +202,6 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Calendar API error:", error);
-    return NextResponse.json(
-      { error: "Failed to generate calendar" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Failed to generate calendar" }, { status: 500 });
   }
 }

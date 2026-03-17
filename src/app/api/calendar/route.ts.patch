@@ -1,0 +1,14 @@
+--- src/app/api/calendar/route.ts
++++ src/app/api/calendar/route.ts
+@@ -128,8 +128,12 @@
+       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
+       
+       // Inject Apple Calendar specific color tag
+       if (entry.shirtColor) {
+-         // STANDARD ICS COLOR
+-         lines.push(`COLOR:${entry.shirtColor.hex}`);
++         lines.push(`COLOR:${entry.shirtColor.hex.toUpperCase()}`);
++         lines.push(`APPLE-CALENDAR-COLOR:${entry.shirtColor.hex.toUpperCase()}`);
+       }
+ 
+       lines.push("LOCATION:Crown Allstar Cheerleading\\, Bandung");

@@ -1,0 +1,99 @@
+--- src/app/dashboard/jadwal/page.tsx
++++ src/app/dashboard/jadwal/page.tsx
+@@ -82,6 +82,15 @@
+ 
+ // ─── Types ───────────────────────────────────────────────────────────────────
+ 
++const SHIRT_COLORS = [
++  { name: "Merah", hex: "#ef4444" },
++  { name: "Hitam", hex: "#374151" },
++  { name: "Biru", hex: "#3b82f6" },
++  { name: "Orange", hex: "#f97316" },
++  { name: "Putih", hex: "#f8fafc" },
++  { name: "Pink", hex: "#ec4899" },
++];
++
+ type ScheduleStatus = "latihan" | "libur" | "tambahan";
+ 
+ type ScheduleEntry = {
+@@ -93,6 +102,7 @@
+   timeStart?: string;
+   timeEnd?: string;
+   note?: string;
++  shirtColor?: typeof SHIRT_COLORS[number];
+ };
+ 
+ type CrownEvent = {
+@@ -113,6 +123,22 @@
+   return new Date(year, month).toLocaleDateString("id-ID", {
+     month: "long",
+     year: "numeric",
+   });
+ }
+ 
++function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
++  let hash = 0;
++  for (let i = 0; i < dateStr.length; i++) {
++    const char = dateStr.charCodeAt(i);
++    hash = (hash << 5) - hash + char;
++    hash = hash & hash;
++  }
++  
++  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
++  if (colorIndex === prevColorIndex) {
++    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
++  }
++  return colorIndex;
++}
++
+ function formatTime(timeStr: string): string {
+@@ -214,6 +240,7 @@
+   const schedule = useMemo(() => {
+     const entries: ScheduleEntry[] = [];
+     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
++    let prevColorIndex = -1;
+ 
+     for (let day = 1; day <= daysInMonth; day++) {
+       const date = new Date(currentYear, currentMonth, day);
+@@ -226,11 +253,20 @@
+ 
+       // Check if there's custom schedule in Firestore
+       const customSchedule = scheduleData.find((s) => s.date === dateStr);
++      
++      let currentShirtColor = undefined;
++      if (customSchedule?.status !== "libur" && (customSchedule || (REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START))) {
++        const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
++        currentShirtColor = SHIRT_COLORS[colorIndex];
++        prevColorIndex = colorIndex;
++      }
+ 
+       if (customSchedule) {
+         entries.push({
+           ...customSchedule,
+           date: dateStr,
+           dayName,
+           isRegular: REGULAR_DAYS.has(dayOfWeek),
++          shirtColor: currentShirtColor
+         });
+       } else {
+         // Check if this is a regular training day
+@@ -244,6 +280,7 @@
+             status: "latihan",
+             timeStart: "07:00",
+             timeEnd: "10:00",
++            shirtColor: currentShirtColor
+           });
+         }
+       }
+@@ -698,6 +735,11 @@
+                           <p className="text-xs text-slate-400">
+                             s/d {entry.timeEnd}
+                           </p>
++                          {entry.shirtColor && (
++                            <Badge className="mt-1 text-[10px] bg-white/10" style={{ color: entry.shirtColor.hex, borderColor: entry.shirtColor.hex }}>
++                              👕 {entry.shirtColor.name}
++                            </Badge>
++                          )}
+                         </div>
+                       ) : (
+                         <p className="text-2xl">

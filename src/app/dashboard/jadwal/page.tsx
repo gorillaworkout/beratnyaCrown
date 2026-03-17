@@ -12,13 +12,27 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   ChevronLeft,
   ChevronRight,
   Plus,
   Calendar,
   X,
-  Sparkles,
-  Download,
+  Clock,
+  Edit2,
 } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
@@ -30,119 +44,12 @@ import {
   doc,
   setDoc,
   onSnapshot,
+  updateDoc,
 } from "firebase/firestore";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
 const glassCardClass = "border-white/10 bg-white/5 backdrop-blur-md shadow-xl";
-
-const JERSEY_COLORS = [
-  {
-    name: "Merah",
-    hex: "#ef4444",
-    bg: "bg-red-500",
-    emoji: "🔴",
-    gradient: "from-red-500 to-red-600",
-  },
-  {
-    name: "Biru",
-    hex: "#3b82f6",
-    bg: "bg-blue-500",
-    emoji: "🔵",
-    gradient: "from-blue-500 to-blue-600",
-  },
-  {
-    name: "Pink",
-    hex: "#ec4899",
-    bg: "bg-pink-500",
-    emoji: "🩷",
-    gradient: "from-pink-500 to-pink-600",
-  },
-  {
-    name: "Ungu",
-    hex: "#8b5cf6",
-    bg: "bg-violet-500",
-    emoji: "🟣",
-    gradient: "from-violet-500 to-violet-600",
-  },
-  {
-    name: "Hijau",
-    hex: "#22c55e",
-    bg: "bg-green-500",
-    emoji: "🟢",
-    gradient: "from-green-500 to-green-600",
-  },
-  {
-    name: "Hitam",
-    hex: "#374151",
-    bg: "bg-gray-700",
-    emoji: "⚫",
-    gradient: "from-gray-700 to-gray-800",
-  },
-];
-
-// ─── Types ───────────────────────────────────────────────────────────────────
-
-type JerseyColor = (typeof JERSEY_COLORS)[number];
-
-type ScheduleEntry = {
-  date: string;
-  dayName: string;
-  isRegular: boolean;
-  isCustom: boolean;
-  jerseyColor: JerseyColor;
-};
-
-type CrownEvent = {
-  id?: string;
-  name: string;
-  date: string;
-  emoji: string;
-  color: string;
-};
-
-type CustomDate = {
-  id?: string;
-  date: string;
-  label: string;
-};
-
-// ─── Helper Functions ────────────────────────────────────────────────────────
-
-function getJerseyForDate(
-  dateStr: string,
-  index: number,
-  prevColorIndex: number | null
-): number {
-  // Seed-based hash from date string
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    const char = dateStr.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  hash = Math.abs(hash + index * 7);
-
-  let colorIndex = hash % JERSEY_COLORS.length;
-
-  // Avoid repeating previous color
-  if (prevColorIndex !== null && colorIndex === prevColorIndex) {
-    colorIndex = (colorIndex + 1) % JERSEY_COLORS.length;
-  }
-
-  return colorIndex;
-}
-
-function getDaysInMonth(year: number, month: number): number {
-  return new Date(year, month + 1, 0).getDate();
-}
-
-function formatMonthYear(year: number, month: number): string {
-  return new Date(year, month).toLocaleDateString("id-ID", {
-    month: "long",
-    year: "numeric",
-  });
-}
 
 const DAY_NAMES_ID = [
   "Minggu",
@@ -155,9 +62,7 @@ const DAY_NAMES_ID = [
 ];
 
 const SHORT_DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
-
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
-
 const TRAINING_START = new Date(2026, 3, 1); // April 1, 2026
 
 const DEFAULT_EVENTS: Omit<CrownEvent, "id">[] = [
@@ -175,6 +80,73 @@ const DEFAULT_EVENTS: Omit<CrownEvent, "id">[] = [
   },
 ];
 
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+const SHIRT_COLORS = [
+  { name: "Merah", hex: "#ef4444" },
+  { name: "Hitam", hex: "#374151" },
+  { name: "Biru", hex: "#3b82f6" },
+  { name: "Orange", hex: "#f97316" },
+  { name: "Putih", hex: "#f8fafc" },
+  { name: "Pink", hex: "#ec4899" },
+];
+
+type ScheduleStatus = "latihan" | "libur" | "tambahan";
+
+type ScheduleEntry = {
+  id?: string;
+  date: string;
+  dayName: string;
+  isRegular: boolean;
+  status: ScheduleStatus;
+  timeStart?: string;
+  timeEnd?: string;
+  note?: string;
+  shirtColor?: typeof SHIRT_COLORS[number];
+};
+
+type CrownEvent = {
+  id?: string;
+  name: string;
+  date: string;
+  emoji: string;
+  color: string;
+};
+
+// ─── Helper Functions ────────────────────────────────────────────────────────
+
+function getDaysInMonth(year: number, month: number): number {
+  return new Date(year, month + 1, 0).getDate();
+}
+
+function formatMonthYear(year: number, month: number): string {
+  return new Date(year, month).toLocaleDateString("id-ID", {
+    month: "long",
+    year: "numeric",
+  });
+}
+
+function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
+  let hash = 0;
+  for (let i = 0; i < dateStr.length; i++) {
+    const char = dateStr.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash = hash & hash;
+  }
+  
+  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
+  if (colorIndex === prevColorIndex) {
+    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
+  }
+  return colorIndex;
+}
+
+function formatTime(timeStr: string): string {
+  if (!timeStr) return "";
+  const [hours, minutes] = timeStr.split(":");
+  return `${hours}:${minutes}`;
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function JadwalPage() {
@@ -186,16 +158,33 @@ export default function JadwalPage() {
   const now = new Date();
   const [currentYear, setCurrentYear] = useState(now.getFullYear());
   const [currentMonth, setCurrentMonth] = useState(now.getMonth());
-  const [customDates, setCustomDates] = useState<CustomDate[]>([]);
-  const [jerseyOverrides, setJerseyOverrides] = useState<
-    Record<string, number>
-  >({});
+  const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [events, setEvents] = useState<CrownEvent[]>([]);
-  const [newCustomDate, setNewCustomDate] = useState("");
-  const [newCustomLabel, setNewCustomLabel] = useState("");
+  const [firestoreLoading, setFirestoreLoading] = useState(true);
+
+  // Edit dialog state
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    status: "latihan" as ScheduleStatus,
+    timeStart: "",
+    timeEnd: "",
+    note: "",
+  });
+
+  // Add dialog state
+  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const [addForm, setAddForm] = useState({
+    date: "",
+    status: "latihan" as ScheduleStatus,
+    timeStart: "07:00",
+    timeEnd: "10:00",
+    note: "",
+  });
+
+  // Event form state
   const [newEventName, setNewEventName] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
-  const [firestoreLoading, setFirestoreLoading] = useState(true);
 
   // ─── Firestore Listeners ─────────────────────────────────────────────────
 
@@ -226,36 +215,22 @@ export default function JadwalPage() {
       }
     );
 
-    // Listen to crown-custom-dates
-    const unsubCustomDates = onSnapshot(
-      collection(db, "crown-custom-dates"),
+    // Listen to crown-schedules (new collection for editable schedules)
+    const unsubSchedules = onSnapshot(
+      collection(db, "crown-schedules"),
       (snapshot) => {
-        const dates: CustomDate[] = snapshot.docs.map((d) => ({
+        const schedules: ScheduleEntry[] = snapshot.docs.map((d) => ({
           id: d.id,
-          date: d.data().date as string,
-          label: d.data().label as string,
+          ...(d.data() as Omit<ScheduleEntry, "id">),
         }));
-        setCustomDates(dates);
-      }
-    );
-
-    // Listen to jersey overrides
-    const unsubOverrides = onSnapshot(
-      doc(db, "crown-jersey-overrides", "overrides"),
-      (snapshot) => {
-        if (snapshot.exists()) {
-          setJerseyOverrides(snapshot.data() as Record<string, number>);
-        } else {
-          setJerseyOverrides({});
-        }
+        setScheduleData(schedules);
         setFirestoreLoading(false);
       }
     );
 
     return () => {
       unsubEvents();
-      unsubCustomDates();
-      unsubOverrides();
+      unsubSchedules();
     };
   }, [authLoading]);
 
@@ -264,58 +239,74 @@ export default function JadwalPage() {
   const schedule = useMemo(() => {
     const entries: ScheduleEntry[] = [];
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    const customDateSet = new Set(customDates.map((cd) => cd.date));
-
-    let prevColorIndex: number | null = null;
+    let prevColorIndex = -1;
 
     for (let day = 1; day <= daysInMonth; day++) {
       const date = new Date(currentYear, currentMonth, day);
-      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+      const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(
+        2,
+        "0"
+      )}-${String(day).padStart(2, "0")}`;
       const dayOfWeek = date.getDay();
       const dayName = DAY_NAMES_ID[dayOfWeek];
 
+      // Check if there's custom schedule in Firestore
+      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+
+      let currentShirtColor = undefined;
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
-      const isCustom = customDateSet.has(dateStr);
+      const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
+      
+      if (isTrainingDay) {
+        const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
+        currentShirtColor = SHIRT_COLORS[colorIndex];
+        prevColorIndex = colorIndex;
+      }
 
-      if (isRegular || isCustom) {
-        let colorIndex: number;
-        if (jerseyOverrides[dateStr] !== undefined) {
-          colorIndex = jerseyOverrides[dateStr];
-        } else {
-          colorIndex = getJerseyForDate(dateStr, entries.length, prevColorIndex);
-        }
-
+      if (customSchedule) {
         entries.push({
+          ...customSchedule,
           date: dateStr,
           dayName,
-          isRegular,
-          isCustom,
-          jerseyColor: JERSEY_COLORS[colorIndex],
+          isRegular: REGULAR_DAYS.has(dayOfWeek),
+          shirtColor: currentShirtColor
         });
+      } else {
+        if (isRegular) {
+          // Rabu (3) & Sabtu (6) -> 19:00 - 22:00 (7-10 malam)
+          // Minggu (0) -> 10:00 - 13:00 (10-1 siang)
+          const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+          const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
 
-        prevColorIndex = colorIndex;
+          entries.push({
+            date: dateStr,
+            dayName,
+            isRegular: true,
+            status: "latihan",
+            timeStart: defaultTimeStart,
+            timeEnd: defaultTimeEnd,
+            shirtColor: currentShirtColor
+          });
+        }
       }
     }
 
-    return entries;
-  }, [currentYear, currentMonth, customDates, jerseyOverrides]);
+    return entries.sort((a, b) => a.date.localeCompare(b.date));
+  }, [currentYear, currentMonth, scheduleData]);
 
   // ─── Calendar Grid Memo ──────────────────────────────────────────────────
 
   const calendarGrid = useMemo(() => {
     const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-    // Monday-start offset: JS getDay() gives 0=Sun, we want Mon=0
     const firstDayOffset =
       (new Date(currentYear, currentMonth, 1).getDay() + 6) % 7;
 
     const grid: (number | null)[] = [];
 
-    // Leading empty cells
     for (let i = 0; i < firstDayOffset; i++) {
       grid.push(null);
     }
 
-    // Days of month
     for (let day = 1; day <= daysInMonth; day++) {
       grid.push(day);
     }
@@ -353,7 +344,7 @@ export default function JadwalPage() {
 
   const triggerCalendarSync = async () => {
     try {
-      const adminKey = "dupoin123"; // matches ADMIN_PASSWORD
+      const adminKey = "dupoin123";
       await fetch("/api/calendar/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -364,60 +355,89 @@ export default function JadwalPage() {
     }
   };
 
-  // ─── Custom Date Management ──────────────────────────────────────────────
+  // ─── Schedule Management ─────────────────────────────────────────────────
 
-  const addCustomDate = async () => {
-    if (!newCustomDate) return;
-    await addDoc(collection(db, "crown-custom-dates"), {
-      date: newCustomDate,
-      label: newCustomLabel || "Latihan Tambahan",
+  const openEditDialog = (entry: ScheduleEntry) => {
+    setEditingDate(entry.date);
+    setEditForm({
+      status: entry.status,
+      timeStart: entry.timeStart || "07:00",
+      timeEnd: entry.timeEnd || "10:00",
+      note: entry.note || "",
     });
-    setNewCustomDate("");
-    setNewCustomLabel("");
-    triggerCalendarSync();
+    setEditDialogOpen(true);
   };
 
-  const removeCustomDate = async (id: string) => {
-    await deleteDoc(doc(db, "crown-custom-dates", id));
-    triggerCalendarSync();
-  };
+  const saveSchedule = async () => {
+    if (!editingDate) return;
 
-  // ─── Jersey Override Management ──────────────────────────────────────────
+    const date = new Date(editingDate + "T00:00:00");
+    const dayOfWeek = date.getDay();
 
-  const cycleJersey = async (dateStr: string) => {
-    const currentIndex = jerseyOverrides[dateStr];
-    const entry = schedule.find((s) => s.date === dateStr);
-    if (!entry) return;
+    const scheduleEntry: Omit<ScheduleEntry, "id"> = {
+      date: editingDate,
+      dayName: DAY_NAMES_ID[dayOfWeek],
+      isRegular: REGULAR_DAYS.has(dayOfWeek),
+      status: editForm.status,
+      timeStart: editForm.timeStart,
+      timeEnd: editForm.timeEnd,
+      note: editForm.note,
+    };
 
-    const currentColorIndex = JERSEY_COLORS.indexOf(entry.jerseyColor);
-    const nextIndex =
-      currentIndex !== undefined
-        ? (currentIndex + 1) % JERSEY_COLORS.length
-        : (currentColorIndex + 1) % JERSEY_COLORS.length;
+    // Check if entry already exists
+    const existing = scheduleData.find((s) => s.date === editingDate);
 
-    await setDoc(
-      doc(db, "crown-jersey-overrides", "overrides"),
-      { [dateStr]: nextIndex },
-      { merge: true }
-    );
-    triggerCalendarSync();
-  };
-
-  const randomizeAll = async () => {
-    const overrides: Record<string, number> = {};
-    let prevIdx: number | null = null;
-
-    for (const entry of schedule) {
-      let idx = Math.floor(Math.random() * JERSEY_COLORS.length);
-      if (prevIdx !== null && idx === prevIdx) {
-        idx = (idx + 1) % JERSEY_COLORS.length;
-      }
-      overrides[entry.date] = idx;
-      prevIdx = idx;
+    if (existing?.id) {
+      await updateDoc(doc(db, "crown-schedules", existing.id), scheduleEntry);
+    } else {
+      await addDoc(collection(db, "crown-schedules"), scheduleEntry);
     }
 
-    await setDoc(doc(db, "crown-jersey-overrides", "overrides"), overrides);
     triggerCalendarSync();
+    setEditDialogOpen(false);
+    setEditingDate(null);
+  };
+
+  const deleteSchedule = async () => {
+    if (!editingDate) return;
+
+    const existing = scheduleData.find((s) => s.date === editingDate);
+    if (existing?.id) {
+      await deleteDoc(doc(db, "crown-schedules", existing.id));
+    }
+
+    triggerCalendarSync();
+    setEditDialogOpen(false);
+    setEditingDate(null);
+  };
+
+  const addCustomSchedule = async () => {
+    if (!addForm.date) return;
+
+    const date = new Date(addForm.date + "T00:00:00");
+    const dayOfWeek = date.getDay();
+
+    const scheduleEntry: Omit<ScheduleEntry, "id"> = {
+      date: addForm.date,
+      dayName: DAY_NAMES_ID[dayOfWeek],
+      isRegular: false,
+      status: addForm.status,
+      timeStart: addForm.timeStart,
+      timeEnd: addForm.timeEnd,
+      note: addForm.note,
+    };
+
+    await addDoc(collection(db, "crown-schedules"), scheduleEntry);
+
+    triggerCalendarSync();
+    setAddDialogOpen(false);
+    setAddForm({
+      date: "",
+      status: "latihan",
+      timeStart: "07:00",
+      timeEnd: "10:00",
+      note: "",
+    });
   };
 
   // ─── Event Management ────────────────────────────────────────────────────
@@ -455,71 +475,6 @@ export default function JadwalPage() {
     return `${diffDays} hari lagi`;
   };
 
-  // ─── ICS Download ────────────────────────────────────────────────────────
-
-  const downloadICS = () => {
-    const lines: string[] = [
-      "BEGIN:VCALENDAR",
-      "VERSION:2.0",
-      "PRODID:-//Crown Allstar//Jadwal//ID",
-      "CALSCALE:GREGORIAN",
-      "METHOD:PUBLISH",
-    ];
-
-    for (const entry of schedule) {
-      const dateCompact = entry.date.replace(/-/g, "");
-      const uid = `crown-${entry.date}@crownallstar.id`;
-
-      lines.push("BEGIN:VEVENT");
-      lines.push(`DTSTART;VALUE=DATE:${dateCompact}`);
-      lines.push(`SUMMARY:Latihan Crown Allstar`);
-      lines.push(`DESCRIPTION:Jersey: ${entry.jerseyColor.name}`);
-      lines.push(`UID:${uid}`);
-      lines.push("END:VEVENT");
-    }
-
-    lines.push("END:VCALENDAR");
-
-    const blob = new Blob([lines.join("\r\n")], {
-      type: "text/calendar;charset=utf-8",
-    });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `jadwal-crown-${formatMonthYear(currentYear, currentMonth).replace(/\s+/g, "-")}.ics`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  // ─── Google Calendar URL ─────────────────────────────────────────────────
-
-  const getGoogleCalendarUrl = (entry: ScheduleEntry): string => {
-    const dateCompact = entry.date.replace(/-/g, "");
-    // For all-day event, end date is the next day
-    const endDate = new Date(entry.date + "T00:00:00");
-    endDate.setDate(endDate.getDate() + 1);
-    const endCompact = `${endDate.getFullYear()}${String(endDate.getMonth() + 1).padStart(2, "0")}${String(endDate.getDate()).padStart(2, "0")}`;
-
-    const params = new URLSearchParams({
-      action: "TEMPLATE",
-      text: "Latihan Crown Allstar",
-      dates: `${dateCompact}/${endCompact}`,
-      details: `Jersey: ${entry.jerseyColor.name} ${entry.jerseyColor.emoji}`,
-    });
-
-    return `https://calendar.google.com/calendar/render?${params.toString()}`;
-  };
-
-  // ─── Computed Values ─────────────────────────────────────────────────────
-
-  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  const totalSessions = schedule.length;
-  const regularCount = schedule.filter((s) => s.isRegular).length;
-  const customCount = schedule.filter((s) => s.isCustom && !s.isRegular).length;
-  const todayEntry = schedule.find((s) => s.date === todayStr);
-
   // ─── Loading State ───────────────────────────────────────────────────────
 
   if (authLoading || firestoreLoading) {
@@ -533,6 +488,13 @@ export default function JadwalPage() {
     );
   }
 
+  const todayStr = `${now.getFullYear()}-${String(
+    now.getMonth() + 1
+  ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const totalSessions = schedule.length;
+  const regularCount = schedule.filter((s) => s.isRegular).length;
+  const todayEntry = schedule.find((s) => s.date === todayStr);
+
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
       <div className="mx-auto max-w-5xl space-y-6">
@@ -544,41 +506,65 @@ export default function JadwalPage() {
               Jadwal Latihan
             </h1>
           </div>
-          <p className="text-slate-400 text-sm">Rabu • Sabtu • Minggu + Latihan Tambahan</p>
+          <p className="text-slate-400 text-sm">
+            Rabu • Sabtu • Minggu + Latihan Tambahan
+          </p>
         </div>
 
         {/* Summary Cards */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className={glassCardClass}>
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider">Total Latihan</p>
-              <p className="text-3xl font-bold text-cyan-400 mt-1">{totalSessions}</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider">
+                Total Latihan
+              </p>
+              <p className="text-3xl font-bold text-cyan-400 mt-1">
+                {totalSessions}
+              </p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider">Rutin</p>
-              <p className="text-3xl font-bold text-emerald-400 mt-1">{regularCount}</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider">
+                Rutin
+              </p>
+              <p className="text-3xl font-bold text-emerald-400 mt-1">
+                {regularCount}
+              </p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider">Tambahan</p>
-              <p className="text-3xl font-bold text-amber-400 mt-1">{customCount}</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider">
+                Tambahan
+              </p>
+              <p className="text-3xl font-bold text-amber-400 mt-1">
+                {totalSessions - regularCount}
+              </p>
             </CardContent>
           </Card>
           <Card className={glassCardClass}>
             <CardContent className="p-4 text-center">
-              <p className="text-xs text-slate-400 uppercase tracking-wider">Hari Ini</p>
+              <p className="text-xs text-slate-400 uppercase tracking-wider">
+                Hari Ini
+              </p>
               {todayEntry ? (
                 <div className="mt-1">
-                  <span className="text-3xl">👕</span>
-                  <p className="text-xs mt-1" style={{ color: todayEntry.jerseyColor.hex }}>
-                    {todayEntry.jerseyColor.name}
+                  <p className="text-xl font-bold text-white">
+                    {todayEntry.timeStart}
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    {todayEntry.status === "libur"
+                      ? "Libur"
+                      : todayEntry.status === "tambahan"
+                      ? "Latihan Extra"
+                      : "Ada Latihan"}
                   </p>
                 </div>
               ) : (
-                <p className="text-3xl mt-1">😴 <span className="text-sm text-slate-500">Libur</span></p>
+                <p className="text-3xl mt-1">
+                  😴 <span className="text-sm text-slate-500">Libur</span>
+                </p>
               )}
             </CardContent>
           </Card>
@@ -590,39 +576,56 @@ export default function JadwalPage() {
             <CardTitle className="text-white flex items-center gap-2">
               <span>🏆</span> Events & Lomba
             </CardTitle>
-            <CardDescription className="text-slate-400">Acara mendatang dan countdown</CardDescription>
+            <CardDescription className="text-slate-400">
+              Acara mendatang dan countdown
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
             {events.length === 0 && (
-              <p className="text-slate-500 text-sm text-center py-4">Belum ada event</p>
+              <p className="text-slate-500 text-sm text-center py-4">
+                Belum ada event
+              </p>
             )}
             {events.map((ev) => {
               const countdown = getCountdown(ev.date);
               const evDate = new Date(ev.date + "T00:00:00");
               const isPast = evDate < now;
               return (
-                <div key={ev.id || ev.date} className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3">
+                <div
+                  key={ev.id || ev.date}
+                  className="flex items-center justify-between bg-white/5 rounded-lg px-4 py-3"
+                >
                   <div className="flex items-center gap-3">
                     <span className="text-2xl">{ev.emoji || "🏅"}</span>
                     <div>
                       <p className="font-semibold text-white">{ev.name}</p>
                       <p className="text-xs text-slate-400">
                         {evDate.toLocaleDateString("id-ID", {
-                          weekday: "long", year: "numeric", month: "long", day: "numeric",
+                          weekday: "long",
+                          year: "numeric",
+                          month: "long",
+                          day: "numeric",
                         })}
                       </p>
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Badge className={
-                      isPast
-                        ? "bg-slate-600 text-slate-300"
-                        : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
-                    }>
+                    <Badge
+                      className={
+                        isPast
+                          ? "bg-slate-600 text-slate-300"
+                          : "bg-cyan-500/20 text-cyan-400 border border-cyan-500/30"
+                      }
+                    >
                       {countdown}
                     </Badge>
                     {isAdmin && ev.id && (
-                      <Button variant="ghost" size="sm" onClick={() => removeEvent(ev.id!)} className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeEvent(ev.id!)}
+                        className="h-6 w-6 p-0 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                      >
                         <X className="h-3 w-3" />
                       </Button>
                     )}
@@ -645,7 +648,11 @@ export default function JadwalPage() {
                   onChange={(e) => setNewEventDate(e.target.value)}
                   className="bg-white/5 border-white/10 text-white w-40 [color-scheme:dark]"
                 />
-                <Button onClick={addEvent} size="sm" className="bg-cyan-600 hover:bg-cyan-500 text-white">
+                <Button
+                  onClick={addEvent}
+                  size="sm"
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white"
+                >
                   <Plus className="h-4 w-4" />
                 </Button>
               </div>
@@ -661,29 +668,43 @@ export default function JadwalPage() {
           <CardContent className="space-y-4">
             {/* Month Navigation */}
             <div className="flex items-center justify-between">
-              <Button variant="ghost" size="sm" onClick={prevMonth} className="text-slate-300 hover:text-white hover:bg-white/10">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={prevMonth}
+                className="text-slate-300 hover:text-white hover:bg-white/10"
+              >
                 <ChevronLeft className="h-5 w-5" />
               </Button>
-              <h3 className="text-lg font-bold text-white">{formatMonthYear(currentYear, currentMonth)}</h3>
+              <h3 className="text-lg font-bold text-white">
+                {formatMonthYear(currentYear, currentMonth)}
+              </h3>
               <div className="flex gap-2">
-                <Button variant="ghost" size="sm" onClick={goToday} className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 text-xs">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={goToday}
+                  className="text-cyan-400 hover:text-cyan-300 hover:bg-cyan-500/10 text-xs"
+                >
                   Hari Ini
                 </Button>
-                {isAdmin && (
-                  <Button variant="ghost" size="sm" onClick={randomizeAll} className="text-amber-400 hover:text-amber-300 hover:bg-amber-500/10 text-xs">
-                    <Sparkles className="h-3 w-3 mr-1" /> Acak Warna
-                  </Button>
-                )}
-                <Button variant="ghost" size="sm" onClick={nextMonth} className="text-slate-300 hover:text-white hover:bg-white/10">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={nextMonth}
+                  className="text-slate-300 hover:text-white hover:bg-white/10"
+                >
                   <ChevronRight className="h-5 w-5" />
                 </Button>
               </div>
             </div>
 
-            {/* Subscribe & Export buttons */}
+            {/* Subscribe Buttons */}
             <div className="flex flex-wrap gap-2">
               <a
-                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID || "")}`}
+                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(
+                  process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID || ""
+                )}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-medium text-white hover:from-cyan-500 hover:to-blue-500 transition shadow-lg shadow-cyan-500/20"
@@ -692,21 +713,26 @@ export default function JadwalPage() {
                 Subscribe ke Google Calendar
               </a>
               <a
-                href={typeof window !== "undefined" ? window.location.origin.replace(/^https?/, "webcal") + "/api/calendar" : "webcal:///api/calendar"}
+                href={
+                  typeof window !== "undefined"
+                    ? window.location.origin.replace(/^https?/, "webcal") +
+                      "/api/calendar"
+                    : "webcal:///api/calendar"
+                }
                 className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
               >
                 <Calendar className="h-3.5 w-3.5 text-emerald-400" />
                 Apple Calendar
               </a>
-              <Button variant="outline" size="sm" onClick={downloadICS} className="border-white/10 text-slate-300 hover:text-white hover:bg-white/10 text-xs">
-                <Download className="h-3 w-3 mr-1" /> Download .ics
-              </Button>
             </div>
 
             {/* Day Headers */}
             <div className="grid grid-cols-7 gap-1 text-center text-xs font-semibold">
               {SHORT_DAY_NAMES.map((d, i) => (
-                <div key={d} className={[2, 5, 6].includes(i) ? "text-cyan-400" : "text-slate-600"}>
+                <div
+                  key={d}
+                  className={[2, 5, 6].includes(i) ? "text-cyan-400" : "text-slate-600"}
+                >
                   {d}
                 </div>
               ))}
@@ -719,31 +745,77 @@ export default function JadwalPage() {
                   return <div key={`empty-${idx}`} className="aspect-square" />;
                 }
 
-                const dateStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
+                const dateStr = `${currentYear}-${String(
+                  currentMonth + 1
+                ).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
                 const entry = schedule.find((s) => s.date === dateStr);
                 const isToday = dateStr === todayStr;
-                const isTraining = !!entry;
                 const isPast = dateStr < todayStr;
+
+                const getStatusColor = (status?: ScheduleStatus) => {
+                  switch (status) {
+                    case "latihan":
+                      return "bg-gradient-to-br from-blue-500 to-blue-600";
+                    case "libur":
+                      return "bg-gradient-to-br from-red-500 to-red-600";
+                    case "tambahan":
+                      return "bg-gradient-to-br from-amber-500 to-amber-600";
+                    default:
+                      return "";
+                  }
+                };
+
+                const getStatusIcon = (status?: ScheduleStatus) => {
+                  switch (status) {
+                    case "latihan":
+                      return "💪";
+                    case "libur":
+                      return "😴";
+                    case "tambahan":
+                      return "⚡";
+                    default:
+                      return "";
+                  }
+                };
 
                 return (
                   <div
                     key={dateStr}
-                    onClick={() => isAdmin && isTraining ? cycleJersey(dateStr) : undefined}
+                    onClick={() => isAdmin && entry && openEditDialog(entry)}
                     className={`
                       aspect-square rounded-xl flex flex-col items-center justify-center relative text-xs transition-all
-                      ${isTraining
-                        ? `bg-gradient-to-br ${entry!.jerseyColor.gradient} shadow-lg ${isAdmin ? "cursor-pointer hover:scale-105" : ""}`
-                        : isPast
+                      ${
+                        entry
+                          ? `${getStatusColor(
+                              entry.status
+                            )} shadow-lg ${
+                              isAdmin ? "cursor-pointer hover:scale-105" : ""
+                            }`
+                          : isPast
                           ? "text-slate-700"
                           : "text-slate-500"
                       }
-                      ${isToday ? "ring-2 ring-cyan-400 ring-offset-1 ring-offset-transparent" : ""}
+                      ${
+                        isToday
+                          ? "ring-2 ring-cyan-400 ring-offset-1 ring-offset-transparent"
+                          : ""
+                      }
                     `}
                   >
-                    {isTraining && <span className="text-sm leading-none">👕</span>}
-                    <span className={`font-bold ${isTraining ? "text-white" : ""}`}>{cell}</span>
-                    {entry?.isCustom && (
-                      <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-amber-400" />
+                    {entry && (
+                      <span className="text-sm leading-none">
+                        {getStatusIcon(entry.status)}
+                      </span>
+                    )}
+                    <span
+                      className={`font-bold ${entry ? "text-white" : ""}`}
+                    >
+                      {cell}
+                    </span>
+                    {entry?.timeStart && (
+                      <span className="text-[8px] text-white/80">
+                        {entry.timeStart}
+                      </span>
                     )}
                   </div>
                 );
@@ -761,11 +833,17 @@ export default function JadwalPage() {
                 <span>Latihan Rutin</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-amber-400" />
-                <span>Latihan Tambahan</span>
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-red-500 to-red-600" />
+                <span>Libur</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-amber-500 to-amber-600" />
+                <span>Latihan Extra</span>
               </div>
               {isAdmin && (
-                <span className="ml-auto text-slate-600">Klik tanggal untuk ganti warna</span>
+                <span className="ml-auto text-slate-600">
+                  Klik tanggal untuk edit
+                </span>
               )}
             </div>
           </CardContent>
@@ -773,11 +851,23 @@ export default function JadwalPage() {
 
         {/* Schedule List Card */}
         <Card className={glassCardClass}>
-          <CardHeader>
-            <CardTitle className="text-white">📋 Daftar Jadwal</CardTitle>
-            <CardDescription className="text-slate-400">
-              {totalSessions} sesi latihan • {formatMonthYear(currentYear, currentMonth)}
-            </CardDescription>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <div>
+              <CardTitle className="text-white">📋 Daftar Jadwal</CardTitle>
+              <CardDescription className="text-slate-400">
+                {totalSessions} sesi latihan •{" "}
+                {formatMonthYear(currentYear, currentMonth)}
+              </CardDescription>
+            </div>
+            {isAdmin && (
+              <Button
+                onClick={() => setAddDialogOpen(true)}
+                size="sm"
+                className="bg-amber-600 hover:bg-amber-500 text-white"
+              >
+                <Plus className="h-4 w-4 mr-1" /> Tambah
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -785,33 +875,91 @@ export default function JadwalPage() {
                 const isEntryToday = entry.date === todayStr;
                 const d = new Date(entry.date + "T00:00:00");
 
+                const getStatusBadge = (status: ScheduleStatus) => {
+                  switch (status) {
+                    case "latihan":
+                      return {
+                        bg: "bg-blue-500/20",
+                        text: "text-blue-400",
+                        border: "border-blue-500/30",
+                        label: "Latihan",
+                      };
+                    case "libur":
+                      return {
+                        bg: "bg-red-500/20",
+                        text: "text-red-400",
+                        border: "border-red-500/30",
+                        label: "Libur",
+                      };
+                    case "tambahan":
+                      return {
+                        bg: "bg-amber-500/20",
+                        text: "text-amber-400",
+                        border: "border-amber-500/30",
+                        label: "Tambahan",
+                      };
+                  }
+                };
+
+                const statusBadge = getStatusBadge(entry.status);
+
                 return (
                   <div
                     key={entry.date}
+                    onClick={() => isAdmin && openEditDialog(entry)}
                     className={`flex items-center gap-3 rounded-xl p-3 transition-all ${
-                      isEntryToday ? "bg-cyan-500/10 ring-1 ring-cyan-500/30" : "bg-white/5"
-                    }`}
+                      isEntryToday
+                        ? "bg-cyan-500/10 ring-1 ring-cyan-500/30"
+                        : "bg-white/5 hover:bg-white/10"
+                    } ${isAdmin ? "cursor-pointer" : ""}`}
                   >
-                    <div className={`w-14 h-14 rounded-xl bg-gradient-to-br ${entry.jerseyColor.gradient} flex flex-col items-center justify-center shrink-0`}>
+                    <div
+                      className={`w-14 h-14 rounded-xl ${statusBadge.bg} flex flex-col items-center justify-center shrink-0`}
+                    >
                       <span className="text-[10px] uppercase text-white/80 leading-none">
                         {d.toLocaleDateString("id-ID", { month: "short" })}
                       </span>
-                      <span className="text-lg font-bold text-white leading-none">{d.getDate()}</span>
+                      <span className="text-lg font-bold text-white leading-none">
+                        {d.getDate()}
+                      </span>
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-white text-sm">{entry.dayName}</p>
+                      <p className="font-semibold text-white text-sm">
+                        {entry.dayName}
+                      </p>
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {isEntryToday && (
-                          <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] px-1.5">HARI INI</Badge>
+                          <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 text-[10px] px-1.5">
+                            HARI INI
+                          </Badge>
                         )}
-                        {entry.isCustom && (
-                          <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30 text-[10px] px-1.5">EXTRA</Badge>
-                        )}
+                        <Badge
+                          className={`${statusBadge.bg} ${statusBadge.text} border ${statusBadge.border} text-[10px] px-1.5`}
+                        >
+                          {statusBadge.label}
+                        </Badge>
                       </div>
                     </div>
                     <div className="text-right shrink-0">
-                      <span className="text-lg">👕</span>
-                      <p className="text-[10px]" style={{ color: entry.jerseyColor.hex }}>{entry.jerseyColor.name}</p>
+                      {entry.timeStart && entry.timeEnd ? (
+                        <div className="text-right">
+                          <p className="text-lg font-bold text-white">
+                            {entry.timeStart}
+                          </p>
+                          <p className="text-xs text-slate-400">
+                            s/d {entry.timeEnd}
+                          </p>
+                          {entry.shirtColor && entry.status !== "libur" && (
+                            <Badge variant="outline" className="mt-1 text-[10px] bg-white/5 border border-white/10" style={{ color: entry.shirtColor.hex }}>
+                              👕 {entry.shirtColor.name}
+                            </Badge>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-2xl">
+                          {entry.status === "libur" ? "😴" : "💪"}
+                        </p>
+                      )}
                     </div>
                   </div>
                 );
@@ -825,84 +973,237 @@ export default function JadwalPage() {
           </CardContent>
         </Card>
 
-        {/* Admin Custom Dates Manager Card */}
-        {isAdmin && (
-          <Card className={glassCardClass}>
-            <CardHeader>
-              <CardTitle className="text-white">⚙️ Kelola Latihan Tambahan</CardTitle>
-              <CardDescription className="text-slate-400">Tambah atau hapus tanggal latihan tambahan</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex gap-2">
-                <Input
-                  type="date"
-                  value={newCustomDate}
-                  onChange={(e) => setNewCustomDate(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white w-44 [color-scheme:dark]"
-                />
-                <Input
-                  type="text"
-                  placeholder="Label (opsional)..."
-                  value={newCustomLabel}
-                  onChange={(e) => setNewCustomLabel(e.target.value)}
-                  className="bg-white/5 border-white/10 text-white placeholder:text-slate-500 flex-1"
-                />
-                <Button onClick={addCustomDate} size="sm" className="bg-amber-600 hover:bg-amber-500 text-white">
-                  <Plus className="h-4 w-4 mr-1" /> Tambah
-                </Button>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {customDates.map((cd) => (
-                  <Badge
-                    key={cd.id}
-                    className="bg-amber-500/15 text-amber-300 border border-amber-500/30 flex items-center gap-1.5 py-1.5 px-3"
-                  >
-                    <span>
-                      {new Date(cd.date + "T00:00:00").toLocaleDateString("id-ID", {
-                        weekday: "short", day: "numeric", month: "short",
-                      })}
-                      {cd.label ? ` — ${cd.label}` : ""}
-                    </span>
-                    {cd.id && (
-                      <button onClick={() => removeCustomDate(cd.id!)} className="ml-1 text-red-400 hover:text-red-300">
-                        <X className="h-3 w-3" />
-                      </button>
-                    )}
-                  </Badge>
-                ))}
-                {customDates.length === 0 && (
-                  <p className="text-slate-500 text-sm">Belum ada latihan tambahan</p>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        )}
-
-        {/* Color Legend Card */}
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <CardTitle className="text-white">🎨 Warna Jersey</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-              {JERSEY_COLORS.map((color, i) => (
-                <div key={i} className="flex items-center gap-2 bg-white/5 rounded-xl p-3">
-                  <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${color.gradient} shadow-lg`} />
-                  <div>
-                    <span className="text-lg">👕</span>
-                    <p className="text-xs text-slate-300">{color.name}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         {/* Footer */}
         <div className="text-center text-xs text-slate-600 pb-4">
           👑 Crown Allstar Cheerleading
         </div>
       </div>
+
+      {/* Edit Schedule Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="bg-slate-900 border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Jadwal</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              {editingDate &&
+                new Date(editingDate + "T00:00:00").toLocaleDateString("id-ID", {
+                  weekday: "long",
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                })}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <label className="text-sm text-slate-400 block mb-1.5">
+                Status
+              </label>
+              <Select
+                value={editForm.status}
+                onValueChange={(v) =>
+                  setEditForm({ ...editForm, status: v as ScheduleStatus })
+                }
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-white/10">
+                  <SelectItem value="latihan">Latihan Rutin</SelectItem>
+                  <SelectItem value="libur">Libur</SelectItem>
+                  <SelectItem value="tambahan">Latihan Tambahan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {editForm.status !== "libur" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-slate-400 block mb-1.5">
+                    Jam Mulai
+                  </label>
+                  <Input
+                    type="time"
+                    value={editForm.timeStart}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, timeStart: e.target.value })
+                    }
+                    className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 block mb-1.5">
+                    Jam Selesai
+                  </label>
+                  <Input
+                    type="time"
+                    value={editForm.timeEnd}
+                    onChange={(e) =>
+                      setEditForm({ ...editForm, timeEnd: e.target.value })
+                    }
+                    className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm text-slate-400 block mb-1.5">
+                Catatan (opsional)
+              </label>
+              <Input
+                type="text"
+                placeholder="Mis: Bawa perlengkapan tambahan..."
+                value={editForm.note}
+                onChange={(e) =>
+                  setEditForm({ ...editForm, note: e.target.value })
+                }
+                className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={() => setEditDialogOpen(false)}
+                variant="outline"
+                className="flex-1 border-white/10 text-slate-300 hover:bg-white/5"
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={deleteSchedule}
+                variant="outline"
+                className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+              >
+                Hapus
+              </Button>
+              <Button
+                onClick={saveSchedule}
+                className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white"
+              >
+                Simpan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Schedule Dialog */}
+      <Dialog open={addDialogOpen} onOpenChange={setAddDialogOpen}>
+        <DialogContent className="bg-slate-900 border-white/10 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle>Tambah Jadwal</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Tambahkan jadwal latihan baru
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 pt-4">
+            <div>
+              <label className="text-sm text-slate-400 block mb-1.5">
+                Tanggal
+              </label>
+              <Input
+                type="date"
+                value={addForm.date}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  const dayOfWeek = new Date(newDate + "T00:00:00").getDay();
+                  setAddForm({ 
+                    ...addForm, 
+                    date: newDate,
+                    timeStart: dayOfWeek === 0 ? "10:00" : "19:00",
+                    timeEnd: dayOfWeek === 0 ? "13:00" : "22:00"
+                  });
+                }}
+                className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
+              />
+            </div>
+
+            <div>
+              <label className="text-sm text-slate-400 block mb-1.5">
+                Status
+              </label>
+              <Select
+                value={addForm.status}
+                onValueChange={(v) =>
+                  setAddForm({ ...addForm, status: v as ScheduleStatus })
+                }
+              >
+                <SelectTrigger className="bg-white/5 border-white/10 text-white">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-white/10">
+                  <SelectItem value="latihan">Latihan Rutin</SelectItem>
+                  <SelectItem value="libur">Libur</SelectItem>
+                  <SelectItem value="tambahan">Latihan Tambahan</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {addForm.status !== "libur" && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-sm text-slate-400 block mb-1.5">
+                    Jam Mulai
+                  </label>
+                  <Input
+                    type="time"
+                    value={addForm.timeStart}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, timeStart: e.target.value })
+                    }
+                    className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm text-slate-400 block mb-1.5">
+                    Jam Selesai
+                  </label>
+                  <Input
+                    type="time"
+                    value={addForm.timeEnd}
+                    onChange={(e) =>
+                      setAddForm({ ...addForm, timeEnd: e.target.value })
+                    }
+                    className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
+                  />
+                </div>
+              </div>
+            )}
+
+            <div>
+              <label className="text-sm text-slate-400 block mb-1.5">
+                Catatan (opsional)
+              </label>
+              <Input
+                type="text"
+                placeholder="Mis: Latihan khusus stunt..."
+                value={addForm.note}
+                onChange={(e) =>
+                  setAddForm({ ...addForm, note: e.target.value })
+                }
+                className="bg-white/5 border-white/10 text-white placeholder:text-slate-500"
+              />
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={() => setAddDialogOpen(false)}
+                variant="outline"
+                className="flex-1 border-white/10 text-slate-300 hover:bg-white/5"
+              >
+                Batal
+              </Button>
+              <Button
+                onClick={addCustomSchedule}
+                className="flex-1 bg-cyan-600 hover:bg-cyan-500 text-white"
+              >
+                Tambahkan
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -4,10 +4,15 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut } from "lucide-react";
+import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-const navItems = [
+const getNavItems = (isAdmin: boolean) => [
+  {
+    label: "Info Board",
+    href: "/dashboard/info",
+    icon: Megaphone,
+  },
   {
     label: "Berat Flyer",
     href: "/dashboard",
@@ -23,12 +28,24 @@ const navItems = [
     href: "/dashboard/absensi",
     icon: ClipboardCheck,
   },
+  ...(isAdmin
+    ? [
+        {
+          label: "Data Atlet",
+          href: "/dashboard/athletes",
+          icon: ShieldAlert,
+        },
+      ]
+    : []),
 ];
 
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user, signOut } = useAuth();
+  
+  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const navItems = getNavItems(isAdmin);
 
   return (
     <>
