@@ -3,12 +3,12 @@ import { adminDb } from "@/lib/firebase-admin";
 import { isHoliday } from "@/lib/holidays";
 
 const SHIRT_COLORS = [
-  { name: "Merah", hex: "#ef4444" },
-  { name: "Hitam", hex: "#374151" },
-  { name: "Biru", hex: "#3b82f6" },
-  { name: "Orange", hex: "#f97316" },
-  { name: "Putih", hex: "#f8fafc" },
-  { name: "Pink", hex: "#ec4899" },
+  { name: "Merah", hex: "#ef4444", emoji: "🔴" },
+  { name: "Hitam", hex: "#374151", emoji: "⚫" },
+  { name: "Biru", hex: "#3b82f6", emoji: "🔵" },
+  { name: "Orange", hex: "#f97316", emoji: "🟠" },
+  { name: "Putih", hex: "#f8fafc", emoji: "⚪" },
+  { name: "Pink", hex: "#ec4899", emoji: "🩷" },
 ];
 
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
@@ -52,90 +52,109 @@ type ScheduleEntry = {
 };
 
 async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[]> {
-  const customSchedulesSnap = await adminDb.collection("crown-schedules").get();
-  const customSchedules = new Map<string, any>();
-  customSchedulesSnap.docs.forEach((doc) => {
-    customSchedules.set(doc.data().date, doc.data());
-  });
+  const schedule: ScheduleEntry[] = [];
+  const today = new Date();
+  
+  // Custom dates from Firestore override regular logic
+  const customEventsMap = new Map<string, any>();
+  if (adminDb) {
+    try {
+      const snap = await adminDb.collection("crown-events")
+        .where("date", ">=", `${today.getFullYear()}-${padDate(today.getMonth() + 1)}-01`)
+        .get();
+      snap.forEach(doc => {
+        const data = doc.data();
+        customEventsMap.set(data.date, data);
+      });
+    } catch (err) {
+      console.warn("Could not fetch custom events from Firestore (ICS sync)", err);
+    }
+  }
 
-  const now = new Date();
-  const startYear = now.getFullYear();
-  const startMonth = now.getMonth();
-  const entries: ScheduleEntry[] = [];
-  let prevColorIndex = -1;
+  let prevColorIdx = -1;
 
-  for (let offset = 0; offset < monthsAhead; offset++) {
-    const month = (startMonth + offset) % 12;
-    const year = startYear + Math.floor((startMonth + offset) / 12);
+  for (let m = 0; m < monthsAhead; m++) {
+    const targetDate = new Date(today.getFullYear(), today.getMonth() + m, 1);
+    const year = targetDate.getFullYear();
+    const month = targetDate.getMonth();
     const daysInMonth = getDaysInMonth(year, month);
 
     for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month, day);
+      const d = new Date(year, month, day);
+      if (d < TRAINING_START) continue;
+
       const dateStr = `${year}-${padDate(month + 1)}-${padDate(day)}`;
-      const dayOfWeek = date.getDay();
-      
-      const holidayName = isHoliday(dateStr);
-      const isRegular = REGULAR_DAYS.has(dayOfWeek) && date >= TRAINING_START;
-      const customSchedule = customSchedules.get(dateStr);
-      const isTrainingDay = customSchedule?.status !== "libur" && (customSchedule || isRegular);
-      
-      let currentShirtColor = undefined;
-      if (isTrainingDay) {
-        const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
-        currentShirtColor = SHIRT_COLORS[colorIndex];
-        prevColorIndex = colorIndex;
+      const isCustom = customEventsMap.has(dateStr);
+      const customData = customEventsMap.get(dateStr);
+
+      if (isCustom) {
+        if (customData.status === "libur") {
+          schedule.push({ date: dateStr, status: "libur", holidayName: customData.note });
+        } else {
+          const colorIdx = SHIRT_COLORS.findIndex(c => c.name === customData.shirtColor);
+          if (colorIdx !== -1) prevColorIdx = colorIdx;
+          
+          schedule.push({
+            date: dateStr,
+            status: customData.status || "tambahan",
+            timeStart: customData.timeStart || "19:00",
+            timeEnd: customData.timeEnd || "21:00",
+            note: customData.note,
+            shirtColor: colorIdx !== -1 ? SHIRT_COLORS[colorIdx] : undefined,
+          });
+        }
+        continue;
       }
 
-      if (customSchedule) {
-        entries.push({
-          date: dateStr,
-          status: customSchedule.status,
-          timeStart: customSchedule.timeStart,
-          timeEnd: customSchedule.timeEnd,
-          note: customSchedule.note,
-          shirtColor: currentShirtColor,
-          holidayName: holidayName || undefined
-        });
-      } else if (isRegular) {
-        const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
-        const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
-        entries.push({
+      // Check National Holiday
+      const holidayCheck = isHoliday(dateStr);
+      if (holidayCheck) {
+        // If it's a regular training day on a holiday, mark it as "libur" but keep a note
+        if (REGULAR_DAYS.has(d.getDay())) {
+           schedule.push({
+             date: dateStr,
+             status: "latihan", // Still marked as training, but with a warning note
+             timeStart: "19:00",
+             timeEnd: "21:00",
+             holidayName: holidayCheck,
+             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr, prevColorIdx)]
+           });
+        }
+        continue;
+      }
+
+      // Regular schedule
+      if (REGULAR_DAYS.has(d.getDay())) {
+        const colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+        prevColorIdx = colorIdx;
+        schedule.push({
           date: dateStr,
           status: "latihan",
-          timeStart: defaultTimeStart,
-          timeEnd: defaultTimeEnd,
-          shirtColor: currentShirtColor,
-          holidayName: holidayName || undefined
-        });
-      } else if (holidayName) {
-        entries.push({
-          date: dateStr,
-          status: "libur",
-          holidayName
+          timeStart: "19:00",
+          timeEnd: "21:00",
+          shirtColor: SHIRT_COLORS[colorIdx],
         });
       }
     }
   }
 
-  return entries;
+  return schedule;
 }
 
 export async function GET() {
   try {
-    const schedule = await generateSchedule(6);
-    const eventsSnap = await adminDb.collection("crown-events").get();
-    const events = eventsSnap.docs.map((doc) => doc.data());
+    const schedule = await generateSchedule();
 
     const now = new Date();
-    const timestamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+    const timestamp = now.toISOString().replace(/[-:]/g, "").split(".")[0] + "Z";
 
-    const lines: string[] = [
+    let lines = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//Crown Allstar Cheerleading//Jadwal Latihan//ID",
+      "PRODID:-//Crown Allstar//Jadwal Latihan//ID",
       "CALSCALE:GREGORIAN",
       "METHOD:PUBLISH",
-      "X-WR-CALNAME:Crown Allstar - Jadwal Latihan",
+      "X-WR-CALNAME:Jadwal Crown Allstar",
       "X-WR-TIMEZONE:Asia/Jakarta",
       "REFRESH-INTERVAL;VALUE=DURATION:PT1H", // Auto refresh setiap 1 jam
       "X-PUBLISHED-TTL:PT1H",
@@ -149,6 +168,11 @@ export async function GET() {
       
       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";
       
+      // Inject EMOJI color into Title so users can see it at a glance
+      if (entry.shirtColor && entry.shirtColor.emoji) {
+        title = `${entry.shirtColor.emoji} ${title}`;
+      }
+
       let descParts = [];
       if (entry.holidayName) {
          descParts.push(`⚠️ PERHATIAN: Hari ini bertepatan dengan Libur Nasional (${entry.holidayName}). Pastikan ada instruksi dari pelatih terkait libur/tidaknya latihan.`);
@@ -178,45 +202,27 @@ export async function GET() {
       lines.push(`SUMMARY:${escapeICS(title)}`);
       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
       
-      // Inject Apple Calendar specific color tag
+      // ADD COLOR/CATEGORY PROPERTY (supported by Apple Calendar/Outlook to some extent)
       if (entry.shirtColor) {
-         lines.push(`COLOR:${entry.shirtColor.hex.toUpperCase()}`);
+        lines.push(`CATEGORIES:${entry.shirtColor.name}`);
+        // Apple specific color property
+        lines.push(`COLOR:${entry.shirtColor.hex}`);
       }
-
-      lines.push("LOCATION:Crown Allstar Cheerleading\\, Bandung");
-      lines.push("STATUS:CONFIRMED");
-      lines.push("END:VEVENT");
-    }
-
-    for (const event of events) {
-      const dateCompact = (event.date as string).replace(/-/g, "");
-      const uid = `crown-event-${event.date}@crownallstar.id`;
-
-      lines.push("BEGIN:VEVENT");
-      lines.push(`DTSTART;VALUE=DATE:${dateCompact}`);
-      lines.push(`DTEND;VALUE=DATE:${dateCompact}`);
-      lines.push(`DTSTAMP:${timestamp}`);
-      lines.push(`UID:${uid}`);
-      lines.push(`SUMMARY:${escapeICS(`${event.emoji || "🏆"} ${event.name as string}`)}`);
-      lines.push("DESCRIPTION:Kompetisi Crown Allstar Cheerleading");
-      lines.push("STATUS:CONFIRMED");
-      lines.push("COLOR:#f59e0b"); // Amber color for events
+      
       lines.push("END:VEVENT");
     }
 
     lines.push("END:VCALENDAR");
 
     return new NextResponse(lines.join("\r\n"), {
-      status: 200,
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
-        "Content-Disposition": 'inline; filename="crown-jadwal.ics"',
-        "Cache-Control": "s-maxage=1800, stale-while-revalidate=1800",
-        "Access-Control-Allow-Origin": "*",
+        "Content-Disposition": 'attachment; filename="jadwal-crown-allstar.ics"',
+        "Cache-Control": "no-cache, no-store, must-revalidate",
       },
     });
-  } catch (error) {
-    console.error("Calendar API error:", error);
-    return NextResponse.json({ error: "Failed to generate calendar" }, { status: 500 });
+  } catch (err: any) {
+    console.error("Error generating ICS file:", err);
+    return NextResponse.json({ error: "Failed to generate schedule" }, { status: 500 });
   }
 }
