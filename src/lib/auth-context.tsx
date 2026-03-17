@@ -6,8 +6,6 @@ import {
   User,
   GoogleAuthProvider,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -35,23 +33,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. Check for redirect result first (in case we're coming back from a mobile Google login)
-  useEffect(() => {
-    const checkRedirect = async () => {
-      try {
-        const result = await getRedirectResult(auth);
-        if (result && result.user) {
-          // Will be handled by onAuthStateChanged, but good to ensure redirect finishes resolving
-          console.log("Redirect login successful");
-        }
-      } catch (err) {
-        console.error("Error from getRedirectResult:", err);
-      }
-    };
-    checkRedirect();
-  }, []);
-
-  // 2. Main auth state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
@@ -82,31 +63,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signInWithGoogle = async () => {
     const provider = new GoogleAuthProvider();
-    // Fallback logic for mobile browsers (especially Safari/iOS WebViews/WhatsApp)
-    // If popup fails or we are in an environment that blocks popups/storage, use redirect.
+    provider.setCustomParameters({
+      prompt: 'select_account'
+    });
+    
     try {
-      const isMobileOrWebView = /iPhone|iPad|iPod|Android|webOS/i.test(navigator.userAgent);
-      if (isMobileOrWebView) {
-        // Redirect is safer on mobile browsers to avoid cross-origin storage issues
-        await signInWithRedirect(auth, provider);
-      } else {
-        await signInWithPopup(auth, provider);
-      }
-    } catch (err: unknown) {
-      const error = err as { code?: string };
-      // Ignore cancelled-popup-request (React Strict Mode double-render)
-      // and popup-closed-by-user (user closed the popup)
+      // Selalu gunakan Popup. Redirect bermasalah di iOS/Safari dan In-App Browsers
+      // karena adanya sistem Storage Partitioning (ITP) yang memblokir sessionStorage.
+      await signInWithPopup(auth, provider);
+    } catch (err: any) {
+      console.error("Login error:", err);
+      // Ignore user cancellation
       if (
-        error.code === "auth/cancelled-popup-request" ||
-        error.code === "auth/popup-closed-by-user"
+        err.code === "auth/cancelled-popup-request" ||
+        err.code === "auth/popup-closed-by-user"
       ) {
         return;
       }
-      // If popup was blocked, fallback to redirect
-      if (error.code === "auth/popup-blocked") {
-        await signInWithRedirect(auth, provider);
+      
+      // Jika diblokir oleh In-App Browser (WhatsApp/Line/Instagram)
+      if (err.code === "auth/popup-blocked" || err.message?.toLowerCase().includes("popup")) {
+        alert("Pop-up diblokir. Jika Anda membuka dari WhatsApp/Line/Instagram, silakan klik tombol titik tiga (⋮) di pojok kanan atas dan pilih 'Buka di Chrome/Safari'.");
         return;
       }
+      
       throw err;
     }
   };
