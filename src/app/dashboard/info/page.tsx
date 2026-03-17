@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Megaphone, Receipt, Users, Trophy, ChevronRight, FileText, CalendarDays, ExternalLink, Dumbbell, Flag, Plus, Trash2, RefreshCw } from "lucide-react";
+import { Megaphone, Receipt, Users, Trophy, ChevronRight, FileText, CalendarDays, ExternalLink, Dumbbell, Flag, Plus, Trash2, RefreshCw, Pencil, Check, X } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
@@ -46,6 +46,12 @@ export default function InfoDashboardPage() {
   const [newDate, setNewDate] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
+  
+  // State for Editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
 
   useEffect(() => {
     const q = query(collection(db, "crown-milestones"), orderBy("date", "asc"));
@@ -83,6 +89,30 @@ export default function InfoDashboardPage() {
   const handleStatusChange = async (id: string, currentStatus: Milestone["status"]) => {
     const nextStatus = currentStatus === "upcoming" ? "current" : currentStatus === "current" ? "done" : currentStatus === "done" ? "delayed" : "upcoming";
     await updateDoc(doc(db, "crown-milestones", id), { status: nextStatus });
+  };
+
+  const startEditing = (ms: Milestone) => {
+    setEditingId(ms.id);
+    setEditDate(ms.date);
+    setEditTitle(ms.title);
+    setEditDesc(ms.description || "");
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditDate("");
+    setEditTitle("");
+    setEditDesc("");
+  };
+
+  const handleUpdateMilestone = async (id: string) => {
+    if (!editDate || !editTitle) return;
+    await updateDoc(doc(db, "crown-milestones", id), {
+      date: editDate,
+      title: editTitle,
+      description: editDesc,
+    });
+    cancelEditing();
   };
 
   const getStatusColor = (status: string) => {
@@ -160,37 +190,69 @@ export default function InfoDashboardPage() {
                     <div className={`p-4 rounded-xl border border-white/10 transition-all
                       ${ms.status === 'current' ? 'bg-amber-500/10 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)]' : ms.status === 'delayed' ? 'bg-rose-500/5' : 'bg-white/5'}
                     `}>
-                      <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
-                        <div>
-                          <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
-                            {new Date(ms.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
-                          </p>
-                          <h3 className={`text-lg font-bold ${ms.status === 'done' ? 'text-slate-300 line-through decoration-emerald-500/50' : ms.status === 'delayed' ? 'text-rose-200 line-through decoration-rose-500/50' : 'text-white'}`}>
-                            {ms.title}
-                          </h3>
+                      {editingId === ms.id ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-400">Tanggal</label>
+                              <Input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
+                            </div>
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-400">Judul</label>
+                              <Input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-400">Keterangan Tambahan</label>
+                            <Input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
+                          </div>
+                          <div className="flex items-center gap-2 pt-2">
+                            <button onClick={() => handleUpdateMilestone(ms.id)} className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded transition-colors border border-emerald-500/20">
+                              <Check className="h-3 w-3" /> Simpan Perubahan
+                            </button>
+                            <button onClick={cancelEditing} className="text-xs flex items-center gap-1 text-slate-400 hover:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 px-3 py-1.5 rounded transition-colors border border-slate-500/20">
+                              <X className="h-3 w-3" /> Batal
+                            </button>
+                          </div>
                         </div>
-                        <Badge className={`${getStatusColor(ms.status)} px-2 py-0.5 flex items-center gap-1.5 cursor-pointer select-none`} onClick={() => isAdmin && handleStatusChange(ms.id, ms.status)}>
-                          <span>{getStatusIcon(ms.status)}</span>
-                          <span className="capitalize text-xs font-semibold">{ms.status === 'current' ? 'In Progress' : ms.status === 'delayed' ? 'Tertunda' : ms.status}</span>
-                        </Badge>
-                      </div>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                            <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                {new Date(ms.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                              </p>
+                              <h3 className={`text-lg font-bold ${ms.status === 'done' ? 'text-slate-300 line-through decoration-emerald-500/50' : ms.status === 'delayed' ? 'text-rose-200 line-through decoration-rose-500/50' : 'text-white'}`}>
+                                {ms.title}
+                              </h3>
+                            </div>
+                            <Badge className={`${getStatusColor(ms.status)} px-2 py-0.5 flex items-center gap-1.5 cursor-pointer select-none`} onClick={() => isAdmin && handleStatusChange(ms.id, ms.status)}>
+                              <span>{getStatusIcon(ms.status)}</span>
+                              <span className="capitalize text-xs font-semibold">{ms.status === 'current' ? 'In Progress' : ms.status === 'delayed' ? 'Tertunda' : ms.status}</span>
+                            </Badge>
+                          </div>
 
-                      {ms.description && (
-                        <p className={`text-sm ${ms.status === 'done' ? 'text-slate-500' : ms.status === 'delayed' ? 'text-rose-300/70' : 'text-slate-300'}`}>
-                          {ms.description}
-                        </p>
-                      )}
+                          {ms.description && (
+                            <p className={`text-sm ${ms.status === 'done' ? 'text-slate-500' : ms.status === 'delayed' ? 'text-rose-300/70' : 'text-slate-300'}`}>
+                              {ms.description}
+                            </p>
+                          )}
 
-                      {/* Admin Controls */}
-                      {isAdmin && (
-                        <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => handleDeleteMilestone(ms.id)} className="text-xs flex items-center gap-1 text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2 py-1 rounded">
-                            <Trash2 className="h-3 w-3" /> Hapus
-                          </button>
-                          <button onClick={() => handleStatusChange(ms.id, ms.status)} className="text-xs flex items-center gap-1 text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 px-2 py-1 rounded">
-                            <RefreshCw className="h-3 w-3" /> Ubah Status
-                          </button>
-                        </div>
+                          {/* Admin Controls */}
+                          {isAdmin && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => startEditing(ms)} className="text-xs flex items-center gap-1 text-amber-400 hover:text-amber-300 bg-amber-500/10 px-2 py-1 rounded">
+                                <Pencil className="h-3 w-3" /> Edit
+                              </button>
+                              <button onClick={() => handleDeleteMilestone(ms.id)} className="text-xs flex items-center gap-1 text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2 py-1 rounded">
+                                <Trash2 className="h-3 w-3" /> Hapus
+                              </button>
+                              <button onClick={() => handleStatusChange(ms.id, ms.status)} className="text-xs flex items-center gap-1 text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 px-2 py-1 rounded">
+                                <RefreshCw className="h-3 w-3" /> Ubah Status
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
