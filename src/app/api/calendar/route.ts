@@ -209,6 +209,13 @@ export async function GET() {
         lines.push(`COLOR:${entry.shirtColor.hex}`);
       }
       
+      // ALARM / REMINDER: 3 Jam sebelum event
+      lines.push("BEGIN:VALARM");
+      lines.push("ACTION:DISPLAY");
+      lines.push("DESCRIPTION:" + escapeICS(title));
+      lines.push("TRIGGER:-PT3H");
+      lines.push("END:VALARM");
+
       lines.push("END:VEVENT");
     }
 
