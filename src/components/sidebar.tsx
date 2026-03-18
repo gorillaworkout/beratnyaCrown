@@ -10,18 +10,18 @@ import { useAuth } from "@/lib/auth-context";
 const getNavItems = (isAdmin: boolean) => [
   {
     label: "Info Board",
-    href: "/dashboard/info",
-    icon: Megaphone,
-  },
-  {
-    label: "Berat Flyer",
     href: "/dashboard",
-    icon: Scale,
+    icon: Megaphone,
   },
   {
     label: "Jadwal Latihan",
     href: "/dashboard/jadwal",
     icon: Calendar,
+  },
+  {
+    label: "Berat Flyer",
+    href: "/dashboard/berat-flyer",
+    icon: Scale,
   },
   {
     label: "Absensi",

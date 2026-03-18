@@ -1,1439 +1,689 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
-import { useAuth } from "@/lib/auth-context";
-import Image from "next/image";
-import {
-  collection,
-  getDocs,
-  onSnapshot,
-  orderBy,
-  query
-} from "firebase/firestore";
-
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle
+  CardTitle,
 } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
+  TableRow,
 } from "@/components/ui/table";
+import { Megaphone, Receipt, Users, Trophy, ChevronRight, FileText, CalendarDays, ExternalLink, Dumbbell, Flag, Plus, Trash2, RefreshCw, Pencil, Check, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
-
-type PenaltyPlan = {
-  level: number;
-  title: string;
-  duration: string;
-  rounds: string;
-  exercises: string[];
-};
-
-const penaltyPlans: PenaltyPlan[] = [
-  {
-    level: 1,
-    title: "Level 1 (1x tanpa progres)",
-    duration: "15 menit",
-    rounds: "3 putaran",
-    exercises: [
-      "Jumping jacks x40",
-      "Push-up x15",
-      "Squat x20",
-      "Mountain climbers x40",
-      "Plank 40 detik",
-      "Handstand 30 detik"
-    ]
-  },
-  {
-    level: 2,
-    title: "Level 2 (2x tanpa progres)",
-    duration: "20 menit",
-    rounds: "4 putaran",
-    exercises: [
-      "High knees x50",
-      "Lunges x20 per kaki",
-      "Push-up x18",
-      "Squat jumps x20",
-      "Sit-up x25",
-      "Side plank 35 detik per sisi",
-      "Handstand 30 detik"
-    ]
-  },
-  {
-    level: 3,
-    title: "Level 3 (3x tanpa progres)",
-    duration: "25 menit",
-    rounds: "5 putaran",
-    exercises: [
-      "Burpees x18",
-      "Squat jumps x25",
-      "Mountain climbers x60",
-      "Push-up x22",
-      "Plank 60 detik",
-      "Sit-up x30",
-      "Handstand 30 detik"
-    ]
-  },
-  {
-    level: 4,
-    title: "Level 4 (4x tanpa progres)",
-    duration: "30 menit",
-    rounds: "6 putaran",
-    exercises: [
-      "Burpees x22",
-      "Jump squats x30",
-      "Mountain climbers x70",
-      "Push-up x25",
-      "Walking lunges x24 per kaki",
-      "Plank 75 detik",
-      "Handstand 30 detik"
-    ]
-  },
-  {
-    level: 5,
-    title: "Level 5 (5x+ tanpa progres)",
-    duration: "35 menit",
-    rounds: "7 putaran",
-    exercises: [
-      "Burpees x25",
-      "Jump squats x35",
-      "Push-up x30",
-      "Mountain climbers x80",
-      "Sit-up x40",
-      "Plank 90 detik",
-      "Handstand 30 detik"
-    ]
-  }
-];
-
-const noProgressNote = "Tidak ada progres. Lihat hukuman aktif di riwayat.";
-const keepTrainingNote = "Pertahankan pola latihan.";
-const missingGoalNote = "Goal wajib diisi agar progres terhitung.";
+import { collection, onSnapshot, doc, deleteDoc, addDoc, updateDoc, orderBy, query } from "firebase/firestore";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 
 const glassCardClass =
-  "border-white/20 bg-white/10 backdrop-blur-xl text-slate-100 shadow-[0_8px_30px_rgba(0,0,0,0.35)]";
-const glassFieldClass =
-  "border-white/20 bg-white/10 text-slate-100 placeholder:text-slate-400 focus-visible:ring-white/40";
-const glassButtonClass =
-  "border-white/30 bg-white/10 text-slate-100 hover:bg-white/20 focus-visible:ring-white/40";
+  "border-white/10 bg-white/5 backdrop-blur-md shadow-xl text-slate-100 transition-all hover:bg-white/[0.07]";
 
-const getTodayDateValue = () => {
-  const now = new Date();
-  const offsetMs = now.getTimezoneOffset() * 60000;
-  return new Date(now.getTime() - offsetMs).toISOString().slice(0, 10);
-};
-
-const formatDateValue = (date: Date) => {
-  const offsetMs = date.getTimezoneOffset() * 60000;
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10);
-};
-
-const isFutureTrainingDate = (dateValue: string) =>
-  dateValue > getTodayDateValue();
-
-type Athlete = {
+type Milestone = {
   id: string;
-  name: string;
-  currentWeight: number;
-  previousWeight: number | null;
-  goalWeight: number | null;
-  trainingDate: Date | null;
-  updatedAt: Date | null;
+  date: string;
+  title: string;
+  description: string;
+  status: "done" | "current" | "upcoming" | "delayed";
 };
 
-type WeightLog = {
-  id: string;
-  weight: number;
-  trainingDate: Date | null;
-  createdAt: Date | null;
-};
-
-type PenaltyInfo = {
-  athleteId: string;
-  athleteName: string;
-  currentWeight: number;
-  goalWeight: number | null;
-  streak: number;
-  penalty: PenaltyPlan | null;
-};
-
-const sortWeightLogs = (logs: WeightLog[]) =>
-  [...logs].sort((a, b) => {
-    const aTraining = a.trainingDate
-      ? new Date(
-          a.trainingDate.getFullYear(),
-          a.trainingDate.getMonth(),
-          a.trainingDate.getDate()
-        ).getTime()
-      : Number.NEGATIVE_INFINITY;
-    const bTraining = b.trainingDate
-      ? new Date(
-          b.trainingDate.getFullYear(),
-          b.trainingDate.getMonth(),
-          b.trainingDate.getDate()
-        ).getTime()
-      : Number.NEGATIVE_INFINITY;
-
-    if (aTraining !== bTraining) {
-      return bTraining - aTraining;
-    }
-
-    const aCreated = a.createdAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-    const bCreated = b.createdAt?.getTime() ?? Number.NEGATIVE_INFINITY;
-    return bCreated - aCreated;
-  });
-
-const getPenaltyForStreak = (streak: number) => {
-  if (streak <= 0) {
-    return null;
-  }
-  const index = Math.min(streak - 1, penaltyPlans.length - 1);
-  return penaltyPlans[index];
-};
-
-const getNoProgressStreak = (logs: WeightLog[], goalWeight: number | null) => {
-  if (!logs.length) {
-    return 0;
-  }
-  if (goalWeight === null) {
-    return logs.length;
-  }
-  const latestDistance = Math.abs((logs[0]?.weight ?? 0) - goalWeight);
-  if (latestDistance === 0) {
-    return 0;
-  }
-  if (logs.length < 2) {
-    return 0;
-  }
-
-  // Hitung streak terakhir tanpa progres: berat tidak turun
-  // atau tidak makin dekat ke goal.
-  let streak = 0;
-  for (let index = 0; index < logs.length - 1; index += 1) {
-    const current = logs[index];
-    const previous = logs[index + 1];
-    const didNotDecrease = current.weight >= previous.weight;
-    const notCloserToGoal =
-      Math.abs(current.weight - goalWeight) >= Math.abs(previous.weight - goalWeight);
-
-    if (didNotDecrease || notCloserToGoal) {
-      streak += 1;
-    } else {
-      break;
-    }
-  }
-  return streak;
-};
-
-const toDate = (value: unknown): Date | null => {
-  if (!value) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  if (typeof value === "string" || typeof value === "number") {
-    const parsed = new Date(value);
-    return Number.isNaN(parsed.valueOf()) ? null : parsed;
-  }
-  if (typeof value === "object" && "toDate" in value) {
-    const maybeDate = (value as { toDate: () => Date }).toDate();
-    return maybeDate instanceof Date ? maybeDate : null;
-  }
-  return null;
-};
-
-const normalizeTrainingDate = (value: unknown): Date | null => {
-  if (!value) {
-    return null;
-  }
-  if (value instanceof Date) {
-    return value;
-  }
-  if (typeof value === "string") {
-    const parsed = new Date(`${value}T00:00:00`);
-    return Number.isNaN(parsed.valueOf()) ? null : parsed;
-  }
-  return toDate(value);
-};
-
-const formatDate = (date: Date) =>
-  date.toLocaleDateString("id-ID", {
-    day: "numeric",
-    month: "long",
-    year: "numeric"
-  });
-
-const formatDateCompact = (date: Date) =>
-  date.toLocaleDateString("id-ID", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric"
-  });
-
-const getSummary = (items: Athlete[]) => {
-  const withPrevious = items.filter((athlete) => athlete.previousWeight !== null);
-  const improved = withPrevious.filter(
-    (athlete) => athlete.currentWeight < (athlete.previousWeight ?? 0)
-  );
-  return {
-    total: items.length,
-    checked: withPrevious.length,
-    improved: improved.length
-  };
-};
-
-const getLatestUpdate = (items: Athlete[]) => {
-  const trainingDates = items
-    .map((athlete) => athlete.trainingDate)
-    .filter((value): value is Date => Boolean(value));
-  if (trainingDates.length) {
-    const latestTraining = Math.max(...trainingDates.map((date) => date.getTime()));
-    return new Date(latestTraining);
-  }
-  const updatedDates = items
-    .map((athlete) => athlete.updatedAt)
-    .filter((value): value is Date => Boolean(value));
-  if (!updatedDates.length) {
-    return null;
-  }
-  const latest = Math.max(...updatedDates.map((date) => date.getTime()));
-  return new Date(latest);
-};
-
-const clamp = (value: number, min: number, max: number) =>
-  Math.min(Math.max(value, min), max);
-
-export default function DashboardPage() {
-  const router = useRouter();
-  const [athletes, setAthletes] = useState<Athlete[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState("");
-
-  const [newAthleteName, setNewAthleteName] = useState("");
-  const [newAthleteWeight, setNewAthleteWeight] = useState("");
-  const [newAthleteGoal, setNewAthleteGoal] = useState("");
-  const [newAthleteDate, setNewAthleteDate] = useState(() => getTodayDateValue());
-  const [addError, setAddError] = useState("");
-  const [addSuccess, setAddSuccess] = useState("");
-  const [isAdding, setIsAdding] = useState(false);
-
-  const [selectedAthleteId, setSelectedAthleteId] = useState("");
-  const [updatedWeight, setUpdatedWeight] = useState("");
-  const [updatedGoal, setUpdatedGoal] = useState("");
-  const [updatedDate, setUpdatedDate] = useState(() => getTodayDateValue());
-  const [updateError, setUpdateError] = useState("");
-  const [updateSuccess, setUpdateSuccess] = useState("");
-  const [isUpdating, setIsUpdating] = useState(false);
-
-  const [detailAthleteId, setDetailAthleteId] = useState("");
-  const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-  const [logsError, setLogsError] = useState("");
-  const [seedError, setSeedError] = useState("");
-  const [seedSuccess, setSeedSuccess] = useState("");
-  const [isSeedingLogs, setIsSeedingLogs] = useState(false);
+export default function InfoDashboardPage() {
   const { user } = useAuth();
   const isAdmin = user?.email === "darmawanbayu1@gmail.com";
-  const isCheckingSession = false;
-  const [penaltyInfos, setPenaltyInfos] = useState<PenaltyInfo[]>([]);
-  const [penaltyLoading, setPenaltyLoading] = useState(false);
-  const [allAthleteLogs, setAllAthleteLogs] = useState<Record<string, WeightLog[]>>({});
-  const [allLogsLoading, setAllLogsLoading] = useState(false);
 
+  const [milestones, setMilestones] = useState<Milestone[]>([]);
+  const [isMilestonesLoading, setIsMilestonesLoading] = useState(true);
+
+  // Form State for Admin
+  const [newDate, setNewDate] = useState("");
+  const [newTitle, setNewTitle] = useState("");
+  const [newDesc, setNewDesc] = useState("");
+  
+  // State for Editing
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDate, setEditDate] = useState("");
+  const [editTitle, setEditTitle] = useState("");
+  const [editDesc, setEditDesc] = useState("");
 
   useEffect(() => {
-    const athletesQuery = query(collection(db, "athletes"), orderBy("name"));
-    const unsubscribe = onSnapshot(
-      athletesQuery,
-      (snapshot) => {
-        const data = snapshot.docs.map((docSnap) => {
-          const docData = docSnap.data();
-          return {
-            id: docSnap.id,
-            name: String(docData.name ?? ""),
-            currentWeight: Number(docData.currentWeight ?? 0),
-            previousWeight:
-              docData.previousWeight === null || docData.previousWeight === undefined
-                ? null
-                : Number(docData.previousWeight),
-            goalWeight:
-              docData.goalWeight === null || docData.goalWeight === undefined
-                ? null
-                : Number(docData.goalWeight),
-            trainingDate: normalizeTrainingDate(docData.trainingDate),
-            updatedAt: toDate(docData.updatedAt)
-          } as Athlete;
-        });
-        setAthletes(data);
-        setLoading(false);
-        setLoadError("");
-      },
-      (error) => {
-        console.error("Firestore snapshot error:", error);
-        setLoadError("Gagal memuat data dari Firestore.");
-        setLoading(false);
-      }
-    );
+    const q = query(collection(db, "crown-milestones"), orderBy("date", "asc"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const ms: Milestone[] = [];
+      snapshot.forEach((doc) => {
+        ms.push({ id: doc.id, ...doc.data() } as Milestone);
+      });
+      setMilestones(ms);
+      setIsMilestonesLoading(false);
+    });
 
-    return () => unsubscribe();
+    return () => unsub();
   }, []);
 
-  useEffect(() => {
-    if (selectedAthleteId && !athletes.find((athlete) => athlete.id === selectedAthleteId)) {
-      setSelectedAthleteId("");
-    }
-  }, [athletes, selectedAthleteId]);
-
-
-  // Load all weight logs + compute penalties for all athletes
-  useEffect(() => {
-    if (!athletes.length) {
-      setAllAthleteLogs({});
-      setPenaltyInfos([]);
-      return;
-    }
-    let cancelled = false;
-    setAllLogsLoading(true);
-    setPenaltyLoading(true);
-
-    const loadAll = async () => {
-      const result: Record<string, WeightLog[]> = {};
-      const infos: PenaltyInfo[] = [];
-
-      await Promise.all(
-        athletes.map(async (athlete) => {
-          try {
-            const logsQuery = query(collection(db, "athletes", athlete.id, "weights"));
-            const snapshot = await getDocs(logsQuery);
-            const logs = sortWeightLogs(
-              snapshot.docs.map((docSnap) => {
-                const docData = docSnap.data();
-                return {
-                  id: docSnap.id,
-                  weight: Number(docData.weight ?? 0),
-                  trainingDate: normalizeTrainingDate(docData.trainingDate),
-                  createdAt: toDate(docData.createdAt),
-                } as WeightLog;
-              })
-            );
-            result[athlete.id] = logs;
-
-            // Compute penalty
-            const effectiveLogs = logs.length > 0 ? logs : [
-              { id: "current", weight: athlete.currentWeight, trainingDate: athlete.trainingDate, createdAt: athlete.updatedAt },
-              ...(athlete.previousWeight !== null ? [{ id: "previous", weight: athlete.previousWeight, trainingDate: null, createdAt: null }] : []),
-            ] as WeightLog[];
-            const streak = getNoProgressStreak(effectiveLogs, athlete.goalWeight);
-            if (streak > 0) {
-              infos.push({
-                athleteId: athlete.id,
-                athleteName: athlete.name,
-                currentWeight: athlete.currentWeight,
-                goalWeight: athlete.goalWeight,
-                streak,
-                penalty: getPenaltyForStreak(streak),
-              });
-            }
-          } catch (err) {
-            console.error(`Failed to load logs for ${athlete.name}:`, err);
-            result[athlete.id] = [];
-          }
-        })
-      );
-
-      if (!cancelled) {
-        setAllAthleteLogs(result);
-        setAllLogsLoading(false);
-        infos.sort((a, b) => b.streak - a.streak);
-        setPenaltyInfos(infos);
-        setPenaltyLoading(false);
-      }
-    };
-
-    loadAll();
-    return () => { cancelled = true; };
-  }, [athletes]);
-
-  // Get unique training dates across all athletes (sorted newest first), max 5
-  const allTrainingDates = useMemo(() => {
-    const dateSet = new Set<string>();
-    Object.values(allAthleteLogs).forEach((logs) => {
-      logs.forEach((log) => {
-        if (log.trainingDate) {
-          dateSet.add(formatDateValue(log.trainingDate));
-        }
-      });
+  const handleAddMilestone = async () => {
+    if (!newDate || !newTitle) return;
+    await addDoc(collection(db, "crown-milestones"), {
+      date: newDate,
+      title: newTitle,
+      description: newDesc,
+      status: "upcoming"
     });
-    return Array.from(dateSet).sort((a, b) => b.localeCompare(a)).slice(0, 5);
-  }, [allAthleteLogs]);
+    setNewDate("");
+    setNewTitle("");
+    setNewDesc("");
+  };
 
-  useEffect(() => {
-    if (detailAthleteId && !athletes.find((athlete) => athlete.id === detailAthleteId)) {
-      setDetailAthleteId("");
+  const handleDeleteMilestone = async (id: string) => {
+    if (confirm("Hapus milestone ini?")) {
+      await deleteDoc(doc(db, "crown-milestones", id));
     }
-  }, [athletes, detailAthleteId]);
+  };
 
-  useEffect(() => {
-    if (!detailAthleteId) {
-      setWeightLogs([]);
-      setLogsLoading(false);
-      setLogsError("");
-      return;
-    }
+  const handleStatusChange = async (id: string, currentStatus: Milestone["status"]) => {
+    const nextStatus = currentStatus === "upcoming" ? "current" : currentStatus === "current" ? "done" : currentStatus === "done" ? "delayed" : "upcoming";
+    await updateDoc(doc(db, "crown-milestones", id), { status: nextStatus });
+  };
 
-    setLogsLoading(true);
-    setLogsError("");
-    const logsQuery = query(collection(db, "athletes", detailAthleteId, "weights"));
-    const unsubscribe = onSnapshot(
-      logsQuery,
-      (snapshot) => {
-        const logs = sortWeightLogs(
-          snapshot.docs
-          .map((docSnap) => {
-            const docData = docSnap.data();
-            return {
-              id: docSnap.id,
-              weight: Number(docData.weight ?? 0),
-              trainingDate: normalizeTrainingDate(docData.trainingDate),
-              createdAt: toDate(docData.createdAt)
-            } as WeightLog;
-          })
-        );
-        setWeightLogs(logs);
-        setLogsLoading(false);
-      },
-      (error) => {
-        console.error("Firestore weight logs error:", error);
-        setLogsError("Gagal memuat riwayat berat.");
-        setLogsLoading(false);
-      }
-    );
+  const startEditing = (ms: Milestone) => {
+    setEditingId(ms.id);
+    setEditDate(ms.date);
+    setEditTitle(ms.title);
+    setEditDesc(ms.description || "");
+  };
 
-    return () => unsubscribe();
-  }, [detailAthleteId]);
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditDate("");
+    setEditTitle("");
+    setEditDesc("");
+  };
 
-  const summary = useMemo(() => getSummary(athletes), [athletes]);
-  const lastUpdated = useMemo(() => getLatestUpdate(athletes), [athletes]);
-  const detailAthlete = useMemo(
-    () => athletes.find((athlete) => athlete.id === detailAthleteId) ?? null,
-    [athletes, detailAthleteId]
-  );
-  const fallbackLogs = useMemo(() => {
-    if (!detailAthlete) {
-      return [];
-    }
-    const items: WeightLog[] = [];
-    items.push({
-      id: "current",
-      weight: detailAthlete.currentWeight,
-      trainingDate: detailAthlete.trainingDate,
-      createdAt: detailAthlete.updatedAt
+  const handleUpdateMilestone = async (id: string) => {
+    if (!editDate || !editTitle) return;
+    await updateDoc(doc(db, "crown-milestones", id), {
+      date: editDate,
+      title: editTitle,
+      description: editDesc,
     });
-    if (detailAthlete.previousWeight !== null) {
-      items.push({
-        id: "previous",
-        weight: detailAthlete.previousWeight,
-        trainingDate: null,
-        createdAt: null
-      });
-    }
-    return items;
-  }, [detailAthlete]);
-  const logsForPenalty = useMemo(
-    () => (weightLogs.length > 0 ? weightLogs : fallbackLogs),
-    [weightLogs, fallbackLogs]
-  );
-  const noProgressStreak = useMemo(
-    () => getNoProgressStreak(logsForPenalty, detailAthlete?.goalWeight ?? null),
-    [logsForPenalty, detailAthlete?.goalWeight]
-  );
-  const activePenalty = useMemo(
-    () => getPenaltyForStreak(noProgressStreak),
-    [noProgressStreak]
-  );
-  const historyLogs = useMemo(() => {
-    const source = weightLogs.length > 0 ? weightLogs : fallbackLogs;
-    return sortWeightLogs(source);
-  }, [weightLogs, fallbackLogs]);
-  const latestLog = historyLogs[0] ?? null;
-  const goalGap = useMemo(() => {
-    if (!detailAthlete || detailAthlete.goalWeight === null || !latestLog) {
-      return null;
-    }
-    return latestLog.weight - detailAthlete.goalWeight;
-  }, [detailAthlete, latestLog]);
-  const goalProgressPercent = useMemo(() => {
-    if (
-      !detailAthlete ||
-      detailAthlete.goalWeight === null ||
-      !latestLog
-    ) {
-      return null;
-    }
-    if (latestLog.weight <= detailAthlete.goalWeight) {
-      return 100;
-    }
+    cancelEditing();
+  };
 
-    // Baseline diambil dari berat tertinggi yang pernah tercatat,
-    // jadi progres tetap terbaca walaupun data lama sempat naik-turun.
-    const startWeight = Math.max(...historyLogs.map((log) => log.weight));
-    const totalNeed = startWeight - detailAthlete.goalWeight;
-    if (totalNeed <= 0) {
-      return 100;
-    }
-    const achieved = startWeight - latestLog.weight;
-    return clamp((achieved / totalNeed) * 100, 0, 100);
-  }, [detailAthlete, latestLog, historyLogs]);
-
-  
-
-  const handleAddAthlete = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setAddError("");
-    setAddSuccess("");
-
-    if (!isAdmin) {
-      setAddError("Hanya admin yang bisa menambah athlete.");
-      return;
-    }
-
-    const trimmedName = newAthleteName.trim();
-    const weightValue = Number(newAthleteWeight);
-    const goalValue = Number(newAthleteGoal);
-
-    if (!trimmedName || !newAthleteDate || newAthleteGoal.trim() === "") {
-      setAddError("Semua kolom harus diisi.");
-      return;
-    }
-    if (isFutureTrainingDate(newAthleteDate)) {
-      setAddError("Tanggal latihan tidak boleh melebihi hari ini.");
-      return;
-    }
-
-    if (!Number.isFinite(weightValue) || weightValue <= 0) {
-      setAddError("Berat awal harus berupa angka lebih dari 0.");
-      return;
-    }
-    if (!Number.isFinite(goalValue) || goalValue <= 0) {
-      setAddError("Goal berat harus berupa angka lebih dari 0.");
-      return;
-    }
-    if (goalValue >= weightValue) {
-      setAddError("Goal berat harus lebih kecil dari berat awal.");
-      return;
-    }
-
-    try {
-      setIsAdding(true);
-      const response = await fetch("/api/athletes", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          name: trimmedName,
-          currentWeight: weightValue,
-          goalWeight: goalValue,
-          trainingDate: newAthleteDate
-        })
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as { message?: string };
-        setAddError(payload.message ?? "Gagal menyimpan athlete.");
-        return;
-      }
-
-      setAddSuccess("Athlete berhasil disimpan.");
-      setNewAthleteName("");
-      setNewAthleteWeight("");
-      setNewAthleteGoal("");
-      setNewAthleteDate(getTodayDateValue());
-    } catch (error) {
-      console.error("Add athlete error:", error);
-      setAddError("Gagal menyimpan athlete.");
-    } finally {
-      setIsAdding(false);
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "done": return "bg-emerald-500/20 border-emerald-500/30 text-emerald-400";
+      case "current": return "bg-amber-500/20 border-amber-500/30 text-amber-400 animate-pulse";
+      case "delayed": return "bg-rose-500/20 border-rose-500/30 text-rose-400";
+      default: return "bg-slate-500/20 border-slate-500/30 text-slate-400";
     }
   };
 
-  const handleUpdateWeight = async (event: React.FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setUpdateError("");
-    setUpdateSuccess("");
-
-    if (!isAdmin) {
-      setUpdateError("Hanya admin yang bisa memperbarui data.");
-      return;
-    }
-
-    if (!selectedAthleteId) {
-      setUpdateError("Pilih athlete terlebih dahulu.");
-      return;
-    }
-
-    if (!updatedDate) {
-      setUpdateError("Tanggal latihan wajib diisi.");
-      return;
-    }
-    if (isFutureTrainingDate(updatedDate)) {
-      setUpdateError("Tanggal latihan tidak boleh melebihi hari ini.");
-      return;
-    }
-
-    const weightValue = Number(updatedWeight);
-    const athlete = athletes.find((item) => item.id === selectedAthleteId);
-    const goalValue =
-      updatedGoal.trim() === "" ? athlete?.goalWeight ?? null : Number(updatedGoal);
-    if (!Number.isFinite(weightValue) || weightValue <= 0) {
-      setUpdateError("Berat baru harus berupa angka lebih dari 0.");
-      return;
-    }
-    if (goalValue === null) {
-      setUpdateError("Goal berat wajib diisi terlebih dahulu.");
-      return;
-    }
-    if (!Number.isFinite(goalValue) || goalValue <= 0) {
-      setUpdateError("Goal berat harus berupa angka lebih dari 0.");
-      return;
-    }
-    if (!athlete) {
-      setUpdateError("Athlete tidak ditemukan.");
-      return;
-    }
-    if (goalValue >= weightValue) {
-      setUpdateError("Goal berat harus lebih kecil dari berat saat ini.");
-      return;
-    }
-
-    try {
-      setIsUpdating(true);
-      const response = await fetch(`/api/athletes/${athlete.id}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          currentWeight: weightValue,
-          trainingDate: updatedDate,
-          goalWeight: goalValue
-        })
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as { message?: string };
-        setUpdateError(payload.message ?? "Gagal memperbarui berat.");
-        return;
-      }
-      setUpdateSuccess("Berat athlete berhasil diperbarui.");
-      setUpdatedWeight("");
-      setUpdatedGoal("");
-      setUpdatedDate(getTodayDateValue());
-    } catch (error) {
-      console.error("Update weight error:", error);
-      setUpdateError("Gagal memperbarui berat.");
-    } finally {
-      setIsUpdating(false);
+  const getStatusIcon = (status: string) => {
+    switch (status) {
+      case "done": return "✅";
+      case "current": return "🔥";
+      case "delayed": return "⚠️";
+      default: return "⏳";
     }
   };
 
-  const handleSeedLogs = async () => {
-    if (!detailAthlete) {
-      return;
-    }
-    if (!isAdmin) {
-      setSeedError("Hanya admin yang bisa menyimpan riwayat.");
-      return;
-    }
-    setSeedError("");
-    setSeedSuccess("");
-
-    try {
-      setIsSeedingLogs(true);
-      const response = await fetch(`/api/athletes/${detailAthlete.id}/seed`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          currentWeight: detailAthlete.currentWeight,
-          previousWeight: detailAthlete.previousWeight,
-          trainingDate: detailAthlete.trainingDate
-            ? formatDateValue(detailAthlete.trainingDate)
-            : null
-        })
-      });
-
-      if (!response.ok) {
-        const payload = (await response.json()) as { message?: string };
-        setSeedError(payload.message ?? "Gagal membuat riwayat.");
-        return;
-      }
-
-      setSeedSuccess("Riwayat berhasil dibuat dari data terakhir.");
-    } catch (error) {
-      console.error("Seed logs error:", error);
-      setSeedError("Gagal membuat riwayat.");
-    } finally {
-      setIsSeedingLogs(false);
-    }
-  };
-
-  
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-4 text-slate-100 sm:p-6">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
-        <header
-          className={`flex flex-wrap items-center justify-between gap-4 rounded-2xl border p-6 ${glassCardClass}`}
-        >
-          <div className="flex items-center gap-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
-              <Image
-                src="/crown-logo.jpg"
-                alt="Crown Allstar"
-                width={40}
-                height={40}
-                className="h-10 w-10 object-contain"
-                priority
-              />
+    <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100 sm:p-6 lg:p-8">
+      <div className="mx-auto max-w-5xl space-y-8">
+        {/* Header Section */}
+        <div className="space-y-2 py-4">
+          <div className="flex items-center gap-3">
+            <div className="rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-2.5 shadow-lg shadow-amber-500/20">
+              <Megaphone className="h-6 w-6 text-white" />
             </div>
-            <div>
-              <p className="text-sm uppercase tracking-[0.24em] text-slate-300">
-                Crown Allstar
-              </p>
-              <h1 className="text-2xl font-semibold">Dashboard Catatan Berat</h1>
-              <p className="text-sm text-slate-300">
-                Update terakhir: {lastUpdated ? formatDate(lastUpdated) : "Belum ada data"}
-              </p>
-              <p className="text-xs text-slate-400">
-                {isAdmin ? "Mode Admin Aktif" : "Mode Publik (Read-only)"}
-              </p>
-            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-white sm:text-4xl">
+              Information Board
+            </h1>
           </div>
-          
-        </header>
+          <p className="text-sm text-slate-400 sm:text-base">
+            Pusat informasi pembayaran, event, dan pengumuman tim Crown Allstar.
+          </p>
+        </div>
 
-        {loadError ? (
-          <p className="text-sm text-destructive">{loadError}</p>
-        ) : null}
+        {/* Progress Tracker (Timeline) */}
+        <div className="pt-2">
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-white mb-4">
+            <Flag className="h-5 w-5 text-emerald-400" />
+            Target & Timeline Tim
+          </h2>
 
-        <section className="grid gap-4 md:grid-cols-3">
-          <Card className={glassCardClass}>
-            <CardHeader>
-              <CardTitle>Total Athlete</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{summary.total}</CardContent>
-          </Card>
-          <Card className={glassCardClass}>
-            <CardHeader>
-              <CardTitle>Data Dibandingkan</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{summary.checked}</CardContent>
-          </Card>
-          <Card className={glassCardClass}>
-            <CardHeader>
-              <CardTitle>Turun Berat</CardTitle>
-            </CardHeader>
-            <CardContent className="text-3xl font-semibold">{summary.improved}</CardContent>
-          </Card>
-        </section>
-
-        {isAdmin ? (
-          <section className="grid gap-4 md:grid-cols-2">
-            <Card className={glassCardClass}>
-              <CardHeader>
-                <CardTitle>Tambah Athlete</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Simpan athlete baru ke Firestore.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-4" onSubmit={handleAddAthlete}>
-                  <div className="space-y-2">
-                    <Label htmlFor="athlete-name">Nama</Label>
-                    <Input
-                      id="athlete-name"
-                      className={glassFieldClass}
-                      value={newAthleteName}
-                      onChange={(event) => setNewAthleteName(event.target.value)}
-                      placeholder="Nama athlete"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="athlete-weight">Berat Awal (kg)</Label>
-                    <Input
-                      id="athlete-weight"
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      min="0"
-                      className={glassFieldClass}
-                      value={newAthleteWeight}
-                      onChange={(event) => setNewAthleteWeight(event.target.value)}
-                      placeholder="65.5"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="athlete-goal">Goal Berat (kg)</Label>
-                    <Input
-                      id="athlete-goal"
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      min="0"
-                      className={glassFieldClass}
-                      value={newAthleteGoal}
-                      onChange={(event) => setNewAthleteGoal(event.target.value)}
-                      placeholder="Target berat"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="athlete-date">Tanggal Latihan</Label>
-                    <Input
-                      id="athlete-date"
-                      type="date"
-                      className={glassFieldClass}
-                      value={newAthleteDate}
-                      max={getTodayDateValue()}
-                      onChange={(event) => setNewAthleteDate(event.target.value)}
-                    />
-                  </div>
-                  {addError ? <p className="text-sm text-destructive">{addError}</p> : null}
-                  {addSuccess ? <p className="text-sm text-emerald-600">{addSuccess}</p> : null}
-                  <Button type="submit" disabled={isAdding} className={glassButtonClass}>
-                    {isAdding ? "Menyimpan..." : "Simpan Athlete"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-
-            <Card className={glassCardClass}>
-              <CardHeader>
-                <CardTitle>Update Berat</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Catat perubahan berat terbaru athlete.
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <form className="space-y-4" onSubmit={handleUpdateWeight}>
-                  <div className="space-y-2">
-                    <Label htmlFor="update-athlete">Pilih Athlete</Label>
-                    <select
-                      id="update-athlete"
-                      value={selectedAthleteId}
-                      onChange={(event) => setSelectedAthleteId(event.target.value)}
-                      className={`flex h-10 w-full rounded-md border px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 ${glassFieldClass}`}
-                      disabled={athletes.length === 0}
-                    >
-                      <option value="">Pilih athlete</option>
-                      {athletes.map((athlete) => (
-                        <option key={athlete.id} value={athlete.id}>
-                          {athlete.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="update-weight">Berat Baru (kg)</Label>
-                    <Input
-                      id="update-weight"
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      min="0"
-                      className={glassFieldClass}
-                      value={updatedWeight}
-                      onChange={(event) => setUpdatedWeight(event.target.value)}
-                      placeholder="72.0"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="update-goal">Update Goal (isi jika ingin ubah)</Label>
-                    <Input
-                      id="update-goal"
-                      type="number"
-                      inputMode="decimal"
-                      step="0.1"
-                      min="0"
-                      className={glassFieldClass}
-                      value={updatedGoal}
-                      onChange={(event) => setUpdatedGoal(event.target.value)}
-                      placeholder="Target berat baru"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="update-date">Tanggal Latihan</Label>
-                    <Input
-                      id="update-date"
-                      type="date"
-                      className={glassFieldClass}
-                      value={updatedDate}
-                      max={getTodayDateValue()}
-                      onChange={(event) => setUpdatedDate(event.target.value)}
-                    />
-                  </div>
-                  {updateError ? <p className="text-sm text-destructive">{updateError}</p> : null}
-                  {updateSuccess ? (
-                    <p className="text-sm text-emerald-600">{updateSuccess}</p>
-                  ) : null}
-                  <Button
-                    type="submit"
-                    disabled={isUpdating || athletes.length === 0}
-                    className={glassButtonClass}
-                  >
-                    {isUpdating ? "Menyimpan..." : "Simpan Berat"}
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </section>
-        ) : (
-          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur-md">
-            <p className="text-sm text-slate-400">Mode Publik. Anda dapat melihat progress athlete di bawah.</p>
-          </div>
-        )}
-
-        {/* Excel-style Comparison Table */}
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>📋 Daftar Perbandingan Berat Athlete</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Menampilkan 5 data timbang terbaru. Klik athlete untuk detail lengkap.
-                </CardDescription>
+          <Card className="border-emerald-500/20 bg-emerald-950/10 backdrop-blur-md shadow-xl text-slate-100 mb-6">
+            <CardHeader className="pb-3 border-b border-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg text-emerald-100">Roadmap Menuju Kejurda 2026</CardTitle>
+                  <CardDescription className="text-emerald-200/60 mt-1">
+                    Pastikan semua atlet tahu target tim setiap minggunlu.
+                  </CardDescription>
+                </div>
+                <Badge className="bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">TIMELINE</Badge>
               </div>
-              {lastUpdated && (
-                <Badge className="bg-cyan-500/25 text-cyan-100 text-sm px-3 py-1">
-                  📅 {formatDate(lastUpdated)}
-                </Badge>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            {allLogsLoading ? (
-              <p className="text-sm text-slate-300">Memuat data timbang...</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="min-w-[600px] text-slate-100">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-slate-300 sticky left-0 bg-black/80 backdrop-blur-sm z-10 min-w-[120px]">Atlet</TableHead>
-                      <TableHead className="text-slate-300 text-center">Goal</TableHead>
-                      {allTrainingDates.map((dateStr) => {
-                        const d = new Date(`${dateStr}T00:00:00`);
-                        return (
-                          <TableHead key={dateStr} className="text-slate-300 text-center min-w-[80px]">
-                            <div className="text-xs">{d.toLocaleDateString("id-ID", { day: "2-digit", month: "short" })}</div>
-                            <div className="text-[10px] text-slate-400">{d.getFullYear()}</div>
-                          </TableHead>
-                        );
-                      })}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {loading ? (
-                      <TableRow>
-                        <TableCell colSpan={allTrainingDates.length + 3} className="text-center text-sm text-slate-300">
-                          Memuat data...
-                        </TableCell>
-                      </TableRow>
-                    ) : athletes.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={allTrainingDates.length + 3} className="text-center text-sm text-slate-300">
-                          Belum ada data athlete.
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      athletes.map((athlete, idx) => {
-                        const previous = athlete.previousWeight;
-                        const improved = previous !== null && athlete.currentWeight < previous;
-                        const stable = previous !== null && athlete.currentWeight === previous;
-                        const goalWeight = athlete.goalWeight ?? null;
-                        const isSelected = athlete.id === detailAthleteId;
-                        const logs = allAthleteLogs[athlete.id] ?? [];
+            </CardHeader>
+            <CardContent className="pt-6">
 
-                        return (
-                          <TableRow
-                            key={athlete.id}
-                            className={`cursor-pointer hover:bg-white/10 transition-colors ${isSelected ? "bg-white/15" : idx % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.06]"}`}
-                            onClick={() => setDetailAthleteId(athlete.id)}
-                            role="button"
-                            tabIndex={0}
-                            onKeyDown={(event) => {
-                              if (event.key === "Enter" || event.key === " ") {
-                                event.preventDefault();
-                                setDetailAthleteId(athlete.id);
-                              }
-                            }}
-                          >
-                            <TableCell className="sticky left-0 bg-black/80 backdrop-blur-sm z-10 font-medium">
-                              {athlete.name}
-                            </TableCell>
-                            <TableCell className="text-center text-xs">
-                              {goalWeight !== null ? `${goalWeight.toFixed(1)}` : "-"}
-                            </TableCell>
-                            {allTrainingDates.map((dateStr) => {
-                              const log = logs.find((l) => l.trainingDate && formatDateValue(l.trainingDate) === dateStr);
-                              const logIdx = log ? logs.indexOf(log) : -1;
-                              const prevLog = logIdx >= 0 && logIdx < logs.length - 1 ? logs[logIdx + 1] : null;
-                              const logDelta = log && prevLog ? log.weight - prevLog.weight : null;
-                              return (
-                                <TableCell key={dateStr} className="text-center">
-                                  {log ? (
-                                    <div>
-                                      <span className="font-semibold text-sm">{log.weight.toFixed(1)}</span>
-                                      {logDelta !== null && (
-                                        <div className={`text-[10px] ${logDelta < 0 ? "text-emerald-400" : logDelta > 0 ? "text-rose-400" : "text-slate-400"}`}>
-                                          {logDelta > 0 ? "+" : ""}{logDelta.toFixed(1)}
-                                        </div>
-                                      )}
-                                    </div>
-                                  ) : (
-                                    <span className="text-slate-600">-</span>
-                                  )}
-                                </TableCell>
-                              );
-                            })}
+              {/* Timeline Container */}
+              <div className="relative border-l-2 border-white/10 ml-3 md:ml-4 space-y-6">
 
-                          </TableRow>
-                        );
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                {isMilestonesLoading ? (
+                  <p className="text-slate-400 ml-6 text-sm">Memuat timeline...</p>
+                ) : milestones.length === 0 ? (
+                  <p className="text-slate-400 ml-6 text-sm">Belum ada target yang dibuat.</p>
+                ) : milestones.map((ms, index) => (
+                  <div key={ms.id} className="relative pl-6 md:pl-8 group">
+                    {/* Dot Indicator */}
+                    <div className={`absolute -left-[9px] top-1.5 h-4 w-4 rounded-full border-2 border-black flex items-center justify-center text-[8px]
+                      ${ms.status === 'done' ? 'bg-emerald-400' : ms.status === 'current' ? 'bg-amber-400 ring-2 ring-amber-400/30' : ms.status === 'delayed' ? 'bg-rose-400' : 'bg-slate-600'}
+                    `}>
+                    </div>
 
-        {/* Penalty Summary Table */}
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
-                <CardTitle>⚠️ Daftar Athlete Kena Hukuman</CardTitle>
-                <CardDescription className="text-slate-300">
-                  Athlete yang tidak menunjukkan progres menuju goal berat.
-                </CardDescription>
-              </div>
-              <Badge className={penaltyInfos.length > 0 ? "bg-rose-500/30 text-rose-100" : "bg-emerald-500/30 text-emerald-100"}>
-                {penaltyLoading ? "Memuat..." : `${penaltyInfos.length} athlete`}
-              </Badge>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {penaltyLoading ? (
-              <p className="text-sm text-slate-300">Memuat data hukuman...</p>
-            ) : penaltyInfos.length === 0 ? (
-              <p className="text-sm text-emerald-300">✅ Semua athlete menunjukkan progres!</p>
-            ) : (
-              <div className="overflow-x-auto">
-                <Table className="min-w-[650px] text-slate-100">
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="text-slate-300 w-10">No</TableHead>
-                      <TableHead className="text-slate-300">Nama</TableHead>
-                      <TableHead className="text-slate-300">Berat</TableHead>
-                      <TableHead className="text-slate-300">Goal</TableHead>
-                      <TableHead className="text-slate-300">Streak</TableHead>
-                      <TableHead className="text-slate-300">Level</TableHead>
-                      <TableHead className="text-slate-300">Detail Hukuman</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {penaltyInfos.map((info, i) => (
-                      <TableRow key={info.athleteId} className={`hover:bg-white/10 ${i % 2 === 0 ? "bg-white/[0.02]" : "bg-white/[0.06]"}`}>
-                        <TableCell className="text-sm">{i + 1}</TableCell>
-                        <TableCell className="font-medium">{info.athleteName}</TableCell>
-                        <TableCell>{info.currentWeight.toFixed(1)} kg</TableCell>
-                        <TableCell>{info.goalWeight !== null ? `${info.goalWeight.toFixed(1)} kg` : "-"}</TableCell>
-                        <TableCell>
-                          <Badge variant="destructive" className="text-xs">{info.streak}x</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {info.penalty ? (
-                            <Badge className="bg-amber-500/30 text-amber-100 text-xs">Level {info.penalty.level}</Badge>
-                          ) : "-"}
-                        </TableCell>
-                        <TableCell className="text-xs text-slate-300 max-w-[200px]">
-                          {info.penalty ? (
-                            <div>
-                              <span className="font-medium text-slate-200">{info.penalty.duration}</span>
-                              {" • "}{info.penalty.rounds}
-                              <br />
-                              {info.penalty.exercises.slice(0, 3).join(", ")}
-                              {info.penalty.exercises.length > 3 && ` +${info.penalty.exercises.length - 3} lagi`}
+                    <div className={`p-4 rounded-xl border border-white/10 transition-all
+                      ${ms.status === 'current' ? 'bg-amber-500/10 border-amber-500/30 shadow-[0_0_15px_rgba(245,158,11,0.1)]' : ms.status === 'delayed' ? 'bg-rose-500/5' : 'bg-white/5'}
+                    `}>
+                      {editingId === ms.id ? (
+                        <div className="space-y-3">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-400">Tanggal</label>
+                              <Input type="date" value={editDate} onChange={e => setEditDate(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
                             </div>
-                          ) : "-"}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <CardTitle>Riwayat Berat Athlete</CardTitle>
-            <CardDescription className="text-slate-300">
-              Klik baris athlete di atas untuk melihat riwayat lengkap.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {detailAthleteId ? (
-              <>
-                <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <p className="text-lg font-semibold">
-                      {detailAthlete?.name ?? "Athlete"}
-                    </p>
-                    <p className="text-xs text-slate-300">ID: {detailAthleteId}</p>
-                  </div>
-                  <Badge className="bg-cyan-500/25 text-cyan-100">
-                    Goal:{" "}
-                    {detailAthlete?.goalWeight !== null &&
-                    detailAthlete?.goalWeight !== undefined
-                      ? `${detailAthlete.goalWeight.toFixed(1)} kg`
-                      : "Belum diatur"}
-                  </Badge>
-                </div>
-
-                <div className="mb-5 grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-cyan-300/30 bg-cyan-500/15 p-4">
-                    <p className="text-xs uppercase tracking-wide text-cyan-100/80">
-                      Goal Berat
-                    </p>
-                    <p className="mt-1 text-2xl font-bold text-cyan-100">
-                      {detailAthlete?.goalWeight !== null &&
-                      detailAthlete?.goalWeight !== undefined
-                        ? `${detailAthlete.goalWeight.toFixed(1)} kg`
-                        : "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-300">
-                      Berat Terakhir
-                    </p>
-                    <p className="mt-1 text-2xl font-bold">
-                      {latestLog ? `${latestLog.weight.toFixed(1)} kg` : "-"}
-                    </p>
-                  </div>
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                    <p className="text-xs uppercase tracking-wide text-slate-300">
-                      Selisih Ke Goal
-                    </p>
-                    <p
-                      className={`mt-1 text-2xl font-bold ${
-                        goalGap !== null && goalGap <= 0 ? "text-emerald-300" : "text-rose-300"
-                      }`}
-                    >
-                      {goalGap === null ? "-" : `${Math.abs(goalGap).toFixed(1)} kg`}
-                    </p>
-                    <p className="text-xs text-slate-300">
-                      {goalGap === null
-                        ? "Set goal dulu"
-                        : goalGap <= 0
-                          ? "Goal tercapai"
-                          : "Masih di atas goal"}
-                    </p>
-                  </div>
-                </div>
-
-                {goalProgressPercent !== null ? (
-                  <div className="mb-5 rounded-xl border border-white/10 bg-white/5 p-4">
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <p className="text-sm text-slate-300">Progress ke Goal</p>
-                      <p className="text-sm font-semibold text-cyan-100">
-                        {goalProgressPercent.toFixed(0)}%
-                      </p>
-                    </div>
-                    <div className="h-2 rounded-full bg-white/10">
-                      <div
-                        className="h-2 rounded-full bg-cyan-400"
-                        style={{ width: `${goalProgressPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                ) : null}
-
-                {logsError ? <p className="text-sm text-destructive">{logsError}</p> : null}
-                {logsLoading ? (
-                  <p className="text-sm text-slate-300">Memuat riwayat...</p>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
-                      <p className="text-sm text-slate-300">Hukuman Aktif</p>
-                      {activePenalty ? (
-                        <div className="mt-2 space-y-2">
-                          <p className="text-base font-semibold">{activePenalty.title}</p>
-                          <p className="text-sm text-slate-300">
-                            {noProgressStreak}x tanpa progres • {activePenalty.duration} •{" "}
-                            {activePenalty.rounds}
-                          </p>
-                          <ul className="list-disc space-y-1 pl-4 text-sm">
-                            {activePenalty.exercises.map((item) => (
-                              <li key={item}>{item}</li>
-                            ))}
-                          </ul>
-                          <p className="text-xs text-slate-400">
-                            Wajib diselesaikan penuh sesuai level.
-                          </p>
+                            <div className="space-y-1">
+                              <label className="text-xs text-slate-400">Judul</label>
+                              <Input type="text" value={editTitle} onChange={e => setEditTitle(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-xs text-slate-400">Keterangan Tambahan</label>
+                            <Input type="text" value={editDesc} onChange={e => setEditDesc(e.target.value)} className="bg-black/40 border-white/20 text-white h-8 text-sm" />
+                          </div>
+                          <div className="flex items-center gap-2 pt-2">
+                            <button onClick={() => handleUpdateMilestone(ms.id)} className="text-xs flex items-center gap-1 text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 px-3 py-1.5 rounded transition-colors border border-emerald-500/20">
+                              <Check className="h-3 w-3" /> Simpan Perubahan
+                            </button>
+                            <button onClick={cancelEditing} className="text-xs flex items-center gap-1 text-slate-400 hover:text-slate-300 bg-slate-500/10 hover:bg-slate-500/20 px-3 py-1.5 rounded transition-colors border border-slate-500/20">
+                              <X className="h-3 w-3" /> Batal
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <p className="mt-2 text-sm text-slate-300">
-                          Tidak ada hukuman aktif. Progress sudah turun.
-                        </p>
+                        <>
+                          <div className="flex flex-wrap items-start justify-between gap-3 mb-2">
+                            <div>
+                              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">
+                                {new Date(ms.date).toLocaleDateString('id-ID', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}
+                              </p>
+                              <h3 className={`text-lg font-bold ${ms.status === 'done' ? 'text-slate-300 line-through decoration-emerald-500/50' : ms.status === 'delayed' ? 'text-rose-200 line-through decoration-rose-500/50' : 'text-white'}`}>
+                                {ms.title}
+                              </h3>
+                            </div>
+                            <Badge className={`${getStatusColor(ms.status)} px-2 py-0.5 flex items-center gap-1.5 cursor-pointer select-none`} onClick={() => isAdmin && handleStatusChange(ms.id, ms.status)}>
+                              <span>{getStatusIcon(ms.status)}</span>
+                              <span className="capitalize text-xs font-semibold">{ms.status === 'current' ? 'In Progress' : ms.status === 'delayed' ? 'Tertunda' : ms.status}</span>
+                            </Badge>
+                          </div>
+
+                          {ms.description && (
+                            <p className={`text-sm ${ms.status === 'done' ? 'text-slate-500' : ms.status === 'delayed' ? 'text-rose-300/70' : 'text-slate-300'}`}>
+                              {ms.description}
+                            </p>
+                          )}
+
+                          {/* Admin Controls */}
+                          {isAdmin && (
+                            <div className="flex items-center gap-2 mt-3 pt-3 border-t border-white/5 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={() => startEditing(ms)} className="text-xs flex items-center gap-1 text-amber-400 hover:text-amber-300 bg-amber-500/10 px-2 py-1 rounded">
+                                <Pencil className="h-3 w-3" /> Edit
+                              </button>
+                              <button onClick={() => handleDeleteMilestone(ms.id)} className="text-xs flex items-center gap-1 text-rose-400 hover:text-rose-300 bg-rose-500/10 px-2 py-1 rounded">
+                                <Trash2 className="h-3 w-3" /> Hapus
+                              </button>
+                              <button onClick={() => handleStatusChange(ms.id, ms.status)} className="text-xs flex items-center gap-1 text-cyan-400 hover:text-cyan-300 bg-cyan-500/10 px-2 py-1 rounded">
+                                <RefreshCw className="h-3 w-3" /> Ubah Status
+                              </button>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
+                  </div>
+                ))}
+              </div>
 
-                    {weightLogs.length === 0 ? (
-                      <p className="text-sm text-slate-300">
-                        Belum ada riwayat tersimpan. Data di bawah dari dokumen utama athlete.
-                      </p>
-                    ) : null}
-
-                    <div className="rounded-xl border border-white/10 bg-white/5 p-1 sm:p-2">
-                      <Table className="w-full table-fixed text-slate-100">
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead className="px-2 py-2 text-xs text-slate-300 sm:text-sm">
-                              Tanggal
-                            </TableHead>
-                            <TableHead className="px-2 py-2 text-xs text-slate-300 sm:text-sm">
-                              Berat (kg)
-                            </TableHead>
-                            <TableHead className="px-2 py-2 text-xs text-slate-300 sm:text-sm">
-                              Delta (kg)
-                            </TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {historyLogs.length === 0 ? (
-                            <TableRow className="hover:bg-white/5">
-                              <TableCell colSpan={3} className="px-2 py-2 text-xs text-slate-300 sm:text-sm">
-                                Belum ada data timbang.
-                              </TableCell>
-                            </TableRow>
-                          ) : (
-                            historyLogs.map((log, index) => {
-                              const previousLog = historyLogs[index + 1];
-                              const delta = previousLog ? log.weight - previousLog.weight : null;
-
-                              return (
-                                <TableRow key={log.id} className="hover:bg-white/5">
-                                  <TableCell className="px-2 py-2 text-xs sm:text-sm">
-                                    {log.trainingDate ? (
-                                      <>
-                                        <span className="hidden sm:inline">
-                                          {formatDate(log.trainingDate)}
-                                        </span>
-                                        <span className="sm:hidden">
-                                          {formatDateCompact(log.trainingDate)}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      "Belum ada"
-                                    )}
-                                  </TableCell>
-                                  <TableCell className="px-2 py-2 text-xs sm:text-sm">
-                                    {log.weight.toFixed(1)}
-                                  </TableCell>
-                                  <TableCell className="px-2 py-2 text-xs sm:text-sm">
-                                    {delta === null
-                                      ? "-"
-                                      : `${delta > 0 ? "+" : ""}${delta.toFixed(1)}`}
-                                  </TableCell>
-                                </TableRow>
-                              );
-                            })
-                          )}
-                        </TableBody>
-                      </Table>
+              {/* Admin Add Form */}
+              {isAdmin && (
+                <div className="mt-8 pt-6 border-t border-white/10">
+                  <h4 className="text-sm font-semibold text-emerald-400 mb-3 flex items-center gap-2">
+                    <Plus className="h-4 w-4" /> Tambah Target Baru (Admin)
+                  </h4>
+                  <div className="grid sm:grid-cols-2 md:grid-cols-4 gap-3 items-end">
+                    <div className="space-y-1 md:col-span-1">
+                      <label className="text-xs text-slate-400">Tanggal</label>
+                      <Input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} className="bg-black/20 border-white/10 text-white [color-scheme:dark] h-9" />
                     </div>
-
-                    {weightLogs.length === 0 && isAdmin ? (
-                      <>
-                        {seedError ? (
-                          <p className="text-sm text-destructive">{seedError}</p>
-                        ) : null}
-                        {seedSuccess ? (
-                          <p className="text-sm text-emerald-600">{seedSuccess}</p>
-                        ) : null}
-                        <Button
-                          type="button"
-                          onClick={handleSeedLogs}
-                          disabled={isSeedingLogs}
-                          className={glassButtonClass}
-                        >
-                          {isSeedingLogs ? "Menyimpan..." : "Simpan ke Riwayat"}
+                    <div className="space-y-1 md:col-span-1">
+                      <label className="text-xs text-slate-400">Judul Target</label>
+                      <Input type="text" placeholder="Contoh: Mulai Running" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="bg-black/20 border-white/10 text-white h-9" />
+                    </div>
+                    <div className="space-y-1 md:col-span-2 flex gap-2">
+                      <div className="flex-1 space-y-1">
+                        <label className="text-xs text-slate-400">Keterangan Tambahan</label>
+                        <Input type="text" placeholder="Detail..." value={newDesc} onChange={e => setNewDesc(e.target.value)} className="bg-black/20 border-white/10 text-white h-9" />
+                      </div>
+                      <div className="flex items-end">
+                        <Button onClick={handleAddMilestone} disabled={!newTitle || !newDate} className="h-9 bg-emerald-600 hover:bg-emerald-500 text-white px-3">
+                          Tambah
                         </Button>
-                      </>
-                    ) : null}
+                      </div>
+                    </div>
                   </div>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-slate-300">
-                Klik baris athlete untuk melihat riwayat lengkap.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className={glassCardClass}>
-          <CardHeader>
-            <CardTitle>Hukuman Level</CardTitle>
-            <CardDescription className="text-slate-300">
-              Naik level otomatis jika timbang berulang tanpa progres menuju goal.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-4 md:grid-cols-2">
-              {penaltyPlans.map((plan) => (
-                <div
-                  key={plan.level}
-                  className="rounded-xl border border-white/10 bg-white/5 p-4"
-                >
-                  <div className="mb-3 flex items-center justify-between gap-2">
-                    <p className="font-semibold">{plan.title}</p>
-                    <Badge className="bg-white/20 text-slate-100">
-                      Level {plan.level}
-                    </Badge>
-                  </div>
-                  <p className="text-sm text-slate-300">
-                    {plan.duration} • {plan.rounds}
-                  </p>
-                  <ul className="list-disc space-y-1 pl-4 text-sm">
-                    {plan.exercises.map((exercise) => (
-                      <li key={exercise}>{exercise}</li>
-                    ))}
-                  </ul>
-                  <p className="mt-3 text-xs text-slate-400">
-                    Wajib diselesaikan penuh sesuai level.
-                  </p>
                 </div>
-              ))}
+              )}
+
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Grid */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {/* Section: Pembayaran & Administrasi */}
+          <div className="space-y-6">
+            <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
+              <Receipt className="h-5 w-5 text-emerald-400" />
+              Administrasi & Keuangan
+            </h2>
+
+            <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Metode Pembayaran</CardTitle>
+                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Official</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  QRIS untuk pembayaran uang kas bulanan dan iuran ke Crown
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="flex justify-center mb-4">
+                  <div className="bg-white p-2 rounded-xl">
+                    <img 
+                      src="/qris-crown.jpg" 
+                      alt="QRIS Bayu Darmawan" 
+                      className="w-full max-w-[200px] h-auto rounded"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex justify-between border-t border-white/10 pt-3 pb-2 text-sm">
+                    <span className="text-slate-300">Iuran Latihan</span>
+                    <span className="font-semibold text-white">Rp 150.000 / bulan</span>
+                  </div>
+                  <div className="flex justify-between pt-1 text-sm">
+                    <span className="text-slate-300">A.N. QRIS</span>
+                    <span className="font-semibold text-white">Warung Crown</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Biaya Kompetisi (Kejurda & Kejurnas)</CardTitle>
+                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Cicilan</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  Estimasi rincian biaya kompetisi dan termin pembayaran
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="bg-black/20 rounded-lg p-3 border border-white/5 space-y-2">
+                    <h4 className="font-semibold text-white text-sm mb-2">Total Biaya per Atlet (Basic)</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putra (Cowo)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.625.000</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putri (Cewe)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.675.000</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mt-1">*Belum termasuk GS (Tambahan +Rp50.000 untuk atlet putri jika ada additional div)</p>
+
+                    <Accordion type="single" collapsible className="w-full mt-4">
+                      <AccordionItem value="rincian" className="border-white/10 border-b-0">
+                        <AccordionTrigger className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:no-underline py-2">
+                          Lihat Rincian Penggunaan Dana
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2 pb-4 space-y-3">
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Transportasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Bus (1 unit x 2 hari)</span><span>Rp 4.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Akomodasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Hotel (14 room x 1 hari)</span><span>Rp 500.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Administrasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurda (40 pax)</span><span>Rp 200.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurnas (40 pax)</span><span>Rp 300.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Peralatan & Perlengkapan</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kostum Atlet (40 pax)</span><span>Rp 400.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kaos dan Celana (40 pax)</span><span>Rp 150.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>P3K (1 set)</span><span>Rp 1.000.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Properti (1 set)</span><span>Rp 1.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Konsumsi</span>
+                            <div className="flex justify-between text-xs text-slate-300"><span>Konsumsi (40 pax x 5 kali)</span><span>Rp 30.000</span></div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-white text-sm mt-4">Termin Pembayaran</h4>
+                    {[
+                      { date: "30 Januari", amount: "Rp 350.000", status: "passed" },
+                      { date: "28 Februari", amount: "Rp 350.000", status: "passed" },
+                      { date: "30 Maret", amount: "Rp 350.000", status: "upcoming" },
+                      { date: "30 April", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Mei", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Juni", amount: "Rp 200.000", status: "upcoming", note: "Cewe +50k, Cowo/Cewe add div sisa" },
+                    ].map((termin, i) => (
+                      <div key={i} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2">
+                          {termin.status === "passed" ? (
+                            <Check className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+                          )}
+                          <span className={`text-sm ${termin.status === "passed" ? "text-slate-400 line-through decoration-slate-500" : "text-slate-200"}`}>{termin.date}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-medium ${termin.status === "passed" ? "text-slate-500" : "text-white"}`}>{termin.amount}</span>
+                          {termin.note && <div className="text-[10px] text-amber-400/80 mt-0.5">{termin.note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Section: Events & Team Info */}
+          <div className="space-y-6">
+            <h2 className="flex items-center gap-2 text-xl font-semibold text-white">
+              <Trophy className="h-5 w-5 text-cyan-400" />
+              Event & Kompetisi
+            </h2>
+
+            <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Kejurda Jawa Barat 2026</CardTitle>
+                  <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">Upcoming</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  Kualifikasi menuju Kejurnas
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
+                    <span className="text-slate-300">Tanggal Pelaksanaan</span>
+                    <span className="font-semibold text-white">31 Mei 2026</span>
+                  </div>
+                  <div className="flex justify-between pt-1 text-sm">
+                    <span className="text-slate-300">Status</span>
+                    <span className="font-semibold text-amber-400">Persiapan Tim</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Kejurnas ICA 2026</CardTitle>
+                  <Badge className="bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">Upcoming</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  Kejuaraan Nasional Cheerleading
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  <div className="flex justify-between border-b border-white/10 pb-2 text-sm">
+                    <span className="text-slate-300">Tanggal Pelaksanaan</span>
+                    <span className="font-semibold text-white">5 Juli 2026</span>
+                  </div>
+                  <div className="flex justify-between pt-1 text-sm">
+                    <span className="text-slate-300">Status</span>
+                    <span className="font-semibold text-amber-400">Menunggu Hasil Kejurda</span>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+
+        {/* PR Latihan Libur Lebaran */}
+        <div className="pt-4">
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-white mb-4">
+            <CalendarDays className="h-5 w-5 text-fuchsia-400" />
+            Tugas Latihan: Libur Lebaran (18 - 30 Maret)
+          </h2>
+
+          <Card className="border-fuchsia-500/30 bg-fuchsia-950/20 backdrop-blur-md shadow-xl text-slate-100 mb-6">
+            <CardHeader className="pb-3 border-b border-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg text-fuchsia-100">Wajib untuk Semua Atlet!</CardTitle>
+                  <CardDescription className="text-fuchsia-200/60 mt-1">
+                    Selama libur latihan, setiap atlet wajib menyetor video bukti latihan.
+                  </CardDescription>
+                </div>
+                <Badge className="bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30">MANDATORY</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="pt-4">
+              <div className="grid sm:grid-cols-2 gap-4 mb-6">
+                <div className="rounded-xl bg-white/5 p-4 border border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Dumbbell className="h-4 w-4 text-cyan-400" />
+                    <h3 className="font-semibold text-white">Target Latihan</h3>
+                  </div>
+                  <ul className="list-disc pl-5 text-sm text-slate-300 space-y-1">
+                    <li><strong className="text-cyan-300">2x Set</strong> Strength Training</li>
+                    <li><strong className="text-amber-300">2x Set</strong> Cardio Training</li>
+                    <li>Waktu bebas (18 - 30 Maret)</li>
+                  </ul>
+                </div>
+                <div className="rounded-xl bg-white/5 p-4 border border-white/10">
+                  <div className="flex items-center gap-2 mb-2">
+                    <ExternalLink className="h-4 w-4 text-emerald-400" />
+                    <h3 className="font-semibold text-white">Upload Bukti Video</h3>
+                  </div>
+                  <div className="space-y-2 mt-3">
+                    <a href="https://drive.google.com/drive/folders/1aq6-xg0TJoeqFgJmaT1ZDPXIHfo0YlvV?usp=drive_link" target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 transition-colors">
+                      <span className="text-xs font-medium text-cyan-200">Upload Strength</span>
+                      <ChevronRight className="h-3 w-3 text-cyan-400" />
+                    </a>
+                    <a href="https://drive.google.com/drive/folders/1TkGCEmdf2OlVsHcCqvIa74Ea0lDZeirf?usp=sharing" target="_blank" rel="noreferrer" className="flex items-center justify-between p-2 rounded bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 transition-colors">
+                      <span className="text-xs font-medium text-amber-200">Upload Cardio</span>
+                      <ChevronRight className="h-3 w-3 text-amber-400" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabel Program Latihan */}
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Strength Table */}
+                <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/20">
+                  <div className="bg-cyan-900/30 py-2 px-3 border-b border-white/10">
+                    <h4 className="font-semibold text-cyan-100 text-sm">💪 STRENGTH TRAINING (Lower & Upper)</h4>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10 hover:bg-transparent">
+                        <TableHead className="text-slate-400 text-xs">Gerakan</TableHead>
+                        <TableHead className="text-slate-400 text-xs text-center w-20">Repetisi</TableHead>
+                        <TableHead className="text-slate-400 text-xs text-center w-16">Set</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=CVaEhXotL7M" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Squat Jumps <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">10</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=IODxDxX7oi4" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Push up <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">15</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=L8fvypPrzzs" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Walking Lunges <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">20</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=pSHjTRCQxIw" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Plank <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">1 Min</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=-M4-G8p8fmc" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Calf Raises <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">20</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=FjjdDItXEQQ" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Handstand <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">30 Sec</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=WxgJS48wf1M" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Handstand Pushup <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">5</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Cardio Table */}
+                <div className="overflow-x-auto rounded-xl border border-white/10 bg-black/20">
+                  <div className="bg-amber-900/30 py-2 px-3 border-b border-white/10">
+                    <h4 className="font-semibold text-amber-100 text-sm">🏃‍♀️ CARDIO TRAINING</h4>
+                  </div>
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="border-white/10 hover:bg-transparent">
+                        <TableHead className="text-slate-400 text-xs">Gerakan</TableHead>
+                        <TableHead className="text-slate-400 text-xs text-center w-20">Repetisi</TableHead>
+                        <TableHead className="text-slate-400 text-xs text-center w-16">Set</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=auBLPXO8Fww" target="_blank" className="hover:text-amber-400 transition-colors flex items-center gap-1">Burpee <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">20</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=nmwgirgXLYM" target="_blank" className="hover:text-amber-400 transition-colors flex items-center gap-1">Mountain Climber <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">30 Sec</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="border-white/10 hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=DfjpR6dzLVg" target="_blank" className="hover:text-amber-400 transition-colors flex items-center gap-1">High Knees <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">30 Sec</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                      <TableRow className="hover:bg-white/5">
+                        <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=9FGilxCbdz8" target="_blank" className="hover:text-amber-400 transition-colors flex items-center gap-1">Bicycle Crunches <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
+                        <TableCell className="text-sm text-center">30 Sec</TableCell>
+                        <TableCell className="text-sm text-center">3</TableCell>
+                      </TableRow>
+                    </TableBody>
+                  </Table>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* General Info / SOP */}
+        <div className="pt-4">
+          <h2 className="flex items-center gap-2 text-xl font-semibold text-white mb-4">
+            <Users className="h-5 w-5 text-blue-400" />
+            Peraturan & Panduan Tim
+          </h2>
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="group flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-all hover:bg-white/10">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-blue-500/20 p-2 text-blue-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">SOP Latihan</p>
+                  <p className="text-xs text-slate-400">Aturan keterlambatan & izin</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
             </div>
-          </CardContent>
-        </Card>
+
+            <div className="group flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-all hover:bg-white/10">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-rose-500/20 p-2 text-rose-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Sistem Hukuman</p>
+                  <p className="text-xs text-slate-400">Panduan fisik & denda</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+            </div>
+
+            <div className="group flex cursor-pointer items-center justify-between rounded-xl border border-white/10 bg-white/5 p-4 transition-all hover:bg-white/10">
+              <div className="flex items-center gap-3">
+                <div className="rounded-lg bg-emerald-500/20 p-2 text-emerald-400">
+                  <FileText className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="font-medium text-white">Struktur Tim</p>
+                  <p className="text-xs text-slate-400">Kapten & Pengurus 2026</p>
+                </div>
+              </div>
+              <ChevronRight className="h-5 w-5 text-slate-500 transition-transform group-hover:translate-x-1 group-hover:text-white" />
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="mt-8 border-t border-white/10 pt-6 text-center">
+          <p className="text-xs text-slate-500">
+            Punya pertanyaan terkait informasi di atas? Silakan hubungi pengurus tim atau pelatih.
+          </p>
+        </div>
       </div>
     </main>
   );
