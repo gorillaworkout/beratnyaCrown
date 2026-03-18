@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useAuth } from "@/lib/auth-context";
 import Image from "next/image";
 import {
   collection,
@@ -344,40 +345,14 @@ export default function DashboardPage() {
   const [seedError, setSeedError] = useState("");
   const [seedSuccess, setSeedSuccess] = useState("");
   const [isSeedingLogs, setIsSeedingLogs] = useState(false);
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const { user } = useAuth();
+  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const isCheckingSession = false;
   const [penaltyInfos, setPenaltyInfos] = useState<PenaltyInfo[]>([]);
   const [penaltyLoading, setPenaltyLoading] = useState(false);
   const [allAthleteLogs, setAllAthleteLogs] = useState<Record<string, WeightLog[]>>({});
   const [allLogsLoading, setAllLogsLoading] = useState(false);
 
-  useEffect(() => {
-    let mounted = true;
-
-    const checkSession = async () => {
-      try {
-        const response = await fetch("/api/admin/session");
-        const data = (await response.json()) as { isAdmin?: boolean };
-        if (mounted) {
-          setIsAdmin(Boolean(data.isAdmin));
-        }
-      } catch {
-        if (mounted) {
-          setIsAdmin(false);
-        }
-      } finally {
-        if (mounted) {
-          setIsCheckingSession(false);
-        }
-      }
-    };
-
-    checkSession();
-
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   useEffect(() => {
     const athletesQuery = query(collection(db, "athletes"), orderBy("name"));
@@ -623,16 +598,7 @@ export default function DashboardPage() {
     return clamp((achieved / totalNeed) * 100, 0, 100);
   }, [detailAthlete, latestLog, historyLogs]);
 
-  const handleLogout = () => {
-    fetch("/api/admin/logout", { method: "POST" }).finally(() => {
-      setIsAdmin(false);
-      router.push("/dashboard");
-    });
-  };
-
-  const handleAdminLogin = () => {
-    router.push("/admin");
-  };
+  
 
   const handleAddAthlete = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -826,14 +792,7 @@ export default function DashboardPage() {
     }
   };
 
-  const handleSessionAction = () => {
-    if (isAdmin) {
-      handleLogout();
-      return;
-    }
-    handleAdminLogin();
-  };
-
+  
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-4 text-slate-100 sm:p-6">
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
@@ -864,14 +823,7 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleSessionAction}
-            className={glassButtonClass}
-            disabled={isCheckingSession}
-          >
-            {isCheckingSession ? "Memuat..." : isAdmin ? "Keluar Admin" : "Masuk Admin"}
-          </Button>
+          
         </header>
 
         {loadError ? (
@@ -1050,19 +1002,9 @@ export default function DashboardPage() {
             </Card>
           </section>
         ) : (
-          <Card className={glassCardClass}>
-            <CardHeader>
-              <CardTitle>Mode Publik</CardTitle>
-              <CardDescription className="text-slate-300">
-                Semua orang bisa melihat progress athlete. Ubah data hanya untuk admin.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Button className={glassButtonClass} onClick={handleAdminLogin}>
-                Login Admin Untuk Mengubah Data
-              </Button>
-            </CardContent>
-          </Card>
+          <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-center backdrop-blur-md">
+            <p className="text-sm text-slate-400">Mode Publik. Anda dapat melihat progress athlete di bawah.</p>
+          </div>
         )}
 
         {/* Excel-style Comparison Table */}
