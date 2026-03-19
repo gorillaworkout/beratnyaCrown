@@ -18,6 +18,9 @@ import {
 import type { KasAthlete, KasRecord, KasTransaction, TransactionType } from "@/lib/types/kas";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
+import { useAuth } from "@/lib/auth-context";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
 export default function KasPage() {
   const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "recap">("daily");
@@ -27,6 +30,22 @@ export default function KasPage() {
   const [transactions, setTransactions] = useState<KasTransaction[]>([]);
   const [allRecords, setAllRecords] = useState<KasRecord[]>([]);
   const [selectedDate, setSelectedDate] = useState("2026-04-01");
+  const { user } = useAuth();
+  const [isKasAdmin, setIsKasAdmin] = useState(false);
+  
+  useEffect(() => {
+    if (user?.email === "darmawanbayu1@gmail.com") {
+      setIsKasAdmin(true);
+      return;
+    }
+    if (user?.uid) {
+      getDoc(doc(db, "crown-athletes", user.uid)).then(d => {
+        if (d.exists() && d.data().role === "admin") {
+          setIsKasAdmin(true);
+        }
+      });
+    }
+  }, [user]);
   const [loading, setLoading] = useState(true);
   
   const [summary, setSummary] = useState({ 
@@ -293,20 +312,24 @@ export default function KasPage() {
               </p>
             </div>
             <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => setShowTrxModal(true)}
-                className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-4 py-2.5 text-sm font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
-              >
-                <Wallet className="h-4 w-4" />
-                Catat Transaksi
-              </button>
-              <button
-                onClick={() => setShowAddModal(true)}
-                className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-cyan-400 active:scale-95"
-              >
-                <Plus className="h-4 w-4" />
-                Tambah Atlet
-              </button>
+              {isKasAdmin && (
+                <>
+                  <button
+                    onClick={() => setShowTrxModal(true)}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-4 py-2.5 text-sm font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
+                  >
+                    <Wallet className="h-4 w-4" />
+                    Catat Transaksi
+                  </button>
+                  <button
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-cyan-400 active:scale-95"
+                  >
+                    <Plus className="h-4 w-4" />
+                    Tambah Atlet
+                  </button>
+                </>
+              )}
             </div>
           </div>
           
@@ -438,20 +461,20 @@ export default function KasPage() {
                             </span>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <input type="checkbox" checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black" />
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
                           <td className="px-6 py-4 text-center">
                             <input type="checkbox" checked={!!record.isLate} disabled={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <input type="checkbox" checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black" />
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
                           <td className="px-6 py-4 text-right font-bold text-cyan-400">
                             Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
                           </td>
                           <td className="px-6 py-4 text-center">
                             {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${record.isSettled ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${record.isSettled ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
                                 {record.isSettled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                                 {record.isSettled ? "Lunas" : "Belum"}
                               </button>
@@ -513,7 +536,7 @@ export default function KasPage() {
                           {trx.type === 'OUT_EXPENSE' ? '-' : '+'} Rp {trx.amount.toLocaleString('id-ID')}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>
+                          {isKasAdmin && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>}
                         </td>
                       </tr>
                     ))
@@ -568,12 +591,13 @@ export default function KasPage() {
                         </div>
                         <button
                           onClick={() => {
+                            if(!isKasAdmin) return;
                             setSelectedAthleteForBulk(athlete);
                             setBulkPaymentAmount(totalUnpaid.toString());
                             setBulkPaymentRecords(athleteUnpaid.map(r => ({record: r, toPay: r.totalBilled})));
                             setShowBulkModal(true);
                           }}
-                          className="w-full rounded-lg bg-red-500/20 px-4 py-2 text-sm font-semibold text-red-400 hover:bg-red-500/30 transition-colors"
+                          className={`w-full rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isKasAdmin ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-white/5 text-slate-500 cursor-not-allowed"}`}
                         >
                           Bayar Tagihan
                         </button>
