@@ -159,19 +159,20 @@ export default function AthletesDashboardPage() {
                     <TableHead className="text-slate-400 text-xs min-w-[200px]">Data Akun</TableHead>
                     <TableHead className="text-slate-400 text-xs">Aktivitas</TableHead>
                     <TableHead className="text-slate-400 text-xs text-center w-24">Akses Crown</TableHead>
+                    <TableHead className="text-slate-400 text-xs text-center w-24">Akses Role</TableHead>
                     <TableHead className="text-slate-400 text-xs text-center w-32">Aksi Bahaya</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoadingUsers ? (
                     <TableRow className="hover:bg-white/5">
-                      <TableCell colSpan={5} className="text-sm text-center py-6 text-slate-400">
+                      <TableCell colSpan={6} className="text-sm text-center py-6 text-slate-400">
                         Menarik data dari Firebase Auth dan Firestore...
                       </TableCell>
                     </TableRow>
                   ) : usersList.length === 0 ? (
                     <TableRow className="hover:bg-white/5">
-                      <TableCell colSpan={5} className="text-sm text-center py-6 text-slate-400">
+                      <TableCell colSpan={6} className="text-sm text-center py-6 text-slate-400">
                         Belum ada atlet yang mendaftar.
                       </TableCell>
                     </TableRow>
