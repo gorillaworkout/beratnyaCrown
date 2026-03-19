@@ -26,6 +26,7 @@ type FirebaseUser = {
   displayName: string;
   photoURL: string;
   disabled: boolean;
+  role?: string;
   creationTime: string;
   lastSignInTime: string;
   lastLoginCrown: string;
@@ -43,6 +44,22 @@ export default function AthletesDashboardPage() {
       fetchUsers();
     }
   }, [isAdmin]);
+
+  const handleRoleChange = async (uid: string, action: "make_admin" | "remove_admin") => {
+    setActionLoading(uid + action);
+    try {
+      const res = await fetch("/api/admin/users/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, action }),
+      });
+      if (res.ok) fetchUsers();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const fetchUsers = async () => {
     try {

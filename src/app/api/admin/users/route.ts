@@ -38,6 +38,7 @@ export async function GET(request: Request) {
           displayName: authData.displayName || athleteData.name,
           photoURL: authData.photoURL || athleteData.photoURL,
           disabled: authData.disabled,
+          role: athleteData.role || "member",
           creationTime: authData.creationTime,
           lastSignInTime: authData.lastSignInTime,
           // Tambahan metadata dari CrownHub
