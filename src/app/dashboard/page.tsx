@@ -566,7 +566,7 @@ export default function InfoDashboardPage() {
                       </TableRow>
                       <TableRow className="border-white/10 hover:bg-white/5">
                         <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=pSHjTRCQxIw" target="_blank" className="hover:text-cyan-400 transition-colors flex items-center gap-1">Plank <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
-                        <TableCell className="text-sm text-center">1 Min</TableCell>
+                        <TableCell className="text-sm text-center">30 Sec</TableCell>
                         <TableCell className="text-sm text-center">3</TableCell>
                       </TableRow>
                       <TableRow className="border-white/10 hover:bg-white/5">
@@ -604,7 +604,7 @@ export default function InfoDashboardPage() {
                     <TableBody>
                       <TableRow className="border-white/10 hover:bg-white/5">
                         <TableCell className="text-sm font-medium"><a href="https://www.youtube.com/watch?v=auBLPXO8Fww" target="_blank" className="hover:text-amber-400 transition-colors flex items-center gap-1">Burpee <ExternalLink className="h-2.5 w-2.5" /></a></TableCell>
-                        <TableCell className="text-sm text-center">20</TableCell>
+                        <TableCell className="text-sm text-center">10</TableCell>
                         <TableCell className="text-sm text-center">3</TableCell>
                       </TableRow>
                       <TableRow className="border-white/10 hover:bg-white/5">
