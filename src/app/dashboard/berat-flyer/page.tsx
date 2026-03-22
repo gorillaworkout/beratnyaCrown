@@ -802,7 +802,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
               <Image
-                src="/crown-logo.jpg"
+                src="/crown-logo.png"
                 alt="Crown Allstar"
                 width={40}
                 height={40}

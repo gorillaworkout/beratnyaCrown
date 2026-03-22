@@ -85,7 +85,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3 border-b border-white/10 p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10">
             <Image
-              src="/crown-logo.jpg"
+              src="/crown-logo.png"
               alt="Crown Allstar"
               width={32}
               height={32}

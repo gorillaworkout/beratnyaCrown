@@ -39,7 +39,7 @@ export default function LoginPage() {
         <div className="mb-8 flex flex-col items-center gap-4">
           <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-white/20 bg-white/10 shadow-lg shadow-cyan-500/10">
             <Image
-              src="/crown-logo.jpg"
+              src="/crown-logo.png"
               alt="Crown Allstar"
               width={56}
               height={56}
