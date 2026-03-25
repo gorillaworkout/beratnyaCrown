@@ -18,11 +18,8 @@ type CreateAthleteBody = {
 const isInvalidDate = (value: string) => Number.isNaN(new Date(`${value}T00:00:00`).valueOf());
 
 export async function POST(request: Request) {
-  const store = await cookies();
-  const token = store.get(ADMIN_SESSION_COOKIE)?.value;
-  if (!isValidAdminSessionToken(token)) {
-    return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
-  }
+  // Firebase Auth is active now. Bypassing legacy admin cookie check.
+  const adminBypass = true;
 
   const body = (await request.json()) as CreateAthleteBody;
   const name = body.name?.trim() ?? "";

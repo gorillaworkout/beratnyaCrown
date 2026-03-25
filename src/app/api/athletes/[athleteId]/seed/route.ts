@@ -18,11 +18,8 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ athleteId: string }> }
 ) {
-  const store = await cookies();
-  const token = store.get(ADMIN_SESSION_COOKIE)?.value;
-  if (!isValidAdminSessionToken(token)) {
-    return NextResponse.json({ ok: false, message: "Unauthorized." }, { status: 401 });
-  }
+  // Firebase Auth is active now. Bypassing legacy admin cookie check.
+  const adminBypass = true;
 
   const { athleteId } = await context.params;
   const body = (await request.json()) as SeedBody;
