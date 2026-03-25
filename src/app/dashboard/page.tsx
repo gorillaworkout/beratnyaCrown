@@ -336,94 +336,7 @@ export default function InfoDashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className={glassCardClass}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-lg">Biaya Kompetisi (Kejurda & Kejurnas)</CardTitle>
-                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Cicilan</Badge>
-                </div>
-                <CardDescription className="text-slate-400">
-                  Estimasi rincian biaya kompetisi dan termin pembayaran
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div className="bg-black/20 rounded-lg p-3 border border-white/5 space-y-2">
-                    <h4 className="font-semibold text-white text-sm mb-2">Total Biaya per Atlet (Basic)</h4>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-300">Atlet Putra (Cowo)</span>
-                      <span className="font-semibold text-amber-400">Rp 1.625.000</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-slate-300">Atlet Putri (Cewe)</span>
-                      <span className="font-semibold text-amber-400">Rp 1.675.000</span>
-                    </div>
-                    <p className="text-xs text-slate-500 italic mt-1">*Belum termasuk GS (Tambahan +Rp50.000 untuk atlet putri jika ada additional div)</p>
-
-                    <Accordion type="single" collapsible className="w-full mt-4">
-                      <AccordionItem value="rincian" className="border-white/10 border-b-0">
-                        <AccordionTrigger className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:no-underline py-2">
-                          Lihat Rincian Penggunaan Dana
-                        </AccordionTrigger>
-                        <AccordionContent className="pt-2 pb-4 space-y-3">
-                          <div className="space-y-1">
-                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Transportasi</span>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Bus (1 unit x 2 hari)</span><span>Rp 4.000.000</span></div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Akomodasi</span>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Hotel (14 room x 1 hari)</span><span>Rp 500.000</span></div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Administrasi</span>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurda (40 pax)</span><span>Rp 200.000</span></div>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurnas (40 pax)</span><span>Rp 300.000</span></div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Peralatan & Perlengkapan</span>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kostum Atlet (40 pax)</span><span>Rp 400.000</span></div>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kaos dan Celana (40 pax)</span><span>Rp 150.000</span></div>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>P3K (1 set)</span><span>Rp 1.000.000</span></div>
-                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Properti (1 set)</span><span>Rp 1.000.000</span></div>
-                          </div>
-                          <div className="space-y-1">
-                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Konsumsi</span>
-                            <div className="flex justify-between text-xs text-slate-300"><span>Konsumsi (40 pax x 5 kali)</span><span>Rp 30.000</span></div>
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    </Accordion>
-                  </div>
-
-                  <div className="space-y-2">
-                    <h4 className="font-semibold text-white text-sm mt-4">Termin Pembayaran</h4>
-                    {[
-                      { date: "30 Januari", amount: "Rp 350.000", status: "passed" },
-                      { date: "28 Februari", amount: "Rp 350.000", status: "passed" },
-                      { date: "30 Maret", amount: "Rp 350.000", status: "upcoming" },
-                      { date: "30 April", amount: "Rp 200.000", status: "upcoming" },
-                      { date: "30 Mei", amount: "Rp 200.000", status: "upcoming" },
-                      { date: "30 Juni", amount: "Rp 200.000", status: "upcoming", note: "Cewe +50k, Cowo/Cewe add div sisa" },
-                    ].map((termin, i) => (
-                      <div key={i} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
-                        <div className="flex items-center gap-2">
-                          {termin.status === "passed" ? (
-                            <Check className="h-3 w-3 text-emerald-500" />
-                          ) : (
-                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500"></div>
-                          )}
-                          <span className={`text-sm ${termin.status === "passed" ? "text-slate-400 line-through decoration-slate-500" : "text-slate-200"}`}>{termin.date}</span>
-                        </div>
-                        <div className="text-right">
-                          <span className={`text-sm font-medium ${termin.status === "passed" ? "text-slate-500" : "text-white"}`}>{termin.amount}</span>
-                          {termin.note && <div className="text-[10px] text-amber-400/80 mt-0.5">{termin.note}</div>}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            
           </div>
 
           {/* Section: Events & Team Info */}
@@ -683,6 +596,96 @@ export default function InfoDashboardPage() {
           <p className="text-xs text-slate-500">
             Punya pertanyaan terkait informasi di atas? Silakan hubungi pengurus tim atau pelatih.
           </p>
+
+        {/* Biaya Kompetisi Card - Full Width */}
+        <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Biaya Kompetisi (Kejurda & Kejurnas)</CardTitle>
+                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Cicilan</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  Estimasi rincian biaya kompetisi dan termin pembayaran
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="bg-black/20 rounded-lg p-3 border border-white/5 space-y-2">
+                    <h4 className="font-semibold text-white text-sm mb-2">Total Biaya per Atlet (Basic)</h4>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putra (Cowo)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.625.000</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-300">Atlet Putri (Cewe)</span>
+                      <span className="font-semibold text-amber-400">Rp 1.675.000</span>
+                    </div>
+                    <p className="text-xs text-slate-500 italic mt-1">*Belum termasuk GS (Tambahan +Rp50.000 untuk atlet putri jika ada additional div)</p>
+
+                    <Accordion type="single" collapsible className="w-full mt-4">
+                      <AccordionItem value="rincian" className="border-white/10 border-b-0">
+                        <AccordionTrigger className="text-sm font-semibold text-cyan-400 hover:text-cyan-300 hover:no-underline py-2">
+                          Lihat Rincian Penggunaan Dana
+                        </AccordionTrigger>
+                        <AccordionContent className="pt-2 pb-4 space-y-3">
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Transportasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Bus (1 unit x 2 hari)</span><span>Rp 4.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Akomodasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Sewa Hotel (14 room x 1 hari)</span><span>Rp 500.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Administrasi</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurda (40 pax)</span><span>Rp 200.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Registrasi Kejurnas (40 pax)</span><span>Rp 300.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Peralatan & Perlengkapan</span>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kostum Atlet (40 pax)</span><span>Rp 400.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Kaos dan Celana (40 pax)</span><span>Rp 150.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>P3K (1 set)</span><span>Rp 1.000.000</span></div>
+                            <div className="flex justify-between text-xs text-slate-300 border-b border-white/5 pb-1"><span>Properti (1 set)</span><span>Rp 1.000.000</span></div>
+                          </div>
+                          <div className="space-y-1">
+                            <span className="text-xs font-semibold text-emerald-400 block uppercase">Konsumsi</span>
+                            <div className="flex justify-between text-xs text-slate-300"><span>Konsumsi (40 pax x 5 kali)</span><span>Rp 30.000</span></div>
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    </Accordion>
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="font-semibold text-white text-sm mt-4">Termin Pembayaran</h4>
+                    {[
+                      { date: "30 Januari", amount: "Rp 350.000", status: "passed" },
+                      { date: "28 Februari", amount: "Rp 350.000", status: "passed" },
+                      { date: "30 Maret", amount: "Rp 350.000", status: "upcoming" },
+                      { date: "30 April", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Mei", amount: "Rp 200.000", status: "upcoming" },
+                      { date: "30 Juni", amount: "Rp 200.000", status: "upcoming", note: "Cewe +50k, Cowo/Cewe add div sisa" },
+                    ].map((termin, i) => (
+                      <div key={i} className="flex justify-between items-center border-b border-white/5 pb-2 last:border-0 last:pb-0">
+                        <div className="flex items-center gap-2">
+                          {termin.status === "passed" ? (
+                            <Check className="h-3 w-3 text-emerald-500" />
+                          ) : (
+                            <div className="h-1.5 w-1.5 rounded-full bg-amber-500"></div>
+                          )}
+                          <span className={`text-sm ${termin.status === "passed" ? "text-slate-400 line-through decoration-slate-500" : "text-slate-200"}`}>{termin.date}</span>
+                        </div>
+                        <div className="text-right">
+                          <span className={`text-sm font-medium ${termin.status === "passed" ? "text-slate-500" : "text-white"}`}>{termin.amount}</span>
+                          {termin.note && <div className="text-[10px] text-amber-400/80 mt-0.5">{termin.note}</div>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
         </div>
       </div>
     </main>
