@@ -777,6 +777,33 @@ export default function JadwalPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Full Team Summary */}
+            {(() => {
+              const kejurda = events.find(e => e.name.toLowerCase().includes("kejurda"));
+              const kejurnas = events.find(e => e.name.toLowerCase().includes("kejurnas"));
+              const hasKejurda = kejurda && new Date(kejurda.date) > new Date();
+              const hasKejurnas = kejurnas && new Date(kejurnas.date) > new Date();
+              if (!hasKejurda && !hasKejurnas) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-amber-500/10 to-cyan-500/10 border border-white/10 rounded-lg px-4 py-3 mb-1">
+                  <span className="text-sm text-slate-300 font-medium">🔥 Sisa Full Team:</span>
+                  {hasKejurda && (
+                    <span className="text-sm">
+                      <span className="text-amber-400 font-bold">{getFullTeamSessionsUntil(kejurda.date)}x</span>
+                      <span className="text-slate-400 ml-1">ke Kejurda</span>
+                    </span>
+                  )}
+                  {hasKejurda && hasKejurnas && <span className="text-slate-600">•</span>}
+                  {hasKejurnas && (
+                    <span className="text-sm">
+                      <span className="text-cyan-400 font-bold">{getFullTeamSessionsUntil(kejurnas.date)}x</span>
+                      <span className="text-slate-400 ml-1">ke Kejurnas</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
             {events.length === 0 && (
               <p className="text-slate-500 text-sm text-center py-4">
                 Belum ada event
@@ -832,34 +859,6 @@ export default function JadwalPage() {
                       </Button>
                     )}
                   </div>
-
-        {/* Sisa Full Team Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {(() => {
-            const kejurda = events.find(e => e.name.toLowerCase().includes("kejurda"));
-            const kejurnas = events.find(e => e.name.toLowerCase().includes("kejurnas"));
-            return (
-              <>
-                {kejurda && new Date(kejurda.date) > new Date() && (
-                  <Card className={glassCardClass}>
-                    <CardContent className="p-4 text-center">
-                      <p className="text-xs text-slate-400 mb-1">🔥 Sisa Latihan Full Team (Kejurda)</p>
-                      <p className="text-2xl font-bold text-amber-400">{getFullTeamSessionsUntil(kejurda.date)}x</p>
-                    </CardContent>
-                  </Card>
-                )}
-                {kejurnas && new Date(kejurnas.date) > new Date() && (
-                  <Card className={glassCardClass}>
-                    <CardContent className="p-4 text-center">
-                      <p className="text-xs text-slate-400 mb-1">🥇 Sisa Latihan Full Team (Kejurnas)</p>
-                      <p className="text-2xl font-bold text-purple-400">{getFullTeamSessionsUntil(kejurnas.date)}x</p>
-                    </CardContent>
-                  </Card>
-                )}
-              </>
-            );
-          })()}
-        </div>
                 </div>
               );
             })}
