@@ -29,11 +29,6 @@ const getNavItems = (isAdmin: boolean) => [
     icon: ClipboardCheck,
   },
   {
-    label: "Izin Latihan",
-    href: "/dashboard/izin",
-    icon: UserX,
-  },
-  {
     label: "Kas Crown",
     href: "/dashboard/kas",
     icon: Calculator,

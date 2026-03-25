@@ -1,0 +1,30 @@
+Requirements:
+
+1. In `src/app/dashboard/athletes/page.tsx`, the user noted two issues:
+   - Issue A: They cannot make other users admins. Even though `handleRoleChange` exists in `page.tsx` (using `/api/admin/users/action`), there are no buttons in the UI for "Make Admin" or "Remove Admin" anymore.
+   - Issue B: The hardcoded list of athletes used in `src/app/dashboard/jadwal/page.tsx` for tracking absences needs to be unified with a real database collection so they can add new athletes and have them appear in the Jadwal Absence list automatically.
+
+2. First, let's fix Issue A (Admin Roles):
+   - In `src/app/dashboard/athletes/page.tsx`, find the users table.
+   - Add buttons to the table actions column (or create an action column if it doesn't exist) to trigger `handleRoleChange(u.uid, "make_admin")` and `handleRoleChange(u.uid, "remove_admin")`.
+   - Show "Jadikan Admin" if `!u.role || u.role !== 'admin'`. Show "Hapus Admin" if `u.role === 'admin'`. Disable/hide for the owner's email (`darmawanbayu1@gmail.com`).
+
+3. Second, let's fix Issue B (Dynamic Athletes for Absence):
+   - There's already a "Atlit Latihan" / "Daftar Atlit" section? Let's check. Wait, `src/app/dashboard/athletes/page.tsx` seems to be just listing users. We need to add a section for `crown-athletes` collection.
+   - Using Shadcn UI Tabs, split `src/app/dashboard/athletes/page.tsx` into two tabs: `<TabsTrigger value="users">Pengguna App</TabsTrigger>` and `<TabsTrigger value="athletes">Daftar Atlit (Absensi)</TabsTrigger>`.
+   - The "Pengguna App" tab keeps the existing Firebase Auth users table.
+   - The "Daftar Atlit" tab should connect to `crown-athletes` Firestore collection.
+   - Show a list/table of athletes (fetching from `crown-athletes` via `onSnapshot`).
+   - Add a simple "Tambah Atlit" button that opens a dialog to insert a new name to `crown-athletes` collection.
+   - Add a delete button to remove an athlete from the list.
+
+4. Replace the hardcoded `ATHLETES` array in `jadwal/page.tsx`:
+   - Fetch the `crown-athletes` collection using `onSnapshot` and store it in `const [athletes, setAthletes] = useState<string[]>([])`.
+   - In the "Atur Izin" dialog, replace the `filteredAthletes` logic to use the dynamic `athletes` array.
+   - If `athletes` is empty initially, fall back to the old hardcoded list just in case, but prioritize the dynamic one.
+
+5. Firebase Imports needed in `athletes/page.tsx`:
+   `import { db } from "@/lib/firebase";`
+   `import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from "firebase/firestore";`
+
+6. Ensure everything builds correctly (`npx next build`).
