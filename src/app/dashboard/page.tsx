@@ -543,7 +543,8 @@ export default function InfoDashboardPage() {
           </Card>
         </div>
 
-        {/* General Info / SOP */}
+        {/* TEMPORARILY HIDDEN SECTION - PERATURAN & PANDUAN TIM 
+<!-- General Info / SOP -->
         <div className="pt-4">
           <h2 className="flex items-center gap-2 text-xl font-semibold text-white mb-4">
             <Users className="h-5 w-5 text-blue-400" />
@@ -590,6 +591,7 @@ export default function InfoDashboardPage() {
             </div>
           </div>
         </div>
+*/}
 
         {/* Footer */}
         <div className="mt-8 border-t border-white/10 pt-6 text-center">
