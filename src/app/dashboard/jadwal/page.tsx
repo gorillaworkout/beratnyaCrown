@@ -1214,7 +1214,19 @@ export default function JadwalPage() {
                         >
                           {statusBadge.label}
                         </Badge>
+                        {(entry.status === "latihan" || entry.status === "tambahan") && (() => {
+                          const absCount = getAbsenceCount(entry.date);
+                          if (absCount > 0) return <Badge className="bg-red-500/20 text-red-400 border-red-500/20 text-[10px] px-1.5">⚠️ Minus {absCount} Orang</Badge>;
+                          return <Badge className="bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-amber-400 border-amber-500/20 text-[10px] px-1.5">🔥 FULL TEAM READY</Badge>;
+                        })()}
                       </div>
+                      
+                      {/* Show names if absent */}
+                      {(entry.status === "latihan" || entry.status === "tambahan") && getAbsenceCount(entry.date) > 0 && (
+                        <div className="mt-1 text-[10px] text-red-300/80 leading-tight">
+                          {absences.find(a => a.date === entry.date)?.absences.map(a => a.name).join(", ")}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       {entry.timeStart && entry.timeEnd ? (
