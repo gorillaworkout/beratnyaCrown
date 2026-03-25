@@ -1,0 +1,20 @@
+Feature Request: Input Izin Latihan (Absence Management)
+
+File to edit: `src/app/dashboard/jadwal/page.tsx` (and related files if any)
+Firebase Collections: `crown-events` (add an `absences` field to the event document) and `crown-athletes`.
+
+Context:
+We need a way to track athletes who cannot attend a specific practice (Jadwal Latihan).
+
+Requirements:
+1. On the Jadwal Kalender/List, when an admin clicks a specific schedule (event), add a new section or button: "Input Izin" (Manage Absences).
+2. Opening it should show a modal/form with:
+   - A list/checkboxes of all athletes (fetch from `crown-athletes` or hardcode if needed).
+   - An optional text input for "Alasan" (Reason) next to each selected athlete (e.g. "Sakit", "Kerja").
+3. Save this data to the `crown-events` document. The data structure should be an array of objects: `absences: [{ name, reason }]`.
+4. Visual Indicators on the Calendar:
+   - If `absences` array is empty or doesn't exist for that event -> Show a badge "🔥 FULL TEAM READY"
+   - If `absences` has items -> Show a red indicator/badge "⚠️ Minus X Orang" (where X is the number of absent athletes).
+
+List of athletes to map/select:
+Bayu, Helmi, Kurniawan, Karysa, Amalia, Moch Ihsan Tripamungkas, Muhammad Akmal, Muhammad Rizki Firdaus, Nanda Natasya, Renaldy Hardyanto, Renanda Suwandi Putri, Rangga Cornelis, Wahyu Cahyadi, Kijay, Aissa Raihana Khyani Putri, Aurel Zahra Dila, Dewi Ramdhan Tri Mulya, Kaisha Lula Arsyawijaya, Malika Sakhi Nurachman, Namina Mikayla Mikha, Nadiya Hazizah Mulyanto, Selma Daiva Fedora, Siti Ramadhani, Radinda Feyfey, Zihan Yurifa Aldevara, Fairuz Kania.
