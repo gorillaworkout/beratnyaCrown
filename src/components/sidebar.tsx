@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, UserX } from "lucide-react";
+import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const getNavItems = (isAdmin: boolean) => [
