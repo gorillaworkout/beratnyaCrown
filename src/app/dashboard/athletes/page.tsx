@@ -18,10 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, XCircle, Users, UserPlus, Trash2 } from "lucide-react";
+import { ShieldAlert, CheckCircle2, XCircle, Users, UserPlus, Trash2, Edit2, Check } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, addDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc } from "firebase/firestore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -45,6 +45,8 @@ export default function AthletesDashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [crownAthletes, setCrownAthletes] = useState<{id: string; name: string}[]>([]);
   const [newAthleteName, setNewAthleteName] = useState("");
+  const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
+  const [editingAthleteName, setEditingAthleteName] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "crown-athletes"), (snap) => {
@@ -57,6 +59,17 @@ export default function AthletesDashboardPage() {
     if (!newAthleteName.trim()) return;
     await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim() });
     setNewAthleteName("");
+  };
+
+  const handleUpdateAthlete = async (id: string) => {
+    if (!editingAthleteName.trim()) return;
+    try {
+      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim() });
+      setEditingAthleteId(null);
+      setEditingAthleteName("");
+    } catch (e) {
+      console.error(e);
+    }
   };
 
   const handleDeleteAthlete = async (id: string) => {
@@ -333,10 +346,32 @@ export default function AthletesDashboardPage() {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {crownAthletes.sort((a, b) => a.name.localeCompare(b.name)).map(ath => (
                     <div key={ath.id} className="flex items-center justify-between bg-black/40 border border-white/10 p-3 rounded-lg">
-                      <span className="text-sm text-slate-200">{ath.name}</span>
-                      <button onClick={() => handleDeleteAthlete(ath.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                      {editingAthleteId === ath.id ? (
+                        <div className="flex items-center gap-2 w-full mr-2">
+                          <Input 
+                            value={editingAthleteName} 
+                            onChange={(e) => setEditingAthleteName(e.target.value)}
+                            onKeyDown={(e) => { if(e.key === "Enter") handleUpdateAthlete(ath.id); if(e.key === "Escape") setEditingAthleteId(null); }}
+                            className="h-7 text-xs bg-black/50 border-white/10 text-white w-full"
+                            autoFocus
+                          />
+                          <button onClick={() => handleUpdateAthlete(ath.id)} className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 p-1.5 rounded transition shrink-0">
+                            <Check className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm text-slate-200">{ath.name}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setEditingAthleteId(ath.id); setEditingAthleteName(ath.name); }} className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1.5 rounded transition">
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleDeleteAthlete(ath.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </>
+                      )}
                     </div>
                   ))}
                 </div>
