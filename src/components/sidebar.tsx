@@ -33,13 +33,13 @@ const getNavItems = (isAdmin: boolean) => [
     href: "/dashboard/kas",
     icon: Calculator,
   },
-  {
-    label: "Workout (Solo Leveling)",
-    href: "/dashboard/workout",
-    icon: Dumbbell,
-  },
   ...(isAdmin
     ? [
+        {
+          label: "Workout (Solo Leveling)",
+          href: "/dashboard/workout",
+          icon: Dumbbell,
+        },
         {
           label: "Data Atlet",
           href: "/dashboard/athletes",
