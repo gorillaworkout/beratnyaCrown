@@ -47,7 +47,7 @@ export default function InfoDashboardPage() {
   const [newDate, setNewDate] = useState("");
   const [newTitle, setNewTitle] = useState("");
   const [newDesc, setNewDesc] = useState("");
-  
+
   // State for Editing
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDate, setEditDate] = useState("");
@@ -316,9 +316,9 @@ export default function InfoDashboardPage() {
               <CardContent>
                 <div className="flex justify-center mb-4">
                   <div className="bg-white p-2 rounded-xl">
-                    <img 
-                      src="/qris-crown.jpg" 
-                      alt="QRIS Bayu Darmawan" 
+                    <img
+                      src="/qris-crown.jpg"
+                      alt="QRIS Bayu Darmawan"
                       className="w-full max-w-[200px] h-auto rounded"
                     />
                   </div>
@@ -326,7 +326,7 @@ export default function InfoDashboardPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between border-t border-white/10 pt-3 pb-2 text-sm">
                     <span className="text-slate-300">Iuran Latihan</span>
-                    <span className="font-semibold text-white">Rp 150.000 / bulan</span>
+                    <span className="font-semibold text-white">Rp 13.000 / visit</span>
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="text-slate-300">A.N. QRIS</span>
