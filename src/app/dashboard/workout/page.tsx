@@ -65,6 +65,8 @@ export default function WorkoutSoloLeveling() {
 
   const [toast, setToast] = useState<{show: boolean, msg: string}>({ show: false, msg: "" });
 
+  const [showConfirm, setShowConfirm] = useState<{show: boolean, type: 'daily' | 'all' | null, title: string, desc: string}>({show: false, type: null, title: "", desc: ""});
+
   // Load state from localStorage on mount
   useEffect(() => {
     const savedData = localStorage.getItem("solo_leveling_workout");
@@ -147,17 +149,31 @@ export default function WorkoutSoloLeveling() {
   };
 
   const resetProgress = () => {
-    if (confirm("Reset seluruh progress dan mulai dari Level 1?")) {
+    setShowConfirm({
+      show: true, 
+      type: 'all', 
+      title: "RESET SYSTEM?", 
+      desc: "Perhatian: Semua data Level, EXP, dan Rank akan dihapus secara permanen. Anda akan kembali ke Level 1. Lanjutkan?"
+    });
+  };
+
+  const resetDailyTasks = () => {
+    setShowConfirm({
+      show: true, 
+      type: 'daily', 
+      title: "RESET DAILY QUESTS?", 
+      desc: "Level dan total EXP tetap aman. Anda hanya akan mereset task agar bisa digrinding ulang untuk hari ini."
+    });
+  };
+
+  const executeConfirm = () => {
+    if (showConfirm.type === 'all') {
       setQuests(INITIAL_QUESTS);
       setLevel(1);
       setExp(0);
       setMaxExp(100);
       showToast("System Reset to Default.");
-    }
-  };
-
-  const resetDailyTasks = () => {
-    if (confirm("Reset task harian? (Level dan EXP tetap aman)")) {
+    } else if (showConfirm.type === 'daily') {
       setQuests((prev) => 
         prev.map(q => ({
           ...q,
@@ -166,6 +182,7 @@ export default function WorkoutSoloLeveling() {
       );
       showToast("Daily Quests Reset for New EXP Grinding.");
     }
+    setShowConfirm({show: false, type: null, title: "", desc: ""});
   };
 
   const calculateProgress = (tasks: Task[]) => {
@@ -202,6 +219,55 @@ export default function WorkoutSoloLeveling() {
                 <span className="text-sm text-white font-medium tracking-wide drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">
                   {toast.msg}
                 </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3D Hologram Modal Confirmation */}
+      {showConfirm.show && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowConfirm({show: false, type: null, title: "", desc: ""})}></div>
+          <div className="relative z-10 w-full max-w-md perspective-1000 animate-in zoom-in-95 fade-in duration-300">
+            
+            <div className="absolute inset-0 bg-red-600/20 blur-2xl rounded-2xl transform scale-110"></div>
+            
+            <div className="relative bg-[#0a0a0a]/90 backdrop-blur-xl border border-red-500/40 rounded-2xl overflow-hidden shadow-[0_0_50px_rgba(220,38,38,0.2)]">
+              {/* Scanline effect */}
+              <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.5)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20"></div>
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent"></div>
+              
+              <div className="p-6 relative">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="p-2 rounded-lg bg-red-500/10 border border-red-500/30 text-red-500">
+                    <Shield className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-red-400 uppercase tracking-wider drop-shadow-[0_0_10px_rgba(220,38,38,0.5)]">
+                      {showConfirm.title}
+                    </h3>
+                  </div>
+                </div>
+                
+                <p className="text-sm text-slate-300 leading-relaxed font-medium">
+                  {showConfirm.desc}
+                </p>
+
+                <div className="mt-8 flex gap-3">
+                  <button 
+                    onClick={() => setShowConfirm({show: false, type: null, title: "", desc: ""})}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-slate-700 bg-slate-800/50 hover:bg-slate-700 hover:text-white transition-colors text-slate-300 font-bold tracking-widest text-sm uppercase"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={executeConfirm}
+                    className="flex-1 px-4 py-2.5 rounded-xl border border-red-500/50 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white hover:shadow-[0_0_20px_rgba(220,38,38,0.4)] transition-all font-bold tracking-widest text-sm uppercase"
+                  >
+                    Confirm
+                  </button>
+                </div>
               </div>
             </div>
           </div>
