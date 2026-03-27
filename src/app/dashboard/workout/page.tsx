@@ -63,6 +63,8 @@ export default function WorkoutSoloLeveling() {
   const [levelUpAnim, setLevelUpAnim] = useState(false);
   const [mounted, setMounted] = useState(false);
 
+  const [toast, setToast] = useState<{show: boolean, msg: string}>({ show: false, msg: "" });
+
   // Load state from localStorage on mount
   useEffect(() => {
     const savedData = localStorage.getItem("solo_leveling_workout");
@@ -114,6 +116,7 @@ export default function WorkoutSoloLeveling() {
           triggerLevelUp();
         } else {
           setExp(newExp);
+          showToast(`Quest Completed! +${taskExp} EXP`);
         }
       } else {
         // Unchecking task
@@ -133,6 +136,11 @@ export default function WorkoutSoloLeveling() {
     });
   };
 
+  const showToast = (msg: string) => {
+    setToast({ show: true, msg });
+    setTimeout(() => setToast({ show: false, msg: "" }), 3000);
+  };
+
   const triggerLevelUp = () => {
     setLevelUpAnim(true);
     setTimeout(() => setLevelUpAnim(false), 3000);
@@ -144,6 +152,7 @@ export default function WorkoutSoloLeveling() {
       setLevel(1);
       setExp(0);
       setMaxExp(100);
+      showToast("System Reset to Default.");
     }
   };
 
@@ -155,6 +164,7 @@ export default function WorkoutSoloLeveling() {
           tasks: q.tasks.map(t => ({ ...t, done: false }))
         }))
       );
+      showToast("Daily Quests Reset for New EXP Grinding.");
     }
   };
 
@@ -170,6 +180,33 @@ export default function WorkoutSoloLeveling() {
       
       {/* Background Effects */}
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-blue-600/10 blur-[120px] rounded-full pointer-events-none"></div>
+
+      {/* 3D Toast Notification System */}
+      {toast.show && (
+        <div className="fixed top-8 left-1/2 -translate-x-1/2 z-[60] animate-in slide-in-from-top-10 fade-in duration-300">
+          <div className="relative group perspective-1000">
+            {/* 3D Depth layers */}
+            <div className="absolute inset-0 bg-cyan-500/30 blur-md rounded-xl transform translate-y-2 scale-95 opacity-50"></div>
+            <div className="absolute inset-0 bg-blue-600/20 blur-xl rounded-xl"></div>
+            
+            {/* Main Toast Body */}
+            <div className="relative flex items-center gap-3 bg-black/80 backdrop-blur-xl border-t border-l border-cyan-400/50 border-r border-b border-cyan-900/50 px-5 py-3 rounded-xl shadow-[0_10px_30px_rgba(6,182,212,0.3)] transform-gpu transition-transform hover:scale-105">
+              <div className="w-1 h-full absolute left-0 top-0 bg-gradient-to-b from-cyan-400 to-blue-600 rounded-l-xl"></div>
+              
+              <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-cyan-950/50 border border-cyan-500/30 text-cyan-400 shadow-[inset_0_0_10px_rgba(6,182,212,0.2)]">
+                <Activity className="w-4 h-4 animate-pulse" />
+              </div>
+              
+              <div className="flex flex-col">
+                <span className="text-[10px] font-mono text-cyan-500 tracking-widest uppercase font-bold">System Notice</span>
+                <span className="text-sm text-white font-medium tracking-wide drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">
+                  {toast.msg}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Level Up Overlay Animation */}
       {levelUpAnim && (
