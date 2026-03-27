@@ -147,6 +147,17 @@ export default function WorkoutSoloLeveling() {
     }
   };
 
+  const resetDailyTasks = () => {
+    if (confirm("Reset task harian? (Level dan EXP tetap aman)")) {
+      setQuests((prev) => 
+        prev.map(q => ({
+          ...q,
+          tasks: q.tasks.map(t => ({ ...t, done: false }))
+        }))
+      );
+    }
+  };
+
   const calculateProgress = (tasks: Task[]) => {
     const done = tasks.filter((t) => t.done).length;
     return Math.round((done / tasks.length) * 100);
@@ -375,12 +386,21 @@ export default function WorkoutSoloLeveling() {
           Penalty Zone: 10 KM RUN if daily quest is incomplete.
         </p>
         
-        <button 
-          onClick={resetProgress}
-          className="px-4 py-2 rounded-lg border border-red-500/20 text-red-500/60 hover:text-red-400 hover:border-red-500/50 hover:bg-red-500/10 transition-colors"
-        >
-          RESET SYSTEM
-        </button>
+        <div className="flex items-center gap-3">
+          <button 
+            onClick={resetDailyTasks}
+            className="px-4 py-2 rounded-lg border border-cyan-500/20 text-cyan-500/80 hover:text-cyan-400 hover:border-cyan-500/50 hover:bg-cyan-500/10 transition-colors shadow-[0_0_10px_rgba(6,182,212,0.1)]"
+          >
+            RESET DAILY TASKS
+          </button>
+          
+          <button 
+            onClick={resetProgress}
+            className="px-4 py-2 rounded-lg border border-red-500/20 text-red-500/60 hover:text-red-400 hover:border-red-500/50 hover:bg-red-500/10 transition-colors"
+          >
+            RESET ALL
+          </button>
+        </div>
       </div>
 
     </div>
