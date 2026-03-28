@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +35,7 @@ import {
   Edit2,
   UserX,
   Search,
+  RefreshCw,
 } from "lucide-react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth-context";
@@ -212,7 +213,28 @@ export default function JadwalPage() {
   const [athleteSearch, setAthleteSearch] = useState("");
   const [dynamicAthletes, setDynamicAthletes] = useState<string[]>([]);
 
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+
   // ─── Firestore Listeners ─────────────────────────────────────────────────
+
+  const fetchScheduleData = useCallback(async () => {
+    try {
+      setIsSyncing(true);
+      const scheduleSnapshot = await getDocs(collection(db, "crown-schedules"));
+      const schedules: ScheduleEntry[] = scheduleSnapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<ScheduleEntry, "id">),
+      }));
+      setScheduleData(schedules);
+      setFirestoreLoading(false);
+      setTimeout(() => setIsSyncing(false), 500);
+    } catch (e) {
+      console.error("Error syncing schedule:", e);
+      setIsSyncing(false);
+      setFirestoreLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -695,7 +717,7 @@ export default function JadwalPage() {
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2 py-6">
+        <div className="text-center space-y-2 py-6 relative">
           <div className="flex items-center justify-center gap-3">
             <Calendar className="h-8 w-8 text-cyan-400" />
             <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -705,6 +727,17 @@ export default function JadwalPage() {
           <p className="text-slate-400 text-sm">
             Rabu • Sabtu • Minggu + Latihan Tambahan
           </p>
+          
+          <Button
+            onClick={fetchScheduleData}
+            disabled={isSyncing}
+            variant="outline"
+            size="sm"
+            className={`absolute top-6 right-0 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all ${isSyncing ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />
+            Sync Jadwal
+          </Button>
         </div>
 
         {/* Summary Cards */}
