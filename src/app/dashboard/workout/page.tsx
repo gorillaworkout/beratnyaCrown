@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, Flame, Trophy, Shield, Dumbbell, Activity, ChevronRight, Zap } from "lucide-react";
+import { Check, Flame, Trophy, Shield, Dumbbell, Activity, ChevronRight, Zap, Lock, Unlock, User } from "lucide-react";
 
 type Task = { id: string; name: string; rep: string; done: boolean; exp: number };
 type WorkoutLevel = {
@@ -9,6 +9,8 @@ type WorkoutLevel = {
   rank: string;
   title: string;
   description: string;
+  requiredLevel: number;
+  expectedOutcome: string;
   tasks: Task[];
   reward: string;
 };
@@ -19,6 +21,8 @@ const INITIAL_QUESTS: WorkoutLevel[] = [
     rank: "E-Rank",
     title: "Rookie Conditioning",
     description: "Persiapan fisik dasar untuk bertahan hidup sebagai cheer.",
+    requiredLevel: 1,
+    expectedOutcome: "Tubuh lebih ringan, nafas lebih panjang, stamina dasar terbentuk.",
     reward: "Stamina +5",
     tasks: [
       { id: "q1-1", name: "Jumping Jacks", rep: "50x", done: false, exp: 10 },
@@ -31,7 +35,9 @@ const INITIAL_QUESTS: WorkoutLevel[] = [
     id: 2,
     rank: "C-Rank",
     title: "Core & Explosiveness",
-    description: "Meningkatkan core untuk balance dan power.",
+    description: "Meningkatkan core untuk balance dan power. Khusus Stunter & Flyer.",
+    requiredLevel: 5,
+    expectedOutcome: "Otot perut mulai terlihat (toned core), lompatan lebih tinggi, balance stabil saat stunt.",
     reward: "Strength +10",
     tasks: [
       { id: "q2-1", name: "Burpees", rep: "20x", done: false, exp: 20 },
@@ -42,15 +48,32 @@ const INITIAL_QUESTS: WorkoutLevel[] = [
   },
   {
     id: 3,
+    rank: "A-Rank",
+    title: "Advanced Power",
+    description: "Kekuatan ekstra untuk tumbling dan lifting beban berat.",
+    requiredLevel: 10,
+    expectedOutcome: "Otot lengan dan kaki solid, fat percentage menurun drastis, siap untuk full tumbling pass.",
+    reward: "Power +15",
+    tasks: [
+      { id: "q4-1", name: "Explosive Push Ups", rep: "15x", done: false, exp: 25 },
+      { id: "q4-2", name: "Lunges Jumps", rep: "20x", done: false, exp: 25 },
+      { id: "q4-3", name: "Mountain Climbers", rep: "50x", done: false, exp: 20 },
+      { id: "q4-4", name: "Side Plank", rep: "45s / sisi", done: false, exp: 20 },
+    ],
+  },
+  {
+    id: 4,
     rank: "S-Rank",
     title: "National Elite",
-    description: "Latihan intensitas tinggi untuk elite athlete.",
+    description: "Latihan intensitas tinggi untuk elite athlete tingkat nasional.",
+    requiredLevel: 15,
+    expectedOutcome: "Fisik atletik sempurna (shredded), daya ledak maksimal, siap kompetisi internasional.",
     reward: "Agility +20",
     tasks: [
-      { id: "q3-1", name: "Handstand Push Ups", rep: "15x", done: false, exp: 30 },
-      { id: "q3-2", name: "Pistol Squats", rep: "20x / leg", done: false, exp: 30 },
-      { id: "q3-3", name: "Tuck Jumps", rep: "50x", done: false, exp: 25 },
-      { id: "q3-4", name: "L-Sit Hold", rep: "30s", done: false, exp: 25 },
+      { id: "q3-1", name: "Handstand Push Ups", rep: "15x", done: false, exp: 35 },
+      { id: "q3-2", name: "Pistol Squats", rep: "20x / leg", done: false, exp: 35 },
+      { id: "q3-3", name: "Tuck Jumps", rep: "50x", done: false, exp: 30 },
+      { id: "q3-4", name: "L-Sit Hold", rep: "30s", done: false, exp: 30 },
     ],
   },
 ];
@@ -60,6 +83,9 @@ export default function WorkoutSoloLeveling() {
   const [level, setLevel] = useState(1);
   const [exp, setExp] = useState(0);
   const [maxExp, setMaxExp] = useState(100);
+  const [weight, setWeight] = useState<number | "">(65);
+  const [height, setHeight] = useState<number | "">(170);
+
   const [levelUpAnim, setLevelUpAnim] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -71,11 +97,21 @@ export default function WorkoutSoloLeveling() {
   useEffect(() => {
     const savedData = localStorage.getItem("solo_leveling_workout");
     if (savedData) {
-      const { quests: savedQuests, level: savedLevel, exp: savedExp, maxExp: savedMaxExp } = JSON.parse(savedData);
-      setQuests(savedQuests);
-      setLevel(savedLevel);
-      setExp(savedExp);
+      const { 
+        quests: savedQuests, 
+        level: savedLevel, 
+        exp: savedExp, 
+        maxExp: savedMaxExp,
+        weight: savedWeight,
+        height: savedHeight
+      } = JSON.parse(savedData);
+      
+      setQuests(savedQuests || INITIAL_QUESTS);
+      setLevel(savedLevel || 1);
+      setExp(savedExp || 0);
       setMaxExp(savedMaxExp || 100);
+      if (savedWeight) setWeight(savedWeight);
+      if (savedHeight) setHeight(savedHeight);
     }
     setMounted(true);
   }, []);
@@ -83,9 +119,11 @@ export default function WorkoutSoloLeveling() {
   // Save to localStorage whenever state changes
   useEffect(() => {
     if (mounted) {
-      localStorage.setItem("solo_leveling_workout", JSON.stringify({ quests, level, exp, maxExp }));
+      localStorage.setItem("solo_leveling_workout", JSON.stringify({ 
+        quests, level, exp, maxExp, weight, height 
+      }));
     }
-  }, [quests, level, exp, maxExp, mounted]);
+  }, [quests, level, exp, maxExp, weight, height, mounted]);
 
   const toggleTask = (questId: number, taskId: string) => {
     setQuests((prev) => {
@@ -188,6 +226,21 @@ export default function WorkoutSoloLeveling() {
   const calculateProgress = (tasks: Task[]) => {
     const done = tasks.filter((t) => t.done).length;
     return Math.round((done / tasks.length) * 100);
+  };
+
+  const getBMI = () => {
+    if (!weight || !height) return { value: 0, status: "-", color: "text-slate-500" };
+    const h = (height as number) / 100;
+    const bmi = (weight as number) / (h * h);
+    let status = "";
+    let color = "";
+    
+    if (bmi < 18.5) { status = "Underweight"; color = "text-yellow-400"; }
+    else if (bmi < 24.9) { status = "Normal/Ideal"; color = "text-green-400"; }
+    else if (bmi < 29.9) { status = "Overweight"; color = "text-orange-400"; }
+    else { status = "Obese"; color = "text-red-500"; }
+    
+    return { value: bmi.toFixed(1), status, color };
   };
 
   if (!mounted) return null;
@@ -311,7 +364,7 @@ export default function WorkoutSoloLeveling() {
             </div>
             
             {/* Player Stats HUD */}
-            <div className="flex items-center gap-6 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 w-full md:w-auto shadow-inner relative overflow-hidden">
+            <div className="flex flex-col md:flex-row items-center gap-6 bg-slate-900/60 p-5 rounded-2xl border border-slate-800/80 shadow-inner relative overflow-hidden">
               <div className="absolute -right-4 -top-4 w-24 h-24 bg-cyan-500/10 blur-2xl rounded-full"></div>
               
               <div className="text-center relative z-10 min-w-[80px]">
@@ -319,9 +372,9 @@ export default function WorkoutSoloLeveling() {
                 <p className="text-4xl font-black text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.3)]">{level}</p>
               </div>
               
-              <div className="w-px h-16 bg-gradient-to-b from-transparent via-slate-700 to-transparent relative z-10"></div>
+              <div className="hidden md:block w-px h-16 bg-gradient-to-b from-transparent via-slate-700 to-transparent relative z-10"></div>
               
-              <div className="relative z-10 flex-1 md:w-48">
+              <div className="relative z-10 flex-1 w-full md:w-48">
                 <div className="flex justify-between text-xs mb-2 font-mono">
                   <span className="text-slate-400 tracking-wider">EXP</span>
                   <span className="text-cyan-400 font-bold">{Math.floor(exp)} <span className="text-slate-600">/ {maxExp}</span></span>
@@ -336,6 +389,54 @@ export default function WorkoutSoloLeveling() {
               </div>
             </div>
           </div>
+
+          {/* Player Physical Stats (BMI) Panel */}
+          <div className="mt-8 pt-6 border-t border-cyan-500/10 grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div className="md:col-span-2 bg-black/40 border border-slate-800 rounded-xl p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-slate-800 rounded-lg text-slate-400">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <p className="text-[10px] text-slate-500 font-mono font-bold tracking-widest uppercase">Base Stats</p>
+                  <p className="text-sm font-semibold text-slate-200">Berat & Tinggi</p>
+                </div>
+              </div>
+              <div className="flex gap-2 text-sm">
+                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 overflow-hidden">
+                  <input 
+                    type="number" 
+                    value={weight} 
+                    onChange={(e) => setWeight(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="w-12 bg-transparent text-white text-center font-mono focus:outline-none"
+                  />
+                  <span className="text-slate-500 text-xs font-mono ml-1">kg</span>
+                </div>
+                <div className="flex items-center bg-slate-900 border border-slate-700 rounded-lg px-2 overflow-hidden">
+                  <input 
+                    type="number" 
+                    value={height} 
+                    onChange={(e) => setHeight(e.target.value === "" ? "" : Number(e.target.value))}
+                    className="w-12 bg-transparent text-white text-center font-mono focus:outline-none"
+                  />
+                  <span className="text-slate-500 text-xs font-mono ml-1">cm</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="md:col-span-2 bg-gradient-to-br from-slate-900 to-black border border-cyan-900/30 rounded-xl p-4 flex items-center justify-between relative overflow-hidden">
+              <div className="absolute -right-4 top-1/2 -translate-y-1/2 w-20 h-20 bg-cyan-500/5 blur-xl rounded-full pointer-events-none"></div>
+              <div>
+                <p className="text-[10px] text-cyan-600 font-mono font-bold tracking-widest uppercase mb-1">Body Mass Index</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-white">{getBMI().value}</span>
+                  <span className={`text-xs font-bold px-2 py-0.5 rounded border border-current bg-black/50 ${getBMI().color}`}>
+                    {getBMI().status}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -344,18 +445,36 @@ export default function WorkoutSoloLeveling() {
         {quests.map((quest) => {
           const progress = calculateProgress(quest.tasks);
           const isComplete = progress === 100;
+          const isLocked = level < quest.requiredLevel;
           
           return (
             <div 
               key={quest.id} 
               className={`relative overflow-hidden rounded-3xl transition-all duration-500 ${
-                isComplete 
-                  ? "border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] bg-slate-900/40" 
-                  : "border border-slate-800 bg-slate-900/20 hover:border-slate-700 hover:bg-slate-900/40"
+                isLocked
+                  ? "border border-red-900/30 bg-black/60 opacity-80"
+                  : isComplete 
+                    ? "border border-cyan-500/30 shadow-[0_0_30px_rgba(6,182,212,0.15)] bg-slate-900/40" 
+                    : "border border-slate-800 bg-slate-900/20 hover:border-slate-700 hover:bg-slate-900/40"
               } backdrop-blur-md`}
             >
-              {isComplete && (
+              {isComplete && !isLocked && (
                 <div className="absolute inset-0 bg-gradient-to-br from-cyan-900/20 to-transparent pointer-events-none"></div>
+              )}
+
+              {/* Locked Overlay */}
+              {isLocked && (
+                <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/80 backdrop-blur-sm border-2 border-red-500/20 rounded-3xl">
+                  <div className="p-4 bg-red-950/50 border border-red-500/30 rounded-2xl text-red-500 shadow-[0_0_30px_rgba(220,38,38,0.2)] mb-4 animate-pulse">
+                    <Lock className="w-10 h-10" />
+                  </div>
+                  <h3 className="text-2xl font-black text-red-500 uppercase tracking-widest drop-shadow-[0_0_10px_rgba(220,38,38,0.8)]">
+                    LOCKED
+                  </h3>
+                  <p className="text-slate-400 mt-2 font-mono text-sm font-bold bg-black/60 px-4 py-2 rounded-lg border border-slate-800">
+                    Mencapai <span className="text-cyan-400">Level {quest.requiredLevel}</span> untuk membuka quest ini.
+                  </p>
+                </div>
               )}
 
               {/* Quest Header */}
@@ -367,7 +486,7 @@ export default function WorkoutSoloLeveling() {
                         ? "bg-cyan-500/20 text-cyan-400 shadow-[0_0_15px_rgba(6,182,212,0.3)]" 
                         : "bg-slate-800 text-slate-400"
                     }`}>
-                      {quest.id === 1 ? <Dumbbell className="w-6 h-6" /> : quest.id === 2 ? <Shield className="w-6 h-6" /> : <Flame className="w-6 h-6" />}
+                      {quest.id === 1 ? <Activity className="w-6 h-6" /> : quest.id === 2 ? <Dumbbell className="w-6 h-6" /> : quest.id === 3 ? <Flame className="w-6 h-6" /> : <Shield className="w-6 h-6" />}
                     </div>
                     <div>
                       <div className="flex items-center gap-3 mb-1">
@@ -379,6 +498,15 @@ export default function WorkoutSoloLeveling() {
                         </h2>
                       </div>
                       <p className="text-sm text-slate-400">{quest.description}</p>
+                      
+                      {/* Expected Outcome Highlight */}
+                      <div className="mt-3 flex items-start gap-2 bg-slate-900/80 p-3 rounded-lg border border-slate-800/80 max-w-lg">
+                        <Zap className="w-4 h-4 text-cyan-500 mt-0.5 flex-shrink-0" />
+                        <p className="text-xs text-cyan-100 font-mono leading-relaxed">
+                          <span className="text-cyan-500 font-bold">OUTCOME: </span>
+                          {quest.expectedOutcome}
+                        </p>
+                      </div>
                     </div>
                   </div>
                   
