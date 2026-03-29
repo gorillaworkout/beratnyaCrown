@@ -59,7 +59,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
   const customEventsMap = new Map<string, any>();
   if (adminDb) {
     try {
-      const snap = await adminDb.collection("crown-events")
+      const snap = await adminDb.collection("crown-schedules")
         .where("date", ">=", `${today.getFullYear()}-${padDate(today.getMonth() + 1)}-01`)
         .get();
       snap.forEach(doc => {
@@ -67,7 +67,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         customEventsMap.set(data.date, data);
       });
     } catch (err) {
-      console.warn("Could not fetch custom events from Firestore (ICS sync)", err);
+      console.warn("Could not fetch custom schedules from Firestore (ICS sync)", err);
     }
   }
 
@@ -91,14 +91,27 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         if (customData.status === "libur") {
           schedule.push({ date: dateStr, status: "libur", holidayName: customData.note });
         } else {
-          const colorIdx = SHIRT_COLORS.findIndex(c => c.name === customData.shirtColor);
+          // Determine color based on data or fallback to deterministic
+          let colorIdx = -1;
+          if (customData.shirtColor) {
+             if (typeof customData.shirtColor === 'string') {
+                 colorIdx = SHIRT_COLORS.findIndex(c => c.name === customData.shirtColor);
+             } else if (customData.shirtColor.name) {
+                 colorIdx = SHIRT_COLORS.findIndex(c => c.name === customData.shirtColor.name);
+             }
+          }
+          
+          if (colorIdx === -1 && customData.status === 'latihan') {
+              colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+          }
+          
           if (colorIdx !== -1) prevColorIdx = colorIdx;
           
           schedule.push({
             date: dateStr,
             status: customData.status || "tambahan",
-            timeStart: customData.timeStart || "19:00",
-            timeEnd: customData.timeEnd || "21:00",
+            timeStart: customData.timeStart || (d.getDay() === 0 ? "10:00" : "19:00"),
+            timeEnd: customData.timeEnd || (d.getDay() === 0 ? "13:00" : "22:00"),
             note: customData.note,
             shirtColor: colorIdx !== -1 ? SHIRT_COLORS[colorIdx] : undefined,
           });
@@ -114,8 +127,8 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
            schedule.push({
              date: dateStr,
              status: "latihan", // Still marked as training, but with a warning note
-             timeStart: "19:00",
-             timeEnd: "21:00",
+             timeStart: d.getDay() === 0 ? "10:00" : "19:00",
+             timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
              holidayName: holidayCheck,
              shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr, prevColorIdx)]
            });
@@ -130,8 +143,8 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         schedule.push({
           date: dateStr,
           status: "latihan",
-          timeStart: "19:00",
-          timeEnd: "21:00",
+          timeStart: d.getDay() === 0 ? "10:00" : "19:00",
+          timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
           shirtColor: SHIRT_COLORS[colorIdx],
         });
       }
