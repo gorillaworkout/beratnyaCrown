@@ -195,9 +195,9 @@ export default function JadwalPage() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     date: "",
-    status: "latihan" as ScheduleStatus,
-    timeStart: "07:00",
-    timeEnd: "10:00",
+    status: "tambahan" as ScheduleStatus,
+    timeStart: "19:00",
+    timeEnd: "22:00",
     note: "",
   });
 
@@ -334,11 +334,17 @@ export default function JadwalPage() {
       }
 
       if (customSchedule) {
+        // Fallback time to default if custom schedule doesn't have it defined properly
+        const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+        const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+        
         entries.push({
           ...customSchedule,
           date: dateStr,
           dayName,
           isRegular: REGULAR_DAYS.has(dayOfWeek),
+          timeStart: customSchedule.timeStart || defaultTimeStart,
+          timeEnd: customSchedule.timeEnd || defaultTimeEnd,
           shirtColor: currentShirtColor,
           holidayName,
           eventName: isEventDay ? isEventDay.name : undefined,
@@ -453,10 +459,17 @@ export default function JadwalPage() {
 
   const openEditDialog = (entry: ScheduleEntry) => {
     setEditingDate(entry.date);
+    
+    // Apply correct default time based on day if missing
+    const dateObj = new Date(entry.date + "T00:00:00");
+    const dayOfWeek = dateObj.getDay();
+    const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+    const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+    
     setEditForm({
       status: entry.status,
-      timeStart: entry.timeStart || "07:00",
-      timeEnd: entry.timeEnd || "10:00",
+      timeStart: entry.timeStart || defaultTimeStart,
+      timeEnd: entry.timeEnd || defaultTimeEnd,
       note: entry.note || "",
     });
     setEditDialogOpen(true);
@@ -527,9 +540,9 @@ export default function JadwalPage() {
     setAddDialogOpen(false);
     setAddForm({
       date: "",
-      status: "latihan",
-      timeStart: "07:00",
-      timeEnd: "10:00",
+      status: "tambahan",
+      timeStart: "19:00",
+      timeEnd: "22:00",
       note: "",
     });
   };
