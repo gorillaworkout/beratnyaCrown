@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell } from "lucide-react";
+import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell, HeartPulse } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const getNavItems = (isAdmin: boolean) => [
@@ -29,17 +29,22 @@ const getNavItems = (isAdmin: boolean) => [
     icon: ClipboardCheck,
   },
   {
+    label: "P3K Crown",
+    href: "/dashboard/p3k",
+    icon: HeartPulse,
+  },
+  {
     label: "Kas Crown",
     href: "/dashboard/kas",
     icon: Calculator,
   },
   ...(isAdmin
     ? [
-        {
-          label: "Workout (Solo Leveling)",
-          href: "/dashboard/workout",
-          icon: Dumbbell,
-        },
+        // {
+        //   label: "Workout (Solo Leveling)",
+        //   href: "/dashboard/workout",
+        //   icon: Dumbbell,
+        // },
         {
           label: "Data Atlet",
           href: "/dashboard/athletes",
