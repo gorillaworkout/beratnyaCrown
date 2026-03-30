@@ -464,7 +464,7 @@ export default function KasPage() {
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <input type="checkbox" checked={!!record.isLate} disabled={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
+                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
                           <td className="px-6 py-4 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" />

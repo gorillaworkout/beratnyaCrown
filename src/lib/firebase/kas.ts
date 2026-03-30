@@ -3,7 +3,7 @@ import { collection, doc, getDocs, setDoc, query, orderBy, where, serverTimestam
 import type { KasRecord, KasAthlete, KasTransaction } from "../types/kas";
 
 export async function getKasAthletes(): Promise<KasAthlete[]> {
-  const q = query(collection(db, "crown-kas-athletes"), orderBy("name"));
+  const q = query(collection(db, "crown-athletes"), orderBy("name"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({
     id: doc.id,
@@ -12,7 +12,7 @@ export async function getKasAthletes(): Promise<KasAthlete[]> {
 }
 
 export async function addKasAthlete(name: string, division: string) {
-  const newRef = doc(collection(db, "crown-kas-athletes"));
+  const newRef = doc(collection(db, "crown-athletes"));
   await setDoc(newRef, {
     name,
     division,
