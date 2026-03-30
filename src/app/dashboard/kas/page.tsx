@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calculator, CheckCircle2, Plus, XCircle, Wallet, ArrowUpCircle, ArrowDownCircle, Trash2, TrendingUp, Download } from "lucide-react";
 import {
-  addKasAthlete,
+  
   getKasAthletes,
   getKasRecordsByDate,
   getKasSummary,
@@ -53,9 +53,9 @@ export default function KasPage() {
   });
 
   // Modal Add Athlete
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [newName, setNewName] = useState("");
-  const [newDivision, setNewDivision] = useState("Coed");
+  
+  
+  
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal Transaction
@@ -124,22 +124,7 @@ export default function KasPage() {
     }
   }
 
-  async function handleAddAthlete(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newName.trim()) return;
-    setIsSubmitting(true);
-    try {
-      await addKasAthlete(newName.trim(), newDivision);
-      setNewName("");
-      setNewDivision("Coed");
-      setShowAddModal(false);
-      await loadData();
-    } catch (error) {
-      console.error(error);
-    } finally {
-      setIsSubmitting(false);
-    }
-  }
+  
 
   async function handleAddTransaction(e: React.FormEvent) {
     e.preventDefault();
@@ -220,7 +205,7 @@ export default function KasPage() {
       date: selectedDate,
       athleteId: athlete.id!,
       name: athlete.name,
-      division: athlete.division,
+      
       paidKas: newPaidKas,
       isLate: newIsLate,
       noNews: newNoNews,
@@ -261,7 +246,7 @@ export default function KasPage() {
         date: selectedDate,
         athleteId: athlete.id!,
         name: athlete.name,
-        division: athlete.division,
+        
         isSettled,
       });
       const s = await getKasSummary();
@@ -279,9 +264,9 @@ export default function KasPage() {
 
   const exportToCSV = () => {
     if (allRecords.length === 0) return alert("Data kosong");
-    const headers = ["Tanggal", "Nama Atlet", "Divisi", "Kas", "Telat", "Alpa", "Tagihan", "Lunas"];
+    const headers = ["Tanggal", "Nama Atlet", "Kas", "Telat", "Alpa", "Tagihan", "Lunas"];
     const rows = allRecords.map(r => [
-      r.date, r.name, r.division, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
+      r.date, r.name, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
     ]);
     
     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n";
@@ -321,13 +306,7 @@ export default function KasPage() {
                     <Wallet className="h-4 w-4" />
                     Catat Transaksi
                   </button>
-                  <button
-                    onClick={() => setShowAddModal(true)}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-cyan-500 px-4 py-2.5 text-sm font-semibold text-black transition-all hover:bg-cyan-400 active:scale-95"
-                  >
-                    <Plus className="h-4 w-4" />
-                    Tambah Atlet
-                  </button>
+                  
                 </>
               )}
             </div>
@@ -432,7 +411,7 @@ export default function KasPage() {
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
                     <th className="px-6 py-4 font-medium">Nama Atlet</th>
-                    <th className="px-6 py-4 font-medium">Divisi</th>
+                    
                     <th className="px-6 py-4 text-center font-medium">Kas</th>
                     <th className="px-6 py-4 text-center font-medium">Telat</th>
                     <th className="px-6 py-4 text-center font-medium">Alpa (No Kabar)</th>
@@ -455,11 +434,7 @@ export default function KasPage() {
                       return (
                         <tr key={athlete.id} className="hover:bg-white/[0.02]">
                           <td className="px-6 py-4 font-medium text-white">{athlete.name}</td>
-                          <td className="px-6 py-4">
-                            <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${athlete.division === "Coed" ? "bg-blue-500/10 text-blue-400" : "bg-pink-500/10 text-pink-400"}`}>
-                              {athlete.division}
-                            </span>
-                          </td>
+                          
                           <td className="px-6 py-4 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
@@ -706,7 +681,7 @@ export default function KasPage() {
                             date: r.record.date,
                             athleteId: r.record.athleteId,
                             name: r.record.name,
-                            division: r.record.division
+                            
                           });
                           nominal -= r.toPay;
                         } else {
@@ -735,36 +710,7 @@ export default function KasPage() {
         )}
 
 
-        {/* MODAL ATHLETE */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl">
-              <h3 className="mb-4 text-xl font-bold text-white">Tambah Atlet Baru</h3>
-              <form onSubmit={handleAddAthlete}>
-                <div className="space-y-4">
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-400">Nama Lengkap</label>
-                    <input type="text" required value={newName} onChange={(e) => setNewName(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white" placeholder="Masukkan nama atlet..." />
-                  </div>
-                  <div>
-                    <label className="mb-2 block text-sm font-medium text-slate-400">Divisi</label>
-                    <select value={newDivision} onChange={(e) => setNewDivision(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white">
-                      <option value="Coed">Coed</option>
-                      <option value="All-Girl">All-Girl</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="mt-8 flex gap-3">
-                  <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
-                  <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50">
-                    {isSubmitting ? "Menyimpan..." : "Simpan Atlet"}
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-      </div>
+        </div>
     </main>
   );
 }
