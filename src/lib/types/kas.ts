@@ -7,6 +7,7 @@ export interface KasRecord {
   paidKas: boolean;
   isLate: boolean;
   noNews: boolean;
+  isExcused: boolean;
   totalBilled: number;
   isSettled: boolean;
   updatedAt?: any;

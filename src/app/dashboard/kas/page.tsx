@@ -97,7 +97,20 @@ export default function KasPage() {
 
       const results = await Promise.all(p);
       setAthletes(results[0]);
-      setSummary(results[1]);
+      let summaryData = results[1];
+      let autoUnpaidSum = 0;
+      
+      dates.forEach((d: string) => {
+        if (d > todayDateStr) return; // Ignore future dates
+        athletesMap.forEach((athlete, athleteId) => {
+          if (!recordsByDateByAthlete.get(d)?.get(athleteId)) {
+            autoUnpaidSum += 26000;
+          }
+        });
+      });
+      
+      summaryData.totalBilled += autoUnpaidSum;
+      setSummary(summaryData);
       
       const dates = results[2];
       setTrainingDates(dates);
@@ -111,7 +124,42 @@ export default function KasPage() {
       setAllRecords(allRecs);
       
       // Calculate global unpaid
-      const unpaid = allRecs.filter((r: KasRecord) => r.totalBilled > 0 && !r.isSettled);
+      // Calculate global unpaid. For dates that have passed, if no record exists, they are considered Alpa (Rp 26000)
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      const unpaid: KasRecord[] = [];
+      
+      const athletesMap = new Map(results[0].map((a: KasAthlete) => [a.id, a]));
+      const recordsByDateByAthlete = new Map<string, Map<string, KasRecord>>();
+      
+      allRecs.forEach((r: KasRecord) => {
+        if (!recordsByDateByAthlete.has(r.date)) recordsByDateByAthlete.set(r.date, new Map());
+        recordsByDateByAthlete.get(r.date)!.set(r.athleteId, r);
+      });
+
+      dates.forEach((d: string) => {
+        if (d > todayDateStr) return; // Ignore future dates
+        
+        athletesMap.forEach((athlete, athleteId) => {
+          const record = recordsByDateByAthlete.get(d)?.get(athleteId);
+          if (record) {
+             if (record.totalBilled > 0 && !record.isSettled) unpaid.push(record);
+          } else {
+             // Missing record for past date -> Treat as Alpa
+             unpaid.push({
+               date: d,
+               athleteId,
+               name: athlete.name,
+               division: athlete.division || "Coed" || "Coed",
+               paidKas: true, // Auto Alpa rule
+               isLate: false,
+               noNews: true, // Auto Alpa rule
+               isExcused: false,
+               totalBilled: 26000,
+               isSettled: false
+             });
+          }
+        });
+      });
       setUnpaidRecords(unpaid);
       
       if (activeTab === "daily") setRecords(results[4] || []);
@@ -159,19 +207,25 @@ export default function KasPage() {
   }
 
   const getAthleteRecord = (athleteId: string): Partial<KasRecord> => {
-    return (
-      records.find((r) => r.athleteId === athleteId) || {
-        athleteId,
-        paidKas: false,
-        isLate: false,
-        noNews: false,
-        isSettled: false,
-        totalBilled: 0,
-      }
-    );
+    const existing = records.find((r) => r.athleteId === athleteId);
+    if (existing) return existing;
+    
+    const todayStr = new Date().toISOString().split('T')[0];
+    const isPastDate = selectedDate < todayStr;
+    
+    return {
+      athleteId,
+      paidKas: isPastDate,
+      isLate: false,
+      noNews: isPastDate, // Auto Alpa visually
+      isExcused: false,
+      isSettled: false,
+      totalBilled: isPastDate ? 26000 : 0,
+    };
   };
 
-  const calculateTotal = (paidKas: boolean, isLate: boolean, noNews: boolean) => {
+  const calculateTotal = (paidKas: boolean, isLate: boolean, noNews: boolean, isExcused: boolean) => {
+    if (isExcused) return 0;
     if (noNews) return 26000;
     let total = 0;
     if (paidKas) total += 13000;
@@ -181,25 +235,35 @@ export default function KasPage() {
 
   async function handleRecordChange(
     athlete: KasAthlete,
-    field: "paidKas" | "isLate" | "noNews",
+    field: "paidKas" | "isLate" | "noNews" | "isExcused",
     value: boolean,
   ) {
     const existingRecord = getAthleteRecord(athlete.id!);
-    let newPaidKas = !!existingRecord.paidKas;
+        let newPaidKas = !!existingRecord.paidKas;
     let newIsLate = !!existingRecord.isLate;
     let newNoNews = !!existingRecord.noNews;
+    let newIsExcused = !!existingRecord.isExcused;
 
     if (field === "paidKas") newPaidKas = value;
     if (field === "isLate") newIsLate = value;
+    if (field === "isExcused") {
+      newIsExcused = value;
+      if (value) {
+        newPaidKas = false;
+        newIsLate = false;
+        newNoNews = false;
+      }
+    }
     if (field === "noNews") {
       newNoNews = value;
       if (value) {
         newPaidKas = true;
         newIsLate = false;
+        newIsExcused = false;
       }
     }
 
-    const totalBilled = calculateTotal(newPaidKas, newIsLate, newNoNews);
+    const totalBilled = calculateTotal(newPaidKas, newIsLate, newNoNews, newIsExcused);
 
     const recordToSave: Partial<KasRecord> = {
       date: selectedDate,
@@ -209,6 +273,7 @@ export default function KasPage() {
       paidKas: newPaidKas,
       isLate: newIsLate,
       noNews: newNoNews,
+      isExcused: newIsExcused,
       totalBilled,
       isSettled: !!existingRecord.isSettled,
     };
@@ -264,9 +329,9 @@ export default function KasPage() {
 
   const exportToCSV = () => {
     if (allRecords.length === 0) return alert("Data kosong");
-    const headers = ["Tanggal", "Nama Atlet", "Kas", "Telat", "Alpa", "Tagihan", "Lunas"];
+    const headers = ["Tanggal", "Nama Atlet", "Kas", "Telat", "Alpa", "Pengecualian", "Tagihan", "Lunas"];
     const rows = allRecords.map(r => [
-      r.date, r.name, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
+      r.date, r.name, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.isExcused ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
     ]);
     
     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n";
@@ -415,6 +480,7 @@ export default function KasPage() {
                     <th className="px-6 py-4 text-center font-medium">Kas</th>
                     <th className="px-6 py-4 text-center font-medium">Telat</th>
                     <th className="px-6 py-4 text-center font-medium">Alpa (No Kabar)</th>
+                    <th className="px-6 py-4 text-center font-medium">Pengecualian</th>
                     <th className="px-6 py-4 text-right font-medium">Tagihan</th>
                     <th className="px-6 py-4 text-center font-medium">Status</th>
                   </tr>
@@ -441,9 +507,7 @@ export default function KasPage() {
                           <td className="px-6 py-4 text-center">
                             <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-6 py-4 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" />
-                          </td>
+                          <td className="px-6 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" /></td><td className="px-6 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" /></td>
                           <td className="px-6 py-4 text-right font-bold text-cyan-400">
                             Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
                           </td>
