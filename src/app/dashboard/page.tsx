@@ -326,7 +326,7 @@ export default function InfoDashboardPage() {
                 <div className="space-y-3">
                   <div className="flex justify-between border-t border-white/10 pt-3 pb-2 text-sm">
                     <span className="text-slate-300">Iuran Latihan</span>
-                    <span className="font-semibold text-white">Rp 150.000 / bulan</span>
+                    <span className="font-semibold text-white">Rp 13.000 / latihan</span>
                   </div>
                   <div className="flex justify-between pt-1 text-sm">
                     <span className="text-slate-300">A.N. QRIS</span>
