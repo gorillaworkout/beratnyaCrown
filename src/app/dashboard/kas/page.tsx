@@ -96,7 +96,7 @@ export default function KasPage() {
       }
 
       const results = await Promise.all(p);
-      setAthletes(results[0]);
+      setAthletes(results[0].sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
       const dates = results[2];
       setTrainingDates(dates);
       
