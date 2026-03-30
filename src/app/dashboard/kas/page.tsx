@@ -118,8 +118,8 @@ export default function KasPage() {
       
       dates.forEach((d: string) => {
         if (d > todayDateStr) return; // Ignore future dates
-        athletesMap.forEach((athlete, athleteId) => {
-          if (!recordsByDateByAthlete.get(d)?.get(athleteId)) {
+        athletesMap.forEach((athlete: any, athleteId: any) => {
+          if (!recordsByDateByAthlete.get(d)?.get(athleteId as string)) {
             autoUnpaidSum += 26000;
           }
         });
@@ -138,15 +138,15 @@ export default function KasPage() {
       dates.forEach((d: string) => {
         if (d > todayDateStr) return; // Ignore future dates
         
-        athletesMap.forEach((athlete, athleteId) => {
-          const record = recordsByDateByAthlete.get(d)?.get(athleteId);
+        athletesMap.forEach((athlete: any, athleteId: any) => {
+          const record = recordsByDateByAthlete.get(d)?.get(athleteId as string);
           if (record) {
              if (record.totalBilled > 0 && !record.isSettled) unpaid.push(record);
           } else {
              // Missing record for past date -> Treat as Alpa
              unpaid.push({
                date: d,
-               athleteId,
+               athleteId: athleteId as string,
                name: athlete.name,
                division: athlete.division || "Coed" || "Coed",
                paidKas: true, // Auto Alpa rule
@@ -213,7 +213,7 @@ export default function KasPage() {
     const isPastDate = selectedDate < todayStr;
     
     return {
-      athleteId,
+      athleteId: athleteId as string,
       paidKas: isPastDate,
       isLate: false,
       noNews: isPastDate, // Auto Alpa visually
