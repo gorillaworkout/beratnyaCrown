@@ -471,17 +471,16 @@ export default function KasPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
+              <table className="w-full text-left text-sm text-slate-300 table-fixed">
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
-                    <th className="px-6 py-4 font-medium">Nama Atlet</th>
-                    
-                    <th className="px-6 py-4 text-center font-medium">Kas</th>
-                    <th className="px-6 py-4 text-center font-medium">Telat</th>
-                    <th className="px-6 py-4 text-center font-medium">Alpa (No Kabar)</th>
-                    <th className="px-6 py-4 text-center font-medium">Pengecualian</th>
-                    <th className="px-6 py-4 text-right font-medium">Tagihan</th>
-                    <th className="px-6 py-4 text-center font-medium">Status</th>
+                    <th className="px-6 py-4 font-medium w-48 truncate">Nama Atlet</th>
+                    <th className="px-4 py-4 text-center font-medium w-20">Kas</th>
+                    <th className="px-4 py-4 text-center font-medium w-20">Telat</th>
+                    <th className="px-4 py-4 text-center font-medium w-36">Alpa (No Kabar)</th>
+                    <th className="px-4 py-4 text-center font-medium w-32">Pengecualian</th>
+                    <th className="px-4 py-4 text-right font-medium w-36">Tagihan</th>
+                    <th className="px-4 py-4 text-center font-medium w-28">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
@@ -500,19 +499,19 @@ export default function KasPage() {
                         <tr key={athlete.id} className="hover:bg-white/[0.02]">
                           <td className="px-6 py-4 font-medium text-white">{athlete.name}</td>
                           
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-4 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-4 text-center">
                             <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-6 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" /></td><td className="px-6 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" /></td>
-                          <td className="px-6 py-4 text-right font-bold text-cyan-400">
+                          <td className="px-4 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" /></td><td className="px-4 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" /></td>
+                          <td className="px-4 py-4 text-right font-bold text-cyan-400">
                             Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
                           </td>
-                          <td className="px-6 py-4 text-center">
+                          <td className="px-4 py-4 text-center">
                             {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ${record.isSettled ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400"}`}>
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1.5 rounded-full w-20 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
                                 {record.isSettled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                                 {record.isSettled ? "Lunas" : "Belum"}
                               </button>
@@ -524,8 +523,8 @@ export default function KasPage() {
                   )}
                   {/* Total Tagihan Hari ini */}
                   <tr className="bg-white/[0.03]">
-                    <td colSpan={5} className="px-6 py-4 text-right font-medium text-slate-400">Total Tagihan Sistem Hari Ini:</td>
-                    <td className="px-6 py-4 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
+                    <td colSpan={6} className="px-4 py-4 text-right font-medium text-slate-400">Total Tagihan Sistem Hari Ini:</td>
+                    <td className="px-4 py-4 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
                     <td></td>
                   </tr>
                 </tbody>
@@ -573,7 +572,7 @@ export default function KasPage() {
                         <td className={`px-6 py-4 text-right font-medium ${trx.type === 'OUT_EXPENSE' ? 'text-rose-400' : 'text-emerald-400'}`}>
                           {trx.type === 'OUT_EXPENSE' ? '-' : '+'} Rp {trx.amount.toLocaleString('id-ID')}
                         </td>
-                        <td className="px-6 py-4 text-center">
+                        <td className="px-4 py-4 text-center">
                           {isKasAdmin && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>}
                         </td>
                       </tr>
