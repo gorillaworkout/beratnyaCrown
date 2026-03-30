@@ -28,5 +28,7 @@ export interface KasTransaction {
   type: TransactionType;
   amount: number;
   description: string;
+  source?: string;
+  raw_payload?: any;
   createdAt?: any;
 }

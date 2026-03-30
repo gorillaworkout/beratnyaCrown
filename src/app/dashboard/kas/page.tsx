@@ -384,7 +384,7 @@ export default function KasPage() {
               Tunggakan Atlet
             </button>
             <button onClick={() => setActiveTab("transactions")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'transactions' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              Uang Job & Pengeluaran
+              Uang Job, Pengeluaran & QRIS GoPay
             </button>
             <button onClick={() => setActiveTab("recap")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'recap' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
               Export Rekap (CSV)
@@ -395,15 +395,15 @@ export default function KasPage() {
         {/* Global Summary Cards */}
         <section className="grid gap-4 md:grid-cols-4">
           <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-transparent p-6 backdrop-blur-xl relative overflow-hidden group">
-            <p className="text-sm font-medium text-emerald-500/80">Saldo Kas & Job (Netto)</p>
+            <p className="text-sm font-medium text-emerald-500/80">Saldo Kas Total (Netto)</p>
             <p className="mt-2 text-3xl font-bold text-emerald-400">
               Rp {summary.currentBalance.toLocaleString("id-ID")}
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-            <p className="text-sm text-slate-400">Total Uang Job Masuk</p>
-            <p className="mt-2 text-2xl font-bold text-indigo-400">
-              Rp {summary.totalJob.toLocaleString("id-ID")}
+            <p className="text-sm text-slate-400">Total Masuk QRIS GoPay</p>
+            <p className="mt-2 text-2xl font-bold text-cyan-400">
+              Rp {transactions.filter(t => t.source === 'gobiz_webhook').reduce((sum, t) => sum + (t.amount||0), 0).toLocaleString("id-ID")}
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
@@ -539,7 +539,7 @@ export default function KasPage() {
             <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
               <div className="flex items-center gap-3">
                 <Wallet className="h-5 w-5 text-indigo-400" />
-                <h2 className="text-lg font-semibold text-white">Uang Job & Pengeluaran</h2>
+                <h2 className="text-lg font-semibold text-white">Uang Job, Pengeluaran & QRIS GoPay</h2>
               </div>
             </div>
 
@@ -565,15 +565,21 @@ export default function KasPage() {
                         <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', {locale: idLocale})}</td>
                         <td className="px-6 py-4">
                           {trx.type === 'IN_JOB' && <span className="inline-flex items-center gap-1 text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3"/> Uang Job</span>}
-                          {trx.type === 'IN_OTHER' && <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3"/> Pemasukan</span>}
+                          {trx.type === 'IN_OTHER' && trx.source !== 'gobiz_webhook' && <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3"/> Pemasukan</span>}
+                          {trx.type === 'IN_OTHER' && trx.source === 'gobiz_webhook' && <span className="inline-flex items-center gap-1 text-cyan-400 bg-cyan-500/10 px-2 py-1 rounded text-xs font-bold"><ArrowUpCircle className="w-3 h-3"/> QRIS GoPay</span>}
                           {trx.type === 'OUT_EXPENSE' && <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs"><ArrowDownCircle className="w-3 h-3"/> Pengeluaran</span>}
                         </td>
-                        <td className="px-6 py-4 text-white">{trx.description}</td>
+                        <td className="px-6 py-4 text-white">
+                          {trx.description}
+                          {trx.source === 'gobiz_webhook' && trx.raw_payload?.order?.order_number && (
+                            <span className="block text-xs text-cyan-500/70 mt-1">ID: {trx.raw_payload.order.order_number}</span>
+                          )}
+                        </td>
                         <td className={`px-6 py-4 text-right font-medium ${trx.type === 'OUT_EXPENSE' ? 'text-rose-400' : 'text-emerald-400'}`}>
                           {trx.type === 'OUT_EXPENSE' ? '-' : '+'} Rp {trx.amount.toLocaleString('id-ID')}
                         </td>
                         <td className="px-4 py-4 text-center">
-                          {isKasAdmin && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>}
+                          {isKasAdmin && trx.source !== 'gobiz_webhook' && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>}
                         </td>
                       </tr>
                     ))
