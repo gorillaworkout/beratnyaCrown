@@ -97,6 +97,22 @@ export default function KasPage() {
 
       const results = await Promise.all(p);
       setAthletes(results[0]);
+      const dates = results[2];
+      setTrainingDates(dates);
+      
+      const allRecs = results[3] || [];
+      setAllRecords(allRecs);
+      
+      // Calculate global unpaid. For dates that have passed, if no record exists, they are considered Alpa (Rp 26000)
+      const todayDateStr = new Date().toISOString().split('T')[0];
+      const athletesMap = new Map(results[0].map((a: KasAthlete) => [a.id, a]));
+      const recordsByDateByAthlete = new Map<string, Map<string, KasRecord>>();
+      
+      allRecs.forEach((r: KasRecord) => {
+        if (!recordsByDateByAthlete.has(r.date)) recordsByDateByAthlete.set(r.date, new Map());
+        recordsByDateByAthlete.get(r.date)!.set(r.athleteId, r);
+      });
+      
       let summaryData = results[1];
       let autoUnpaidSum = 0;
       
@@ -111,30 +127,13 @@ export default function KasPage() {
       
       summaryData.totalBilled += autoUnpaidSum;
       setSummary(summaryData);
-      
-      const dates = results[2];
-      setTrainingDates(dates);
-      
       // Default selectedDate to latest training if not set
       if (selectedDate === "2026-04-01" && dates.length > 0 && activeTab === "daily" && !selectedDate) {
         setSelectedDate(dates[0]);
       }
       
-      const allRecs = results[3] || [];
-      setAllRecords(allRecs);
-      
       // Calculate global unpaid
-      // Calculate global unpaid. For dates that have passed, if no record exists, they are considered Alpa (Rp 26000)
-      const todayDateStr = new Date().toISOString().split('T')[0];
       const unpaid: KasRecord[] = [];
-      
-      const athletesMap = new Map(results[0].map((a: KasAthlete) => [a.id, a]));
-      const recordsByDateByAthlete = new Map<string, Map<string, KasRecord>>();
-      
-      allRecs.forEach((r: KasRecord) => {
-        if (!recordsByDateByAthlete.has(r.date)) recordsByDateByAthlete.set(r.date, new Map());
-        recordsByDateByAthlete.get(r.date)!.set(r.athleteId, r);
-      });
 
       dates.forEach((d: string) => {
         if (d > todayDateStr) return; // Ignore future dates
