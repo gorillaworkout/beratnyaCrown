@@ -23,7 +23,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 export default function KasPage() {
-  const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "qris" | "recap">("daily");
+  const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "recap">("daily");
 
   const [athletes, setAthletes] = useState<KasAthlete[]>([]);
   const [records, setRecords] = useState<KasRecord[]>([]);
@@ -386,9 +386,7 @@ export default function KasPage() {
             <button onClick={() => setActiveTab("transactions")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'transactions' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
               Uang Job & Pengeluaran
             </button>
-            <button onClick={() => setActiveTab("qris")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'qris' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              QRIS GoPay (Merchant)
-            </button>
+
             <button onClick={() => setActiveTab("recap")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'recap' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
               Export Rekap (CSV)
             </button>
@@ -404,9 +402,9 @@ export default function KasPage() {
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-            <p className="text-sm text-slate-400">Total Masuk QRIS GoPay</p>
+            <p className="text-sm text-slate-400">Uang Job & Pemasukan</p>
             <p className="mt-2 text-2xl font-bold text-cyan-400">
-              Rp {transactions.filter(t => t.source === 'gobiz_webhook').reduce((sum, t) => sum + (t.amount||0), 0).toLocaleString("id-ID")}
+              Rp {(summary.totalJob + summary.totalOtherIn).toLocaleString("id-ID")}
             </p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
@@ -475,15 +473,24 @@ export default function KasPage() {
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300 table-fixed">
+                <colgroup>
+                  <col className="w-auto" />
+                  <col className="w-[52px]" />
+                  <col className="w-[52px]" />
+                  <col className="w-[52px]" />
+                  <col className="w-[52px]" />
+                  <col className="w-[110px]" />
+                  <col className="w-[80px]" />
+                </colgroup>
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
-                    <th className="px-6 py-4 font-medium w-48 truncate">Nama Atlet</th>
-                    <th className="px-4 py-4 text-center font-medium w-20">Kas</th>
-                    <th className="px-4 py-4 text-center font-medium w-20">Telat</th>
-                    <th className="px-4 py-4 text-center font-medium w-36">Alpa (No Kabar)</th>
-                    <th className="px-4 py-4 text-center font-medium w-32">Pengecualian</th>
-                    <th className="px-4 py-4 text-right font-medium w-36">Tagihan</th>
-                    <th className="px-4 py-4 text-center font-medium w-28">Status</th>
+                    <th className="pl-6 pr-3 py-3 font-medium">Nama Atlet</th>
+                    <th className="px-1 py-3 text-center font-medium">Kas</th>
+                    <th className="px-1 py-3 text-center font-medium">Telat</th>
+                    <th className="px-1 py-3 text-center font-medium">Alpa</th>
+                    <th className="px-1 py-3 text-center font-medium">Izin</th>
+                    <th className="px-3 py-3 text-right font-medium">Tagihan</th>
+                    <th className="px-3 py-3 text-center font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
@@ -500,21 +507,25 @@ export default function KasPage() {
                       const record = getAthleteRecord(athlete.id!);
                       return (
                         <tr key={athlete.id} className="hover:bg-white/[0.02]">
-                          <td className="px-6 py-4 font-medium text-white">{athlete.name}</td>
-                          
-                          <td className="px-4 py-4 text-center">
+                          <td className="pl-6 pr-3 py-3 font-medium text-white truncate">{athlete.name}</td>
+                          <td className="px-1 py-3 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-4 py-4 text-center">
+                          <td className="px-1 py-3 text-center">
                             <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-4 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" /></td><td className="px-4 py-4 text-center"><input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" /></td>
-                          <td className="px-4 py-4 text-right font-bold text-cyan-400">
+                          <td className="px-1 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" />
+                          </td>
+                          <td className="px-1 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" />
+                          </td>
+                          <td className="px-3 py-3 text-right font-bold text-cyan-400">
                             Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
                           </td>
-                          <td className="px-4 py-4 text-center">
+                          <td className="px-3 py-3 text-center">
                             {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1.5 rounded-full w-20 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
                                 {record.isSettled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
                                 {record.isSettled ? "Lunas" : "Belum"}
                               </button>
@@ -526,8 +537,8 @@ export default function KasPage() {
                   )}
                   {/* Total Tagihan Hari ini */}
                   <tr className="bg-white/[0.03]">
-                    <td colSpan={6} className="px-4 py-4 text-right font-medium text-slate-400">Total Tagihan Sistem Hari Ini:</td>
-                    <td className="px-4 py-4 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
+                    <td colSpan={5} className="pl-6 pr-3 py-3 text-right font-medium text-slate-400">Total Tagihan Hari Ini:</td>
+                    <td className="px-3 py-3 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
                     <td></td>
                   </tr>
                 </tbody>
@@ -563,7 +574,7 @@ export default function KasPage() {
                   ) : transactions.length === 0 ? (
                     <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Belum ada catatan transaksi.</td></tr>
                   ) : (
-                    transactions.filter(t => t.source !== 'gobiz_webhook').map((trx) => (
+                    transactions.map((trx) => (
                       <tr key={trx.id} className="hover:bg-white/[0.02]">
                         <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', {locale: idLocale})}</td>
                         <td className="px-6 py-4">
@@ -590,61 +601,6 @@ export default function KasPage() {
         )}
 
         
-
-        {/* TAB: QRIS */}
-        {activeTab === "qris" && (
-          <section className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
-            <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <div className="flex items-center gap-3">
-                <div className="bg-cyan-500 p-2 rounded-xl">
-                  <Wallet className="h-4 w-4 text-black" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-semibold text-white">QRIS GoPay (Otomatis)</h2>
-                  <p className="text-xs text-slate-400">Total Saldo Masuk: Rp {transactions.filter(t => t.source === 'gobiz_webhook').reduce((sum, t) => sum + (t.amount||0), 0).toLocaleString("id-ID")}</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-white/5 text-xs uppercase text-slate-400">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Tanggal</th>
-                    <th className="px-6 py-4 font-medium">Metode</th>
-                    <th className="px-6 py-4 font-medium">Keterangan & Order ID</th>
-                    <th className="px-6 py-4 font-medium text-right">Nominal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {loading ? (
-                    <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">Memuat...</td></tr>
-                  ) : transactions.filter(t => t.source === 'gobiz_webhook').length === 0 ? (
-                    <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">Belum ada transaksi QRIS otomatis.</td></tr>
-                  ) : (
-                    transactions.filter(t => t.source === 'gobiz_webhook').map((trx) => (
-                      <tr key={trx.id} className="hover:bg-white/[0.02]">
-                        <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', {locale: idLocale})}</td>
-                        <td className="px-6 py-4">
-                          <span className="inline-flex items-center gap-1 text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 px-2 py-1 rounded text-xs font-bold">QRIS</span>
-                        </td>
-                        <td className="px-6 py-4 text-white">
-                          {trx.description}
-                          {trx.raw_payload?.order?.order_number && (
-                            <span className="block text-xs text-cyan-500/70 mt-1">ID: {trx.raw_payload.order.order_number}</span>
-                          )}
-                        </td>
-                        <td className="px-6 py-4 text-right font-medium text-emerald-400">
-                          + Rp {trx.amount.toLocaleString('id-ID')}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </section>
-        )}
 
         {/* TAB 3: RECAP */}
         {activeTab === "recap" && (
