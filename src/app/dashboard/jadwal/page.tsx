@@ -228,6 +228,7 @@ export default function JadwalPage() {
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
+  const [calendarVersion, setCalendarVersion] = useState(1);
 
   // ─── Firestore Listeners ─────────────────────────────────────────────────
 
@@ -240,6 +241,16 @@ export default function JadwalPage() {
         ...(d.data() as Omit<ScheduleEntry, "id">),
       }));
       setScheduleData(schedules);
+      
+      // Fetch calendar version
+      try {
+        const verDoc = await getDoc(doc(db, "crown-system", "calendar-version"));
+        if (verDoc.exists()) {
+          setCalendarVersion(verDoc.data().version || 1);
+        }
+      } catch (e) {
+        console.error(e);
+      }
       setFirestoreLoading(false);
       setTimeout(() => setIsSyncing(false), 500);
     } catch (e) {
@@ -298,6 +309,15 @@ export default function JadwalPage() {
         }));
         setScheduleData(schedules);
         setFirestoreLoading(false);
+      }
+    );
+
+    const unsubVersion = onSnapshot(
+      doc(db, "crown-system", "calendar-version"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setCalendarVersion(docSnap.data().version || 1);
+        }
       }
     );
 
@@ -958,7 +978,7 @@ export default function JadwalPage() {
         {/* Calendar View Card */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <CardTitle className="text-white">📅 Kalender</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">📅 Kalender <span className="text-xs font-normal text-slate-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">v0.1.{calendarVersion}</span></CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Month Navigation */}
