@@ -49,7 +49,7 @@ import {
   doc,
   setDoc,
   onSnapshot,
-  updateDoc,
+  updateDoc, getDoc,
 } from "firebase/firestore";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
