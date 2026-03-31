@@ -189,6 +189,7 @@ export default function JadwalPage() {
     timeStart: "",
     timeEnd: "",
     note: "",
+    shirtColorName: "",
   });
 
   // Add dialog state
@@ -481,6 +482,8 @@ export default function JadwalPage() {
     const date = new Date(editingDate + "T00:00:00");
     const dayOfWeek = date.getDay();
 
+    const selectedShirt = SHIRT_COLORS.find(c => c.name === editForm.shirtColorName);
+    
     const scheduleEntry: Omit<ScheduleEntry, "id"> = {
       date: editingDate,
       dayName: DAY_NAMES_ID[dayOfWeek],
@@ -489,6 +492,7 @@ export default function JadwalPage() {
       timeStart: editForm.timeStart,
       timeEnd: editForm.timeEnd,
       note: editForm.note,
+      ...(selectedShirt ? { shirtColor: selectedShirt } : {}),
     };
 
     // Check if entry already exists
