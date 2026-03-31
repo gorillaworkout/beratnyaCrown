@@ -102,7 +102,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           }
           
           if (colorIdx === -1 && customData.status === 'latihan') {
-              colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+              colorIdx = getDeterministicShirtColor(dateStr);
           }
           
           if (colorIdx !== -1) prevColorIdx = colorIdx;
@@ -130,7 +130,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
              timeStart: d.getDay() === 0 ? "10:00" : "19:00",
              timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
              holidayName: holidayCheck,
-             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr, prevColorIdx)]
+             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr)]
            });
         }
         continue;
@@ -138,7 +138,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
 
       // Regular schedule
       if (REGULAR_DAYS.has(d.getDay())) {
-        const colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+        const colorIdx = getDeterministicShirtColor(dateStr);
         prevColorIdx = colorIdx;
         schedule.push({
           date: dateStr,
