@@ -1,0 +1,11 @@
+--- src/app/dashboard/kas/page.tsx
++++ src/app/dashboard/kas/page.tsx
+@@ -37,7 +37,7 @@
+   const { user } = useAuth();
+   const [isKasAdmin, setIsKasAdmin] = useState(false);
+   
+-  const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "recap">("daily");
++  const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "qris" | "recap">("daily");
+ 
+   const [athletes, setAthletes] = useState<KasAthlete[]>([]);
+   const [records, setRecords] = useState<KasRecord[]>([]);

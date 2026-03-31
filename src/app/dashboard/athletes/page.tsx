@@ -18,7 +18,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, XCircle, Users } from "lucide-react";
+import { ShieldAlert, CheckCircle2, XCircle, Users, UserPlus, Trash2, Edit2, Check } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { db } from "@/lib/firebase";
+import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc } from "firebase/firestore";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 type FirebaseUser = {
   uid: string;
@@ -26,6 +31,7 @@ type FirebaseUser = {
   displayName: string;
   photoURL: string;
   disabled: boolean;
+  role?: string;
   creationTime: string;
   lastSignInTime: string;
   lastLoginCrown: string;
@@ -37,12 +43,62 @@ export default function AthletesDashboardPage() {
   const [usersList, setUsersList] = useState<FirebaseUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [crownAthletes, setCrownAthletes] = useState<{id: string; name: string}[]>([]);
+  const [newAthleteName, setNewAthleteName] = useState("");
+  const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
+  const [editingAthleteName, setEditingAthleteName] = useState("");
+
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "crown-athletes"), (snap) => {
+      setCrownAthletes(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name || "" })));
+    });
+    return () => unsub();
+  }, []);
+
+  const handleAddAthlete = async () => {
+    if (!newAthleteName.trim()) return;
+    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim() });
+    setNewAthleteName("");
+  };
+
+  const handleUpdateAthlete = async (id: string) => {
+    if (!editingAthleteName.trim()) return;
+    try {
+      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim() });
+      setEditingAthleteId(null);
+      setEditingAthleteName("");
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleDeleteAthlete = async (id: string) => {
+    if (window.confirm("Hapus atlit ini dari daftar?")) {
+      await deleteDoc(doc(db, "crown-athletes", id));
+    }
+  };
 
   useEffect(() => {
     if (isAdmin) {
       fetchUsers();
     }
   }, [isAdmin]);
+
+  const handleRoleChange = async (uid: string, action: "make_admin" | "remove_admin") => {
+    setActionLoading(uid + action);
+    try {
+      const res = await fetch("/api/admin/users/role", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ uid, action }),
+      });
+      if (res.ok) fetchUsers();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setActionLoading(null);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -116,7 +172,14 @@ export default function AthletesDashboardPage() {
           </p>
         </div>
 
-        <Card className="border-rose-500/20 bg-rose-950/10 backdrop-blur-md shadow-xl text-slate-100">
+        <Tabs defaultValue="users" className="w-full">
+          <TabsList className="bg-black/40 border border-white/10 mb-4">
+            <TabsTrigger value="users" className="data-[state=active]:bg-rose-500/20 data-[state=active]:text-rose-300 text-slate-400">Pengguna App</TabsTrigger>
+            <TabsTrigger value="athletes" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-300 text-slate-400">Daftar Atlit (Latihan)</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="users">
+            <Card className="border-rose-500/20 bg-rose-950/10 backdrop-blur-md shadow-xl text-slate-100">
           <CardHeader className="pb-3 border-b border-white/5">
             <div className="flex items-center justify-between">
               <div>
@@ -142,19 +205,21 @@ export default function AthletesDashboardPage() {
                     <TableHead className="text-slate-400 text-xs min-w-[200px]">Data Akun</TableHead>
                     <TableHead className="text-slate-400 text-xs">Aktivitas</TableHead>
                     <TableHead className="text-slate-400 text-xs text-center w-24">Akses Crown</TableHead>
+                    <TableHead className="text-slate-400 text-xs text-center w-24">Akses Role</TableHead>
+                    <TableHead className="text-slate-400 text-xs text-center w-24">Role</TableHead>
                     <TableHead className="text-slate-400 text-xs text-center w-32">Aksi Bahaya</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoadingUsers ? (
                     <TableRow className="hover:bg-white/5">
-                      <TableCell colSpan={5} className="text-sm text-center py-6 text-slate-400">
+                      <TableCell colSpan={6} className="text-sm text-center py-6 text-slate-400">
                         Menarik data dari Firebase Auth dan Firestore...
                       </TableCell>
                     </TableRow>
                   ) : usersList.length === 0 ? (
                     <TableRow className="hover:bg-white/5">
-                      <TableCell colSpan={5} className="text-sm text-center py-6 text-slate-400">
+                      <TableCell colSpan={6} className="text-sm text-center py-6 text-slate-400">
                         Belum ada atlet yang mendaftar.
                       </TableCell>
                     </TableRow>
@@ -195,6 +260,29 @@ export default function AthletesDashboardPage() {
                             <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-normal"><CheckCircle2 className="w-3 h-3 mr-1" /> Aktif</Badge>
                           )}
                         </TableCell>
+                        <TableCell className="text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {usr.email === "darmawanbayu1@gmail.com" ? (
+                              <Badge className="bg-rose-500/20 text-rose-400 border border-rose-500/30">Owner</Badge>
+                            ) : usr.role === "admin" ? (
+                              <button
+                                onClick={() => handleRoleChange(usr.uid, "remove_admin")}
+                                disabled={actionLoading !== null}
+                                className="px-2.5 py-1 rounded text-xs bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 transition-colors border border-cyan-500/30"
+                              >
+                                {actionLoading === usr.uid + "remove_admin" ? "..." : "Cabut Admin"}
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleRoleChange(usr.uid, "make_admin")}
+                                disabled={actionLoading !== null}
+                                className="px-2.5 py-1 rounded text-xs bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 transition-colors border border-emerald-500/30"
+                              >
+                                {actionLoading === usr.uid + "make_admin" ? "..." : "Jadi Admin"}
+                              </button>
+                            )}
+                          </div>
+                        </TableCell>
                         <TableCell>
                           <div className="flex items-center justify-center gap-2">
                             {usr.email !== "darmawanbayu1@gmail.com" && (
@@ -224,7 +312,73 @@ export default function AthletesDashboardPage() {
               </Table>
             </div>
           </CardContent>
-        </Card>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="athletes">
+            <Card className="border-cyan-500/20 bg-cyan-950/10 backdrop-blur-md shadow-xl text-slate-100">
+              <CardHeader className="pb-3 border-b border-white/5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="text-lg text-cyan-100 flex items-center gap-2">
+                      <UserPlus className="h-5 w-5 text-cyan-400" />
+                      Daftar Atlit Latihan
+                    </CardTitle>
+                    <CardDescription className="text-cyan-200/60 mt-1">
+                      Nama di sini otomatis muncul di formulir absensi latihan.
+                    </CardDescription>
+                  </div>
+                  <Badge className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                    {crownAthletes.length} Atlit
+                  </Badge>
+                </div>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-4">
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Nama Atlit Baru..."
+                    value={newAthleteName}
+                    onChange={(e) => setNewAthleteName(e.target.value)}
+                    className="bg-black/50 border-white/10 text-white max-w-sm"
+                  />
+                  <Button onClick={handleAddAthlete} className="bg-cyan-600 hover:bg-cyan-500 text-white">Tambah</Button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {crownAthletes.sort((a, b) => a.name.localeCompare(b.name)).map(ath => (
+                    <div key={ath.id} className="flex items-center justify-between bg-black/40 border border-white/10 p-3 rounded-lg">
+                      {editingAthleteId === ath.id ? (
+                        <div className="flex items-center gap-2 w-full mr-2">
+                          <Input 
+                            value={editingAthleteName} 
+                            onChange={(e) => setEditingAthleteName(e.target.value)}
+                            onKeyDown={(e) => { if(e.key === "Enter") handleUpdateAthlete(ath.id); if(e.key === "Escape") setEditingAthleteId(null); }}
+                            className="h-7 text-xs bg-black/50 border-white/10 text-white w-full"
+                            autoFocus
+                          />
+                          <button onClick={() => handleUpdateAthlete(ath.id)} className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 p-1.5 rounded transition shrink-0">
+                            <Check className="h-4 w-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <span className="text-sm text-slate-200">{ath.name}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => { setEditingAthleteId(ath.id); setEditingAthleteName(ath.name); }} className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1.5 rounded transition">
+                              <Edit2 className="h-4 w-4" />
+                            </button>
+                            <button onClick={() => handleDeleteAthlete(ath.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition">
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </main>
   );

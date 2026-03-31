@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert } from "lucide-react";
+import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell, HeartPulse } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const getNavItems = (isAdmin: boolean) => [
@@ -28,8 +28,23 @@ const getNavItems = (isAdmin: boolean) => [
     href: "/dashboard/absensi",
     icon: ClipboardCheck,
   },
+  {
+    label: "P3K Crown",
+    href: "/dashboard/p3k",
+    icon: HeartPulse,
+  },
+  {
+    label: "Kas Crown",
+    href: "/dashboard/kas",
+    icon: Calculator,
+  },
   ...(isAdmin
     ? [
+        // {
+        //   label: "Workout (Solo Leveling)",
+        //   href: "/dashboard/workout",
+        //   icon: Dumbbell,
+        // },
         {
           label: "Data Atlet",
           href: "/dashboard/athletes",
@@ -80,7 +95,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3 border-b border-white/10 p-5">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/20 bg-white/10">
             <Image
-              src="/crown-logo.jpg"
+              src="/crown-logo.png"
               alt="Crown Allstar"
               width={32}
               height={32}

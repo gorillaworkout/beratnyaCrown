@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -33,7 +33,11 @@ import {
   X,
   Clock,
   Edit2,
+  UserX,
+  Search,
+  RefreshCw,
 } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
@@ -45,7 +49,7 @@ import {
   doc,
   setDoc,
   onSnapshot,
-  updateDoc,
+  updateDoc, getDoc,
 } from "firebase/firestore";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -65,6 +69,17 @@ const DAY_NAMES_ID = [
 const SHORT_DAY_NAMES = ["Sen", "Sel", "Rab", "Kam", "Jum", "Sab", "Min"];
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
 const TRAINING_START = new Date(2026, 3, 1); // April 1, 2026
+
+const FALLBACK_ATHLETES = [
+  "Bayu", "Helmi", "Kurniawan", "Karysa", "Amalia",
+  "Moch Ihsan Tripamungkas", "Muhammad Akmal", "Muhammad Rizki Firdaus",
+  "Nanda Natasya", "Renaldy Hardyanto", "Renanda Suwandi Putri",
+  "Rangga Cornelis", "Wahyu Cahyadi", "Kijay", "Aissa Raihana Khyani Putri",
+  "Aurel Zahra Dila", "Dewi Ramdhan Tri Mulya", "Kaisha Lula Arsyawijaya",
+  "Malika Sakhi Nurachman", "Namina Mikayla Mikha", "Nadiya Hazizah Mulyanto",
+  "Selma Daiva Fedora", "Siti Ramadhani", "Radinda Feyfey",
+  "Zihan Yurifa Aldevara", "Fairuz Kania",
+];
 
 const DEFAULT_EVENTS: Omit<CrownEvent, "id">[] = [
   {
@@ -130,19 +145,31 @@ function formatMonthYear(year: number, month: number): string {
   });
 }
 
-function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    const char = dateStr.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
+function getDeterministicShirtColor(dateStr: string): number {
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return 0;
+  const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  const dayOfWeek = date.getDay(); // 0: Minggu, 3: Rabu, 6: Sabtu
   
-  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
-  if (colorIndex === prevColorIndex) {
-    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
-  }
-  return colorIndex;
+  // Hitung selisih hari dari patokan awal (Rabu, 1 April 2026)
+  const refDate = new Date(2026, 3, 1);
+  const utc1 = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const utc2 = Date.UTC(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+  const diffDays = Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
+  
+  const weekNumber = Math.floor(diffDays / 7);
+  
+  let sessionIndexInWeek = 0;
+  if (dayOfWeek === 3) sessionIndexInWeek = 0; // Rabu
+  else if (dayOfWeek === 6) sessionIndexInWeek = 1; // Sabtu
+  else if (dayOfWeek === 0) sessionIndexInWeek = 2; // Minggu
+  else return Math.abs(diffDays) % SHIRT_COLORS.length; // Hari lain
+  
+  // Hitung index sesi global (3 kali latihan per minggu)
+  const globalSessionIndex = (weekNumber * 3) + sessionIndexInWeek;
+  
+  // Menggunakan array colors [0,1,2,3,4,5] secara berurutan dan berulang sempurna (Round-Robin)
+  return Math.abs(globalSessionIndex) % SHIRT_COLORS.length;
 }
 
 function formatTime(timeStr: string): string {
@@ -174,15 +201,16 @@ export default function JadwalPage() {
     timeStart: "",
     timeEnd: "",
     note: "",
+    shirtColorName: "",
   });
 
   // Add dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [addForm, setAddForm] = useState({
     date: "",
-    status: "latihan" as ScheduleStatus,
-    timeStart: "07:00",
-    timeEnd: "10:00",
+    status: "tambahan" as ScheduleStatus,
+    timeStart: "19:00",
+    timeEnd: "22:00",
     note: "",
   });
 
@@ -190,7 +218,47 @@ export default function JadwalPage() {
   const [newEventName, setNewEventName] = useState("");
   const [newEventDate, setNewEventDate] = useState("");
 
+  // Absence state
+  const [absences, setAbsences] = useState<{date: string, absences: {name: string, reason: string}[]}[]>([]);
+  const [absenceDialogOpen, setAbsenceDialogOpen] = useState(false);
+  const [selectedAbsenceDate, setSelectedAbsenceDate] = useState("");
+  const [absenceForm, setAbsenceForm] = useState<{name: string, reason: string}[]>([]);
+  const [athleteSearch, setAthleteSearch] = useState("");
+  const [dynamicAthletes, setDynamicAthletes] = useState<string[]>([]);
+
+  // Sync state
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [calendarVersion, setCalendarVersion] = useState(1);
+
   // ─── Firestore Listeners ─────────────────────────────────────────────────
+
+  const fetchScheduleData = useCallback(async () => {
+    try {
+      setIsSyncing(true);
+      const scheduleSnapshot = await getDocs(collection(db, "crown-schedules"));
+      const schedules: ScheduleEntry[] = scheduleSnapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as Omit<ScheduleEntry, "id">),
+      }));
+      setScheduleData(schedules);
+      
+      // Fetch calendar version
+      try {
+        const verDoc = await getDoc(doc(db, "crown-system", "calendar-version"));
+        if (verDoc.exists()) {
+          setCalendarVersion(verDoc.data().version || 1);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+      setFirestoreLoading(false);
+      setTimeout(() => setIsSyncing(false), 500);
+    } catch (e) {
+      console.error("Error syncing schedule:", e);
+      setIsSyncing(false);
+      setFirestoreLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     if (authLoading) return;
@@ -219,6 +287,18 @@ export default function JadwalPage() {
       }
     );
 
+    // Listen to crown-athletes
+    const unsubAthletes = onSnapshot(collection(db, "crown-athletes"), (snap) => {
+      const names = snap.docs.map(d => d.data().name).filter(Boolean).sort();
+      if (names.length > 0) setDynamicAthletes(names);
+    });
+
+    // Listen to crown-absences
+    const unsubAbsences = onSnapshot(collection(db, "crown-absences"), (snap) => {
+      const data = snap.docs.map(d => ({ date: d.id, ...(d.data() as any) }));
+      setAbsences(data);
+    });
+
     // Listen to crown-schedules (new collection for editable schedules)
     const unsubSchedules = onSnapshot(
       collection(db, "crown-schedules"),
@@ -232,9 +312,20 @@ export default function JadwalPage() {
       }
     );
 
+    const unsubVersion = onSnapshot(
+      doc(db, "crown-system", "calendar-version"),
+      (docSnap) => {
+        if (docSnap.exists()) {
+          setCalendarVersion(docSnap.data().version || 1);
+        }
+      }
+    );
+
     return () => {
       unsubEvents();
       unsubSchedules();
+      unsubAthletes();
+      unsubAbsences();
     };
   }, [authLoading]);
 
@@ -270,18 +361,24 @@ export default function JadwalPage() {
         (!customSchedule && isRegular && !isEventDay);
       
       if (isTrainingDay) {
-        const colorIndex = getDeterministicShirtColor(dateStr, prevColorIndex);
+        const colorIndex = getDeterministicShirtColor(dateStr);
         currentShirtColor = SHIRT_COLORS[colorIndex];
         prevColorIndex = colorIndex;
       }
 
       if (customSchedule) {
+        // Fallback time to default if custom schedule doesn't have it defined properly
+        const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+        const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+        
         entries.push({
           ...customSchedule,
           date: dateStr,
           dayName,
           isRegular: REGULAR_DAYS.has(dayOfWeek),
-          shirtColor: currentShirtColor,
+          timeStart: customSchedule.timeStart || defaultTimeStart,
+          timeEnd: customSchedule.timeEnd || defaultTimeEnd,
+          shirtColor: customSchedule.shirtColor || currentShirtColor,
           holidayName,
           eventName: isEventDay ? isEventDay.name : undefined,
           eventEmoji: isEventDay ? isEventDay.emoji : undefined,
@@ -328,7 +425,7 @@ export default function JadwalPage() {
     }
 
     return entries.sort((a, b) => a.date.localeCompare(b.date));
-  }, [currentYear, currentMonth, scheduleData]);
+  }, [currentYear, currentMonth, scheduleData, events]);
 
   // ─── Calendar Grid Memo ──────────────────────────────────────────────────
 
@@ -380,6 +477,20 @@ export default function JadwalPage() {
 
   const triggerCalendarSync = async () => {
     try {
+      setIsSyncing(true);
+      // Increment the version document
+      try {
+        const verRef = doc(db, "crown-system", "calendar-version");
+        const verDoc = await getDoc(verRef);
+        if (verDoc.exists()) {
+          await updateDoc(verRef, { version: (verDoc.data().version || 0) + 1, lastUpdated: new Date().toISOString() });
+        } else {
+          await setDoc(verRef, { version: 1, lastUpdated: new Date().toISOString() });
+        }
+      } catch (e) {
+        console.error("Version tracking error", e);
+      }
+
       const adminKey = "dupoin123";
       await fetch("/api/calendar/sync", {
         method: "POST",
@@ -388,6 +499,8 @@ export default function JadwalPage() {
       });
     } catch {
       // Silent fail — calendar sync is best-effort
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1000);
     }
   };
 
@@ -395,11 +508,19 @@ export default function JadwalPage() {
 
   const openEditDialog = (entry: ScheduleEntry) => {
     setEditingDate(entry.date);
+    
+    // Apply correct default time based on day if missing
+    const dateObj = new Date(entry.date + "T00:00:00");
+    const dayOfWeek = dateObj.getDay();
+    const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+    const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+    
     setEditForm({
       status: entry.status,
-      timeStart: entry.timeStart || "07:00",
-      timeEnd: entry.timeEnd || "10:00",
+      timeStart: entry.timeStart || defaultTimeStart,
+      timeEnd: entry.timeEnd || defaultTimeEnd,
       note: entry.note || "",
+      shirtColorName: entry.shirtColor?.name || "",
     });
     setEditDialogOpen(true);
   };
@@ -410,6 +531,8 @@ export default function JadwalPage() {
     const date = new Date(editingDate + "T00:00:00");
     const dayOfWeek = date.getDay();
 
+    const selectedShirt = SHIRT_COLORS.find(c => c.name === editForm.shirtColorName);
+    
     const scheduleEntry: Omit<ScheduleEntry, "id"> = {
       date: editingDate,
       dayName: DAY_NAMES_ID[dayOfWeek],
@@ -418,6 +541,7 @@ export default function JadwalPage() {
       timeStart: editForm.timeStart,
       timeEnd: editForm.timeEnd,
       note: editForm.note,
+      ...(selectedShirt ? { shirtColor: selectedShirt } : {}),
     };
 
     // Check if entry already exists
@@ -469,9 +593,9 @@ export default function JadwalPage() {
     setAddDialogOpen(false);
     setAddForm({
       date: "",
-      status: "latihan",
-      timeStart: "07:00",
-      timeEnd: "10:00",
+      status: "tambahan",
+      timeStart: "19:00",
+      timeEnd: "22:00",
       note: "",
     });
   };
@@ -550,6 +674,69 @@ export default function JadwalPage() {
     return count;
   };
 
+  // ─── Absence Management ──────────────────────────────────────────────
+
+  const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES;
+
+  const openAbsenceDialog = (dateStr: string) => {
+    setSelectedAbsenceDate(dateStr);
+    setAthleteSearch("");
+    const existing = absences.find(a => a.date === dateStr);
+    setAbsenceForm(existing?.absences || []);
+    setAbsenceDialogOpen(true);
+  };
+
+  const toggleAbsenceAthlete = (name: string) => {
+    setAbsenceForm(prev => {
+      if (prev.find(a => a.name === name)) {
+        return prev.filter(a => a.name !== name);
+      }
+      return [...prev, { name, reason: "" }];
+    });
+  };
+
+  const updateAbsenceReason = (name: string, reason: string) => {
+    setAbsenceForm(prev => prev.map(a => a.name === name ? { ...a, reason } : a));
+  };
+
+  const saveAbsences = async () => {
+    if (!selectedAbsenceDate) return;
+    await setDoc(doc(db, "crown-absences", selectedAbsenceDate), {
+      date: selectedAbsenceDate,
+      absences: absenceForm,
+    });
+    setAbsenceDialogOpen(false);
+  };
+
+  const getAbsenceCount = (dateStr: string): number => {
+    const rec = absences.find(a => a.date === dateStr);
+    return rec?.absences?.length || 0;
+  };
+
+  const getFullTeamSessionsUntil = (targetDateStr: string): number => {
+    const targetDate = new Date(targetDateStr + "T00:00:00");
+    const current = new Date();
+    current.setHours(0, 0, 0, 0);
+    let count = 0;
+    while (current < targetDate) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+      const dayOfWeek = current.getDay();
+      const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
+      const customSchedule = scheduleData.find(s => s.date === dateStr);
+      const isEvent = events.some(e => e.date === dateStr);
+      let isTrainingDay = false;
+      if (customSchedule) {
+        isTrainingDay = customSchedule.status === "latihan" || customSchedule.status === "tambahan";
+      } else if (isRegular && !isEvent) {
+        isTrainingDay = true;
+      }
+      const absCt = getAbsenceCount(dateStr);
+      if (isTrainingDay && absCt === 0) count++;
+      current.setDate(current.getDate() + 1);
+    }
+    return count;
+  };
+
   // ─── Loading State ───────────────────────────────────────────────────────
 
   if (authLoading || firestoreLoading) {
@@ -568,18 +755,21 @@ export default function JadwalPage() {
     if (entryObj.status === "libur") return "bg-gradient-to-br from-red-500 to-red-600";
     if (entryObj.status === "event") return "bg-gradient-to-br from-indigo-500 to-purple-600";
     if (entryObj.holidayName && entryObj.status !== "tambahan" && entryObj.status !== "latihan" && entryObj.status !== "event") return "bg-gradient-to-br from-zinc-600 to-zinc-800";
-    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
-    // Latihan Biasa -> ikuti warna baju
-    if (entryObj.shirtColor) {
+    
+    // Jika Latihan / Latihan Tambahan dan ada warna bajunya, paksa ikuti warna bajunya
+    if ((entryObj.status === "latihan" || entryObj.status === "tambahan") && entryObj.shirtColor) {
         switch(entryObj.shirtColor.name) {
           case "Merah": return "bg-gradient-to-br from-red-500 to-red-700";
           case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
           case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
           case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
-          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300"; // Teks jadi gelap untuk putih
+          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300";
           case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
         }
     }
+    
+    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
+    
     return "bg-gradient-to-br from-blue-500 to-blue-600";
   };
 
@@ -596,7 +786,7 @@ export default function JadwalPage() {
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
       <div className="mx-auto max-w-5xl space-y-6">
         {/* Header */}
-        <div className="text-center space-y-2 py-6">
+        <div className="text-center space-y-2 py-6 relative">
           <div className="flex items-center justify-center gap-3">
             <Calendar className="h-8 w-8 text-cyan-400" />
             <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -606,6 +796,17 @@ export default function JadwalPage() {
           <p className="text-slate-400 text-sm">
             Rabu • Sabtu • Minggu + Latihan Tambahan
           </p>
+          
+          <Button
+            onClick={fetchScheduleData}
+            disabled={isSyncing}
+            variant="outline"
+            size="sm"
+            className={`absolute top-6 right-0 border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:text-cyan-300 transition-all ${isSyncing ? "opacity-50 cursor-not-allowed" : ""}`}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${isSyncing ? "animate-spin" : ""}`} />
+            Sync Jadwal
+          </Button>
         </div>
 
         {/* Summary Cards */}
@@ -678,6 +879,33 @@ export default function JadwalPage() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
+            {/* Full Team Summary */}
+            {(() => {
+              const kejurda = events.find(e => e.name.toLowerCase().includes("kejurda"));
+              const kejurnas = events.find(e => e.name.toLowerCase().includes("kejurnas"));
+              const hasKejurda = kejurda && new Date(kejurda.date) > new Date();
+              const hasKejurnas = kejurnas && new Date(kejurnas.date) > new Date();
+              if (!hasKejurda && !hasKejurnas) return null;
+              return (
+                <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-amber-500/10 to-cyan-500/10 border border-white/10 rounded-lg px-4 py-3 mb-1">
+                  <span className="text-sm text-slate-300 font-medium">🔥 Sisa Full Team:</span>
+                  {hasKejurda && (
+                    <span className="text-sm">
+                      <span className="text-amber-400 font-bold">{getFullTeamSessionsUntil(kejurda.date)}x</span>
+                      <span className="text-slate-400 ml-1">ke Kejurda</span>
+                    </span>
+                  )}
+                  {hasKejurda && hasKejurnas && <span className="text-slate-600">•</span>}
+                  {hasKejurnas && (
+                    <span className="text-sm">
+                      <span className="text-cyan-400 font-bold">{getFullTeamSessionsUntil(kejurnas.date)}x</span>
+                      <span className="text-slate-400 ml-1">ke Kejurnas</span>
+                    </span>
+                  )}
+                </div>
+              );
+            })()}
+
             {events.length === 0 && (
               <p className="text-slate-500 text-sm text-center py-4">
                 Belum ada event
@@ -766,7 +994,7 @@ export default function JadwalPage() {
         {/* Calendar View Card */}
         <Card className={glassCardClass}>
           <CardHeader>
-            <CardTitle className="text-white">📅 Kalender</CardTitle>
+            <CardTitle className="text-white flex items-center gap-2">📅 Kalender <span className="text-xs font-normal text-slate-400 bg-white/5 px-2 py-0.5 rounded-full border border-white/10">v0.1.{calendarVersion}</span></CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Month Navigation */}
@@ -854,26 +1082,6 @@ export default function JadwalPage() {
                 const entry = schedule.find((s) => s.date === dateStr);
                 const isToday = dateStr === todayStr;
                 const isPast = dateStr < todayStr;
-
-  const getStatusColor = (entryObj?: ScheduleEntry) => {
-    if (!entryObj) return "";
-    if (entryObj.status === "libur") return "bg-gradient-to-br from-red-500 to-red-600";
-    if (entryObj.status === "event") return "bg-gradient-to-br from-indigo-500 to-purple-600";
-    if (entryObj.holidayName && entryObj.status !== "tambahan" && entryObj.status !== "latihan" && entryObj.status !== "event") return "bg-gradient-to-br from-zinc-600 to-zinc-800";
-    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
-    // Latihan Biasa -> ikuti warna baju
-    if (entryObj.shirtColor) {
-        switch(entryObj.shirtColor.name) {
-          case "Merah": return "bg-gradient-to-br from-red-500 to-red-700";
-          case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
-          case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
-          case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
-          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300"; // Teks jadi gelap untuk putih
-          case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
-        }
-    }
-    return "bg-gradient-to-br from-blue-500 to-blue-600";
-  };
 
                 const getStatusIcon = (status?: ScheduleStatus, entryObj?: ScheduleEntry) => {
                   switch (status) {
@@ -984,6 +1192,19 @@ export default function JadwalPage() {
                 {totalSessions} sesi latihan •{" "}
                 {formatMonthYear(currentYear, currentMonth)}
               </CardDescription>
+              {/* prevMonth in daftar jadwal */}
+              <div className="flex items-center gap-2 mt-2">
+                <Button variant="ghost" size="icon" onClick={prevMonth} className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10">
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-slate-300 min-w-[120px] text-center">{formatMonthYear(currentYear, currentMonth)}</span>
+                <Button variant="ghost" size="icon" onClick={nextMonth} className="h-7 w-7 text-slate-400 hover:text-white hover:bg-white/10">
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="sm" onClick={goToday} className="h-7 text-xs text-slate-400 hover:text-white hover:bg-white/10">
+                  Hari Ini
+                </Button>
+              </div>
             </div>
             {isAdmin && (
               <Button
@@ -1074,7 +1295,19 @@ export default function JadwalPage() {
                         >
                           {statusBadge.label}
                         </Badge>
+                        {(entry.status === "latihan" || entry.status === "tambahan") && (() => {
+                          const absCount = getAbsenceCount(entry.date);
+                          if (absCount > 0) return <Badge className="bg-red-500/20 text-red-400 border-red-500/20 text-[10px] px-1.5">⚠️ Minus {absCount} Orang</Badge>;
+                          return <Badge className="bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-amber-400 border-amber-500/20 text-[10px] px-1.5">🔥 FULL TEAM READY</Badge>;
+                        })()}
                       </div>
+                      
+                      {/* Show names if absent */}
+                      {(entry.status === "latihan" || entry.status === "tambahan") && getAbsenceCount(entry.date) > 0 && (
+                        <div className="mt-1 text-[10px] text-red-300/80 leading-tight">
+                          {absences.find(a => a.date === entry.date)?.absences.map(a => a.name).join(", ")}
+                        </div>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       {entry.timeStart && entry.timeEnd ? (
@@ -1106,6 +1339,35 @@ export default function JadwalPage() {
                 Tidak ada jadwal latihan bulan ini.
               </p>
             )}
+          </CardContent>
+        </Card>
+
+        
+        {/* Rekap Izin Bulan Ini */}
+        <Card className={glassCardClass}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-white">📊 Rekap Izin Bulan Ini</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              const monthPrefix = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+              const monthAbsences = absences.filter(a => a.date.startsWith(monthPrefix) && a.absences?.length > 0).sort((a,b) => a.date.localeCompare(b.date));
+              if (monthAbsences.length === 0) return <p className="text-slate-400 text-sm">Tidak ada yang izin di bulan ini. FULL TEAM! 🔥</p>;
+              return (
+                <div className="space-y-3">
+                  {monthAbsences.map(rec => (
+                    <div key={rec.date} className="border border-white/10 rounded-lg p-3 bg-black/20">
+                      <p className="text-sm font-medium text-white mb-1">{new Date(rec.date + "T00:00:00").toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}</p>
+                      <div className="flex flex-wrap gap-1">
+                        {rec.absences.map((a: any, i: number) => (
+                          <Badge key={i} className="bg-red-500/20 text-red-300 border-red-500/20 text-xs">{a.name}{a.reason ? ` (${a.reason})` : ""}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </CardContent>
         </Card>
 
@@ -1154,6 +1416,7 @@ export default function JadwalPage() {
             </div>
 
             {editForm.status !== "libur" && editForm.status !== "event" && (
+              <>
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-sm text-slate-400 block mb-1.5">
@@ -1182,6 +1445,32 @@ export default function JadwalPage() {
                   />
                 </div>
               </div>
+              
+              <div className="mt-4">
+                <label className="text-sm text-slate-400 block mb-1.5">
+                  Warna Baju (Opsional)
+                </label>
+                <Select
+                  value={editForm.shirtColorName || "auto"}
+                  onValueChange={(v) => setEditForm({ ...editForm, shirtColorName: v === "auto" ? "" : v })}
+                >
+                  <SelectTrigger className="bg-white/5 border-white/10 text-white w-full">
+                    <SelectValue placeholder="Otomatis" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-white/10 text-white">
+                    <SelectItem value="auto" className="focus:bg-slate-700 focus:text-white cursor-pointer">Otomatis / Ikuti Algoritma</SelectItem>
+                    {SHIRT_COLORS.map(c => (
+                      <SelectItem key={c.name} value={c.name} className="focus:bg-slate-700 focus:text-white cursor-pointer">
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full border border-white/20" style={{backgroundColor: c.hex}}></div>
+                          {c.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              </>
             )}
 
             <div>
@@ -1222,7 +1511,16 @@ export default function JadwalPage() {
               </Button>
             </div>
           </div>
-        </DialogContent>
+        
+              {/* Izin Button */}
+              <Button
+                onClick={() => { setEditDialogOpen(false); openAbsenceDialog(editingDate || ""); }}
+                className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white border-0"
+              >
+                <UserX className="mr-2 h-4 w-4" />
+                Atur Izin Atlit
+              </Button>
+</DialogContent>
       </Dialog>
 
       {/* Add Schedule Dialog */}
@@ -1342,6 +1640,53 @@ export default function JadwalPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+        {/* Absence Dialog */}
+        <Dialog open={absenceDialogOpen} onOpenChange={setAbsenceDialogOpen}>
+          <DialogContent className="bg-slate-900 border-white/10 text-white max-w-lg max-h-[85vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle className="text-white">Atur Izin Atlit</DialogTitle>
+              <DialogDescription className="text-slate-400">
+                Tanggal: {selectedAbsenceDate} — Centang atlit yang izin
+              </DialogDescription>
+            </DialogHeader>
+            <Input
+              placeholder="Cari nama atlit..."
+              value={athleteSearch}
+              onChange={(e) => setAthleteSearch(e.target.value)}
+              className="bg-white/5 border-white/10 text-white mb-2"
+            />
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+              {athleteList
+                .filter(a => a.toLowerCase().includes(athleteSearch.toLowerCase()))
+                .map(athlete => {
+                  const isChecked = absenceForm.some(a => a.name === athlete);
+                  return (
+                    <div key={athlete} className={"flex flex-col gap-1 rounded-lg border p-2 transition-colors " + (isChecked ? "border-orange-500/50 bg-orange-500/10" : "border-white/5 bg-white/5")}>
+                      <div className="flex items-center space-x-2">
+                        <Checkbox
+                          checked={isChecked}
+                          onCheckedChange={() => toggleAbsenceAthlete(athlete)}
+                        />
+                        <span className="text-sm text-slate-200">{athlete}</span>
+                      </div>
+                      {isChecked && (
+                        <Input
+                          placeholder="Alasan (opsional)..."
+                          value={absenceForm.find(a => a.name === athlete)?.reason || ""}
+                          onChange={(e) => updateAbsenceReason(athlete, e.target.value)}
+                          className="h-7 text-xs bg-black/50 border-white/10 text-white ml-6"
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+            </div>
+            <Button onClick={saveAbsences} className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 mt-2">
+              Simpan ({absenceForm.length} izin)
+            </Button>
+          </DialogContent>
+        </Dialog>
     </div>
   );
 }

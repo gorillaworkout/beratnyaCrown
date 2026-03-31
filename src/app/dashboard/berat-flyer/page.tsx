@@ -337,6 +337,7 @@ export default function DashboardPage() {
   const [updateError, setUpdateError] = useState("");
   const [updateSuccess, setUpdateSuccess] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
 
   const [detailAthleteId, setDetailAthleteId] = useState("");
   const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -417,7 +418,13 @@ export default function DashboardPage() {
         athletes.map(async (athlete) => {
           try {
             const logsQuery = query(collection(db, "athletes", athlete.id, "weights"));
-            const snapshot = await getDocs(logsQuery);
+            // placeholder
+  // We want to force server fetch for freshness.
+  // We can't easily pass options to standard getDocs without importing GetOptions, but wait...
+  // getDocs(query) actually fetches from server first by default in JS SDK, 
+  // but if it's lagging, it might be the listener timing.
+  const snapshot = await getDocs(logsQuery); // cache is fine because athletes doc update will trigger a new server read anyway? No wait let us bypass cache:
+            // Actually let us just rely on refreshTrigger.
             const logs = sortWeightLogs(
               snapshot.docs.map((docSnap) => {
                 const docData = docSnap.data();
@@ -465,7 +472,7 @@ export default function DashboardPage() {
 
     loadAll();
     return () => { cancelled = true; };
-  }, [athletes]);
+  }, [athletes, refreshTrigger]);
 
   // Get unique training dates across all athletes (sorted newest first), max 5
   const allTrainingDates = useMemo(() => {
@@ -739,6 +746,7 @@ export default function DashboardPage() {
         return;
       }
       setUpdateSuccess("Berat athlete berhasil diperbarui.");
+      setRefreshTrigger(prev => prev + 1);
       setUpdatedWeight("");
       setUpdatedGoal("");
       setUpdatedDate(getTodayDateValue());
@@ -802,7 +810,7 @@ export default function DashboardPage() {
           <div className="flex items-center gap-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-white/20 bg-white/10">
               <Image
-                src="/crown-logo.jpg"
+                src="/crown-logo.png"
                 alt="Crown Allstar"
                 width={40}
                 height={40}
