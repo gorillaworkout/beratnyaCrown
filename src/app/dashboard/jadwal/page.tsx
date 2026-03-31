@@ -477,6 +477,20 @@ export default function JadwalPage() {
 
   const triggerCalendarSync = async () => {
     try {
+      setIsSyncing(true);
+      // Increment the version document
+      try {
+        const verRef = doc(db, "crown-system", "calendar-version");
+        const verDoc = await getDoc(verRef);
+        if (verDoc.exists()) {
+          await updateDoc(verRef, { version: (verDoc.data().version || 0) + 1, lastUpdated: new Date().toISOString() });
+        } else {
+          await setDoc(verRef, { version: 1, lastUpdated: new Date().toISOString() });
+        }
+      } catch (e) {
+        console.error("Version tracking error", e);
+      }
+
       const adminKey = "dupoin123";
       await fetch("/api/calendar/sync", {
         method: "POST",
@@ -485,6 +499,8 @@ export default function JadwalPage() {
       });
     } catch {
       // Silent fail — calendar sync is best-effort
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1000);
     }
   };
 
