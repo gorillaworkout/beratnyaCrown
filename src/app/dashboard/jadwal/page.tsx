@@ -147,15 +147,20 @@ function formatMonthYear(year: number, month: number): string {
 
 function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
   let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    const char = dateStr.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
+  // Tambahkan pengali agar angka tanggal (12, 13, 14, 18, 19) punya hasil lompatan hash yang lebih jauh
+  const seed = dateStr + "crown2026"; 
+  for (let i = 0; i < seed.length; i++) {
+    const char = seed.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; 
   }
   
-  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
+  // Lompatan ekstra menggunakan hasil hash dikali tanggal
+  const dateDay = parseInt(dateStr.split('-')[2]);
+  let colorIndex = Math.abs(hash * dateDay) % SHIRT_COLORS.length;
+  
   if (colorIndex === prevColorIndex) {
-    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
+    colorIndex = (colorIndex + 2) % SHIRT_COLORS.length; // Lompat 2 agar lebih bervariasi
   }
   return colorIndex;
 }
@@ -346,7 +351,7 @@ export default function JadwalPage() {
           isRegular: REGULAR_DAYS.has(dayOfWeek),
           timeStart: customSchedule.timeStart || defaultTimeStart,
           timeEnd: customSchedule.timeEnd || defaultTimeEnd,
-          shirtColor: currentShirtColor,
+          shirtColor: customSchedule.shirtColor || currentShirtColor,
           holidayName,
           eventName: isEventDay ? isEventDay.name : undefined,
           eventEmoji: isEventDay ? isEventDay.emoji : undefined,
