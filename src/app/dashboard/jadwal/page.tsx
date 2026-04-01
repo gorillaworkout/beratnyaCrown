@@ -1030,19 +1030,8 @@ export default function JadwalPage() {
               </div>
             </div>
 
-            {/* Subscribe Buttons */}
+            {/* Subscribe Button - Apple Calendar (iCal/webcal) */}
             <div className="flex flex-wrap gap-2">
-              <a
-                href={`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(
-                  process.env.NEXT_PUBLIC_GOOGLE_CALENDAR_ID || ""
-                )}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-medium text-white hover:from-cyan-500 hover:to-blue-500 transition shadow-lg shadow-cyan-500/20"
-              >
-                <Calendar className="h-3.5 w-3.5" />
-                Subscribe ke Google Calendar
-              </a>
               <a
                 href={
                   typeof window !== "undefined"
@@ -1050,10 +1039,10 @@ export default function JadwalPage() {
                       "/api/calendar"
                     : "webcal:///api/calendar"
                 }
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-xs text-white hover:bg-white/10 transition"
+                className="inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 px-4 py-2 text-xs font-medium text-white hover:from-cyan-500 hover:to-blue-500 transition shadow-lg shadow-cyan-500/20"
               >
-                <Calendar className="h-3.5 w-3.5 text-emerald-400" />
-                Apple Calendar
+                <Calendar className="h-3.5 w-3.5" />
+                Subscribe ke Apple Calendar
               </a>
             </div>
 
