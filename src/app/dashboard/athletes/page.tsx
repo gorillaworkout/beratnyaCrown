@@ -38,8 +38,7 @@ type FirebaseUser = {
 };
 
 export default function AthletesDashboardPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const { user, isAdmin } = useAuth();
   const [usersList, setUsersList] = useState<FirebaseUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);

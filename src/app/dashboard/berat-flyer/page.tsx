@@ -346,8 +346,7 @@ export default function DashboardPage() {
   const [seedError, setSeedError] = useState("");
   const [seedSuccess, setSeedSuccess] = useState("");
   const [isSeedingLogs, setIsSeedingLogs] = useState(false);
-  const { user } = useAuth();
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const { user, isAdmin } = useAuth();
   const isCheckingSession = false;
   const [penaltyInfos, setPenaltyInfos] = useState<PenaltyInfo[]>([]);
   const [penaltyLoading, setPenaltyLoading] = useState(false);

@@ -69,9 +69,6 @@ type AttendanceRecord = {
   locationName?: string;
 };
 
-// --- Constants ---
-const ADMIN_EMAIL = "darmawanbayu1@gmail.com";
-
 // --- Helpers ---
 function getDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number): number {
   const R = 6371000;
@@ -109,8 +106,7 @@ function parseRecord(d: { id: string; data: () => Record<string, unknown> }): At
 
 // --- Component ---
 export default function AbsensiPage() {
-  const { user, loading: authLoading } = useAuth();
-  const isAdmin = user?.email === ADMIN_EMAIL;
+  const { user, isAdmin, loading: authLoading } = useAuth();
 
   // Location state (from Firestore)
   const [locations, setLocations] = useState<TrainingLocation[]>([]);

@@ -37,8 +37,7 @@ type Milestone = {
 };
 
 export default function InfoDashboardPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const { user, isAdmin } = useAuth();
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isMilestonesLoading, setIsMilestonesLoading] = useState(true);

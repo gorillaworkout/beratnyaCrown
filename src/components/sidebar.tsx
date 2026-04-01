@@ -57,9 +57,8 @@ const getNavItems = (isAdmin: boolean) => [
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, isAdmin, signOut } = useAuth();
   
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
   const navItems = getNavItems(isAdmin);
 
   return (

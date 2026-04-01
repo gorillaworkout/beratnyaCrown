@@ -11,9 +11,12 @@ import {
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
+const OWNER_EMAIL = "darmawanbayu1@gmail.com";
+
 type AuthContextType = {
   user: User | null;
   loading: boolean;
+  isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -21,6 +24,7 @@ type AuthContextType = {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  isAdmin: false,
   signInWithGoogle: async () => {},
   signOut: async () => {},
 });
@@ -32,12 +36,12 @@ export function useAuth() {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isAdmin, setIsAdmin] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       setUser(firebaseUser);
       if (firebaseUser) {
-        // Upsert athlete profile in Firestore (crown-athletes collection)
         try {
           const athleteRef = doc(db, "crown-athletes", firebaseUser.uid);
           const athleteSnap = await getDoc(athleteRef);
@@ -50,10 +54,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               createdAt: new Date().toISOString(),
               targetWeight: 0,
             });
+            setIsAdmin(false);
+          } else {
+            const role = athleteSnap.data()?.role;
+            setIsAdmin(
+              firebaseUser.email === OWNER_EMAIL || role === "admin"
+            );
           }
         } catch (error) {
           console.error("Error upserting athlete:", error);
+          setIsAdmin(firebaseUser.email === OWNER_EMAIL);
         }
+      } else {
+        setIsAdmin(false);
       }
       setLoading(false);
     });
@@ -96,7 +109,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

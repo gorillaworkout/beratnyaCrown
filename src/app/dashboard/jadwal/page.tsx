@@ -181,8 +181,7 @@ function formatTime(timeStr: string): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function JadwalPage() {
-  const { user, loading: authLoading } = useAuth();
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const { user, isAdmin, loading: authLoading } = useAuth();
 
   // ─── State ───────────────────────────────────────────────────────────────
 

@@ -26,8 +26,7 @@ const CATEGORIES = ["Obat", "Alat Medis", "Lainnya"];
 const STATUSES: SupplyStatus[] = ["Tersedia", "Hampir Habis", "Habis", "Kosong (Belum Beli)"];
 
 export default function P3KPage() {
-  const { user } = useAuth();
-  const isAdmin = user?.email === "darmawanbayu1@gmail.com";
+  const { user, isAdmin } = useAuth();
   
   const [items, setItems] = useState<P3KItem[]>([]);
   const [loading, setLoading] = useState(true);
