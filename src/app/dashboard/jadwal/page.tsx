@@ -103,7 +103,7 @@ const SHIRT_COLORS = [
   { name: "Hitam", hex: "#374151" },
   { name: "Biru", hex: "#3b82f6" },
   { name: "Orange", hex: "#f97316" },
-  { name: "Putih", hex: "#f8fafc" },
+  { name: "Ungu", hex: "#8b5cf6" },
   { name: "Pink", hex: "#ec4899" },
 ];
 
@@ -762,7 +762,7 @@ export default function JadwalPage() {
           case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
           case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
           case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
-          case "Putih": return "bg-slate-200 text-slate-900 border border-slate-300";
+          case "Ungu": return "bg-gradient-to-br from-purple-500 to-purple-700";
           case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
         }
     }
@@ -842,15 +842,15 @@ export default function JadwalPage() {
           </Card>
           <Card className={`${glassCardClass} ${todayEntry ? getStatusColor(todayEntry) : ''}`}>
             <CardContent className="p-4 text-center">
-              <p className={`text-xs uppercase tracking-wider ${todayEntry?.shirtColor?.name === "Putih" ? "text-slate-600 font-bold" : "text-slate-400"}`}>
+              <p className={`text-xs uppercase tracking-wider text-slate-400`}>
                 Hari Ini
               </p>
               {todayEntry ? (
                 <div className="mt-1">
-                  <p className={`text-xl font-bold ${todayEntry.shirtColor?.name === "Putih" ? "text-slate-900" : "text-white"}`}>
+                  <p className={`text-xl font-bold text-white`}>
                     {todayEntry.timeStart}
                   </p>
-                  <p className={`text-xs ${todayEntry.shirtColor?.name === "Putih" ? "text-slate-700" : "text-slate-400"}`}>
+                  <p className={`text-xs text-slate-400`}>
                     {todayEntry.status === "libur"
                       ? "Libur"
                       : todayEntry.status === "tambahan"
@@ -1114,12 +1114,12 @@ export default function JadwalPage() {
                       </span>
                     )}
                     <span
-                      className={`font-bold ${entry && (!entry.shirtColor || entry.shirtColor.name !== "Putih") ? "text-white" : ""}`}
+                      className={`font-bold ${entry ? "text-white" : ""}`}
                     >
                       {cell}
                     </span>
                     {entry?.timeStart && (
-                      <span className={`text-[8px] ${entry.shirtColor?.name === "Putih" ? "text-slate-600 font-semibold" : "text-white/80"}`}>
+                      <span className={`text-[8px] text-white/80`}>
                         {entry.timeStart}
                       </span>
                     )}
@@ -1155,7 +1155,7 @@ export default function JadwalPage() {
                 <div className="w-3 h-3 rounded-full bg-slate-800" title="Hitam" />
                 <div className="w-3 h-3 rounded-full bg-blue-600" title="Biru" />
                 <div className="w-3 h-3 rounded-full bg-orange-600" title="Orange" />
-                <div className="w-3 h-3 rounded-full bg-slate-200 border border-slate-400" title="Putih" />
+                <div className="w-3 h-3 rounded-full bg-purple-600" title="Ungu" />
                 <div className="w-3 h-3 rounded-full bg-pink-600" title="Pink" />
               </div>
               <div className="flex items-center gap-1.5">

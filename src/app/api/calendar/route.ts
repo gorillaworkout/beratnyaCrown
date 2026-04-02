@@ -7,7 +7,7 @@ const SHIRT_COLORS = [
   { name: "Hitam", hex: "#374151", emoji: "⚫" },
   { name: "Biru", hex: "#3b82f6", emoji: "🔵" },
   { name: "Orange", hex: "#f97316", emoji: "🟠" },
-  { name: "Putih", hex: "#f8fafc", emoji: "⚪" },
+  { name: "Ungu", hex: "#8b5cf6", emoji: "🟣" },
   { name: "Pink", hex: "#ec4899", emoji: "🩷" },
 ];
 
