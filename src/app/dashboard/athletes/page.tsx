@@ -327,24 +327,32 @@ export default function AthletesDashboardPage() {
                 </div>
               )}
 
-              {/* Athletes List */}
-              <div className="space-y-2">
-                {filteredAthletes.length === 0 ? (
-                  <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
-                    <Users className="h-8 w-8 text-slate-600 mx-auto mb-2" />
-                    <p className="text-sm text-slate-500">
-                      {filterDivision === "all" ? "Belum ada atlit. Tambahkan atlit pertama!" : `Belum ada atlit di divisi ${filterDivision}.`}
-                    </p>
-                  </div>
-                ) : (
-                  filteredAthletes.map((ath, i) => (
+              {/* Athletes Grid */}
+              {filteredAthletes.length === 0 ? (
+                <div className="rounded-xl border border-white/10 bg-white/5 p-8 text-center">
+                  <Users className="h-8 w-8 text-slate-600 mx-auto mb-2" />
+                  <p className="text-sm text-slate-500">
+                    {filterDivision === "all" ? "Belum ada atlit. Tambahkan atlit pertama!" : `Belum ada atlit di divisi ${filterDivision}.`}
+                  </p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2 sm:gap-3">
+                  {filteredAthletes.map((ath) => (
                     <div 
                       key={ath.id} 
-                      className="group rounded-xl border border-white/8 bg-white/[0.03] hover:bg-white/[0.06] transition-all overflow-hidden"
+                      className={`group relative rounded-xl border overflow-hidden transition-all ${
+                        editingAthleteId === ath.id
+                          ? "border-cyan-500/40 bg-cyan-500/5 col-span-2 sm:col-span-3 md:col-span-2"
+                          : ath.division === "All Girl"
+                            ? "border-pink-500/15 bg-pink-500/[0.03] hover:bg-pink-500/[0.07] hover:border-pink-500/30"
+                            : ath.division === "Coed"
+                              ? "border-sky-500/15 bg-sky-500/[0.03] hover:bg-sky-500/[0.07] hover:border-sky-500/30"
+                              : "border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15"
+                      }`}
                     >
                       {editingAthleteId === ath.id ? (
                         /* Edit Mode */
-                        <div className="p-3 sm:p-4 space-y-3 animate-in fade-in duration-150">
+                        <div className="p-3 space-y-2.5">
                           <Input 
                             value={editingAthleteName} 
                             onChange={(e) => setEditingAthleteName(e.target.value)}
@@ -352,50 +360,50 @@ export default function AthletesDashboardPage() {
                               if (e.key === "Enter") handleUpdateAthlete(ath.id); 
                               if (e.key === "Escape") setEditingAthleteId(null); 
                             }}
-                            className="bg-black/40 border-white/10 text-white h-10 text-sm"
+                            className="bg-black/40 border-white/10 text-white h-9 text-sm"
                             autoFocus
                           />
-                          <div className="flex gap-2">
+                          <div className="flex gap-1.5">
                             {DIVISIONS.map(div => (
                               <button
                                 key={div}
                                 onClick={() => setEditingAthleteDivision(div)}
-                                className={`flex-1 py-2 rounded-lg text-xs font-medium border transition-all ${
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                                   editingAthleteDivision === div
                                     ? div === "All Girl"
                                       ? "bg-pink-500/20 text-pink-300 border-pink-500/40"
                                       : "bg-sky-500/20 text-sky-300 border-sky-500/40"
-                                    : "bg-black/20 text-slate-400 border-white/10"
+                                    : "bg-black/20 text-slate-500 border-white/10"
                                 }`}
                               >
                                 {div}
                               </button>
                             ))}
                           </div>
-                          <div className="flex gap-2">
+                          <div className="flex gap-1.5">
                             <Button 
                               onClick={() => handleUpdateAthlete(ath.id)} 
                               size="sm" 
-                              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-9"
+                              className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white h-8 text-xs"
                             >
-                              <Check className="h-3.5 w-3.5 mr-1" />
+                              <Check className="h-3 w-3 mr-1" />
                               Simpan
                             </Button>
                             <Button 
                               onClick={() => setEditingAthleteId(null)} 
                               size="sm" 
                               variant="outline" 
-                              className="h-9 border-white/10 text-slate-400 hover:text-white hover:bg-white/5"
+                              className="h-8 text-xs border-white/10 text-slate-400 hover:text-white hover:bg-white/5 px-3"
                             >
                               Batal
                             </Button>
                           </div>
                         </div>
                       ) : (
-                        /* Display Mode */
-                        <div className="flex items-center gap-3 p-3 sm:p-4">
+                        /* Display Mode — Compact Card */
+                        <div className="p-3 flex flex-col items-center text-center">
                           {/* Avatar */}
-                          <div className={`shrink-0 h-10 w-10 rounded-full flex items-center justify-center text-sm font-bold ${
+                          <div className={`h-11 w-11 rounded-full flex items-center justify-center text-base font-bold mb-2 ${
                             ath.division === "All Girl" 
                               ? "bg-gradient-to-br from-pink-500/30 to-pink-600/20 text-pink-300 ring-1 ring-pink-500/20" 
                               : ath.division === "Coed"
@@ -404,43 +412,45 @@ export default function AthletesDashboardPage() {
                           }`}>
                             {ath.name.charAt(0).toUpperCase()}
                           </div>
-
-                          {/* Name & Division */}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-sm font-medium text-white truncate">{ath.name}</p>
+                          
+                          {/* Name */}
+                          <p className="text-xs font-medium text-white truncate w-full leading-tight">{ath.name}</p>
+                          
+                          {/* Division Pill */}
+                          <div className="mt-1.5">
                             <DivisionPill division={ath.division} size="xs" />
                           </div>
 
-                          {/* Actions */}
-                          <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                          {/* Actions — show on hover (desktop), always on mobile */}
+                          <div className="flex items-center gap-0.5 mt-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button 
                               onClick={() => { 
                                 setEditingAthleteId(ath.id); 
                                 setEditingAthleteName(ath.name); 
                                 setEditingAthleteDivision(ath.division || "All Girl"); 
                               }} 
-                              className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-cyan-300 hover:bg-cyan-500/10 active:scale-95 transition-all"
+                              className="h-7 w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 active:scale-95 transition-all"
                             >
-                              <Edit2 className="h-3.5 w-3.5" />
+                              <Edit2 className="h-3 w-3" />
                             </button>
                             <button 
                               onClick={() => handleDeleteAthlete(ath.id)} 
-                              className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 transition-all"
+                              className="h-7 w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-rose-300 hover:bg-rose-500/10 active:scale-95 transition-all"
                             >
-                              <Trash2 className="h-3.5 w-3.5" />
+                              <Trash2 className="h-3 w-3" />
                             </button>
                           </div>
                         </div>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                </div>
+              )}
 
               {/* Footer count */}
               {filteredAthletes.length > 0 && (
                 <p className="text-center text-[11px] text-slate-600 pb-4">
-                  Menampilkan {filteredAthletes.length} dari {crownAthletes.length} atlit
+                  {filteredAthletes.length} dari {crownAthletes.length} atlit
                 </p>
               )}
             </div>
