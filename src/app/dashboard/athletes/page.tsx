@@ -42,30 +42,34 @@ export default function AthletesDashboardPage() {
   const [usersList, setUsersList] = useState<FirebaseUser[]>([]);
   const [isLoadingUsers, setIsLoadingUsers] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-  const [crownAthletes, setCrownAthletes] = useState<{id: string; name: string}[]>([]);
+  const [crownAthletes, setCrownAthletes] = useState<{id: string; name: string; division?: string}[]>([]);
   const [newAthleteName, setNewAthleteName] = useState("");
+  const [newAthleteDivision, setNewAthleteDivision] = useState("All Girl");
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
   const [editingAthleteName, setEditingAthleteName] = useState("");
+  const [editingAthleteDivision, setEditingAthleteDivision] = useState("");
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "crown-athletes"), (snap) => {
-      setCrownAthletes(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name || "" })));
+      setCrownAthletes(snap.docs.map(d => ({ id: d.id, name: (d.data() as any).name || "", division: (d.data() as any).division || "" })));
     });
     return () => unsub();
   }, []);
 
   const handleAddAthlete = async () => {
     if (!newAthleteName.trim()) return;
-    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim() });
+    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim(), division: newAthleteDivision });
     setNewAthleteName("");
+    setNewAthleteDivision("All Girl");
   };
 
   const handleUpdateAthlete = async (id: string) => {
     if (!editingAthleteName.trim()) return;
     try {
-      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim() });
+      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim(), division: editingAthleteDivision });
       setEditingAthleteId(null);
       setEditingAthleteName("");
+      setEditingAthleteDivision("");
     } catch (e) {
       console.error(e);
     }
@@ -333,36 +337,59 @@ export default function AthletesDashboardPage() {
                 </div>
               </CardHeader>
               <CardContent className="pt-4 space-y-4">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Input
                     placeholder="Nama Atlit Baru..."
                     value={newAthleteName}
                     onChange={(e) => setNewAthleteName(e.target.value)}
                     className="bg-black/50 border-white/10 text-white max-w-sm"
                   />
+                  <select
+                    value={newAthleteDivision}
+                    onChange={(e) => setNewAthleteDivision(e.target.value)}
+                    className="bg-black/50 border border-white/10 text-white rounded-md px-3 py-2 text-sm"
+                  >
+                    <option value="All Girl">All Girl</option>
+                    <option value="Coed">Coed</option>
+                  </select>
                   <Button onClick={handleAddAthlete} className="bg-cyan-600 hover:bg-cyan-500 text-white">Tambah</Button>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {crownAthletes.sort((a, b) => a.name.localeCompare(b.name)).map(ath => (
                     <div key={ath.id} className="flex items-center justify-between bg-black/40 border border-white/10 p-3 rounded-lg">
                       {editingAthleteId === ath.id ? (
-                        <div className="flex items-center gap-2 w-full mr-2">
+                        <div className="flex items-center gap-2 w-full mr-2 flex-wrap">
                           <Input 
                             value={editingAthleteName} 
                             onChange={(e) => setEditingAthleteName(e.target.value)}
                             onKeyDown={(e) => { if(e.key === "Enter") handleUpdateAthlete(ath.id); if(e.key === "Escape") setEditingAthleteId(null); }}
-                            className="h-7 text-xs bg-black/50 border-white/10 text-white w-full"
+                            className="h-7 text-xs bg-black/50 border-white/10 text-white flex-1 min-w-[120px]"
                             autoFocus
                           />
+                          <select
+                            value={editingAthleteDivision}
+                            onChange={(e) => setEditingAthleteDivision(e.target.value)}
+                            className="h-7 text-xs bg-black/50 border border-white/10 text-white rounded-md px-2"
+                          >
+                            <option value="All Girl">All Girl</option>
+                            <option value="Coed">Coed</option>
+                          </select>
                           <button onClick={() => handleUpdateAthlete(ath.id)} className="text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 p-1.5 rounded transition shrink-0">
                             <Check className="h-4 w-4" />
                           </button>
                         </div>
                       ) : (
                         <>
-                          <span className="text-sm text-slate-200">{ath.name}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm text-slate-200">{ath.name}</span>
+                            {ath.division && (
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded border ${ath.division === "All Girl" ? "bg-pink-500/20 text-pink-300 border-pink-500/30" : "bg-blue-500/20 text-blue-300 border-blue-500/30"}`}>
+                                {ath.division === "All Girl" ? "AG" : "Coed"}
+                              </span>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1">
-                            <button onClick={() => { setEditingAthleteId(ath.id); setEditingAthleteName(ath.name); }} className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1.5 rounded transition">
+                            <button onClick={() => { setEditingAthleteId(ath.id); setEditingAthleteName(ath.name); setEditingAthleteDivision(ath.division || "All Girl"); }} className="text-blue-400 hover:text-blue-300 hover:bg-blue-500/10 p-1.5 rounded transition">
                               <Edit2 className="h-4 w-4" />
                             </button>
                             <button onClick={() => handleDeleteAthlete(ath.id)} className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-1.5 rounded transition">
