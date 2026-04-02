@@ -290,8 +290,8 @@ export default function KasPage() {
         setRecords((prev) => prev.map(r => r.athleteId === athlete.id ? { ...r, id: newId } : r));
       }
       
-      const s = await getKasSummary();
-      setSummary(s);
+      // Full reload to recalculate summary + unpaid records (including auto-alpa)
+      await loadData();
     } catch (error) {
       console.error("Save error:", error);
       await loadData();
@@ -313,8 +313,8 @@ export default function KasPage() {
         
         isSettled,
       });
-      const s = await getKasSummary();
-      setSummary(s);
+      // Full reload to recalculate summary + unpaid records
+      await loadData();
     } catch (error) {
       console.error(error);
       await loadData();
