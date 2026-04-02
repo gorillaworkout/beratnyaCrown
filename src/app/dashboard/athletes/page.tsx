@@ -40,26 +40,29 @@ type FirebaseUser = {
 type Athlete = {
   id: string;
   name: string;
-  division?: string;
+  divisions: string[];
 };
 
 const DIVISIONS = ["All Girl", "Coed"] as const;
 
-function DivisionPill({ division, size = "sm" }: { division?: string; size?: "sm" | "xs" }) {
-  if (!division) return (
+function DivisionPills({ divisions, size = "sm" }: { divisions: string[]; size?: "sm" | "xs" }) {
+  if (!divisions || divisions.length === 0) return (
     <span className={`inline-flex items-center rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/20 font-medium ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
       —
     </span>
   );
-  const isAG = division === "All Girl";
   return (
-    <span className={`inline-flex items-center rounded-full font-medium ${
-      isAG 
-        ? "bg-pink-500/15 text-pink-300 border border-pink-500/25" 
-        : "bg-sky-500/15 text-sky-300 border border-sky-500/25"
-    } ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
-      {isAG ? "All Girl" : "Coed"}
-    </span>
+    <div className="flex items-center gap-1 flex-wrap">
+      {divisions.map(div => (
+        <span key={div} className={`inline-flex items-center rounded-full font-medium ${
+          div === "All Girl" 
+            ? "bg-pink-500/15 text-pink-300 border border-pink-500/25" 
+            : "bg-sky-500/15 text-sky-300 border border-sky-500/25"
+        } ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
+          {div === "All Girl" ? "AG" : "Coed"}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -70,20 +73,26 @@ export default function AthletesDashboardPage() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [crownAthletes, setCrownAthletes] = useState<Athlete[]>([]);
   const [newAthleteName, setNewAthleteName] = useState("");
-  const [newAthleteDivision, setNewAthleteDivision] = useState<string>("All Girl");
+  const [newAthleteDivisions, setNewAthleteDivisions] = useState<string[]>(["All Girl"]);
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
   const [editingAthleteName, setEditingAthleteName] = useState("");
-  const [editingAthleteDivision, setEditingAthleteDivision] = useState("");
+  const [editingAthleteDivisions, setEditingAthleteDivisions] = useState<string[]>([]);
   const [filterDivision, setFilterDivision] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "crown-athletes"), (snap) => {
-      setCrownAthletes(snap.docs.map(d => ({ 
-        id: d.id, 
-        name: (d.data() as any).name || "", 
-        division: (d.data() as any).division || "" 
-      })));
+      setCrownAthletes(snap.docs.map(d => {
+        const data = d.data() as any;
+        // Support both old "division" (string) and new "divisions" (array)
+        let divisions: string[] = [];
+        if (Array.isArray(data.divisions)) {
+          divisions = data.divisions;
+        } else if (data.division) {
+          divisions = [data.division];
+        }
+        return { id: d.id, name: data.name || "", divisions };
+      }));
     });
     return () => unsub();
   }, []);
@@ -91,31 +100,31 @@ export default function AthletesDashboardPage() {
   const filteredAthletes = useMemo(() => {
     const sorted = [...crownAthletes].sort((a, b) => a.name.localeCompare(b.name));
     if (filterDivision === "all") return sorted;
-    return sorted.filter(a => a.division === filterDivision);
+    return sorted.filter(a => a.divisions.includes(filterDivision));
   }, [crownAthletes, filterDivision]);
 
   const divisionCounts = useMemo(() => ({
     all: crownAthletes.length,
-    "All Girl": crownAthletes.filter(a => a.division === "All Girl").length,
-    "Coed": crownAthletes.filter(a => a.division === "Coed").length,
-    unset: crownAthletes.filter(a => !a.division).length,
+    "All Girl": crownAthletes.filter(a => a.divisions.includes("All Girl")).length,
+    "Coed": crownAthletes.filter(a => a.divisions.includes("Coed")).length,
+    unset: crownAthletes.filter(a => a.divisions.length === 0).length,
   }), [crownAthletes]);
 
   const handleAddAthlete = async () => {
     if (!newAthleteName.trim()) return;
-    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim(), division: newAthleteDivision });
+    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim(), divisions: newAthleteDivisions });
     setNewAthleteName("");
-    setNewAthleteDivision("All Girl");
+    setNewAthleteDivisions(["All Girl"]);
     setShowAddForm(false);
   };
 
   const handleUpdateAthlete = async (id: string) => {
     if (!editingAthleteName.trim()) return;
     try {
-      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim(), division: editingAthleteDivision });
+      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim(), divisions: editingAthleteDivisions });
       setEditingAthleteId(null);
       setEditingAthleteName("");
-      setEditingAthleteDivision("");
+      setEditingAthleteDivisions([]);
     } catch (e) {
       console.error(e);
     }
@@ -300,21 +309,26 @@ export default function AthletesDashboardPage() {
                     autoFocus
                   />
                   <div className="flex gap-2">
-                    {DIVISIONS.map(div => (
-                      <button
-                        key={div}
-                        onClick={() => setNewAthleteDivision(div)}
-                        className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
-                          newAthleteDivision === div
-                            ? div === "All Girl"
-                              ? "bg-pink-500/20 text-pink-300 border-pink-500/40 shadow-lg shadow-pink-500/5"
-                              : "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-lg shadow-sky-500/5"
-                            : "bg-black/20 text-slate-400 border-white/10 hover:bg-white/5"
-                        }`}
-                      >
-                        {div}
-                      </button>
-                    ))}
+                    {DIVISIONS.map(div => {
+                      const isSelected = newAthleteDivisions.includes(div);
+                      return (
+                        <button
+                          key={div}
+                          onClick={() => setNewAthleteDivisions(prev => 
+                            isSelected ? prev.filter(d => d !== div) : [...prev, div]
+                          )}
+                          className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                            isSelected
+                              ? div === "All Girl"
+                                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 shadow-lg shadow-pink-500/5"
+                                : "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-lg shadow-sky-500/5"
+                              : "bg-black/20 text-slate-400 border-white/10 hover:bg-white/5"
+                          }`}
+                        >
+                          {div}
+                        </button>
+                      );
+                    })}
                   </div>
                   <Button 
                     onClick={handleAddAthlete} 
@@ -343,11 +357,13 @@ export default function AthletesDashboardPage() {
                       className={`group relative rounded-xl border overflow-hidden transition-all ${
                         editingAthleteId === ath.id
                           ? "border-cyan-500/40 bg-cyan-500/5 col-span-2 sm:col-span-3 md:col-span-2"
-                          : ath.division === "All Girl"
-                            ? "border-pink-500/15 bg-pink-500/[0.03] hover:bg-pink-500/[0.07] hover:border-pink-500/30"
-                            : ath.division === "Coed"
-                              ? "border-sky-500/15 bg-sky-500/[0.03] hover:bg-sky-500/[0.07] hover:border-sky-500/30"
-                              : "border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15"
+                          : ath.divisions.length === 2
+                            ? "border-purple-500/15 bg-purple-500/[0.03] hover:bg-purple-500/[0.07] hover:border-purple-500/30"
+                            : ath.divisions.includes("All Girl")
+                              ? "border-pink-500/15 bg-pink-500/[0.03] hover:bg-pink-500/[0.07] hover:border-pink-500/30"
+                              : ath.divisions.includes("Coed")
+                                ? "border-sky-500/15 bg-sky-500/[0.03] hover:bg-sky-500/[0.07] hover:border-sky-500/30"
+                                : "border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15"
                       }`}
                     >
                       {editingAthleteId === ath.id ? (
@@ -364,21 +380,26 @@ export default function AthletesDashboardPage() {
                             autoFocus
                           />
                           <div className="flex gap-1.5">
-                            {DIVISIONS.map(div => (
-                              <button
-                                key={div}
-                                onClick={() => setEditingAthleteDivision(div)}
-                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
-                                  editingAthleteDivision === div
-                                    ? div === "All Girl"
-                                      ? "bg-pink-500/20 text-pink-300 border-pink-500/40"
-                                      : "bg-sky-500/20 text-sky-300 border-sky-500/40"
-                                    : "bg-black/20 text-slate-500 border-white/10"
-                                }`}
-                              >
-                                {div}
-                              </button>
-                            ))}
+                            {DIVISIONS.map(div => {
+                              const isSelected = editingAthleteDivisions.includes(div);
+                              return (
+                                <button
+                                  key={div}
+                                  onClick={() => setEditingAthleteDivisions(prev => 
+                                    isSelected ? prev.filter(d => d !== div) : [...prev, div]
+                                  )}
+                                  className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                    isSelected
+                                      ? div === "All Girl"
+                                        ? "bg-pink-500/20 text-pink-300 border-pink-500/40"
+                                        : "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                                      : "bg-black/20 text-slate-500 border-white/10"
+                                  }`}
+                                >
+                                  {div}
+                                </button>
+                              );
+                            })}
                           </div>
                           <div className="flex gap-1.5">
                             <Button 
@@ -404,11 +425,13 @@ export default function AthletesDashboardPage() {
                         <div className="p-3 flex flex-col items-center text-center">
                           {/* Avatar */}
                           <div className={`h-11 w-11 rounded-full flex items-center justify-center text-base font-bold mb-2 ${
-                            ath.division === "All Girl" 
-                              ? "bg-gradient-to-br from-pink-500/30 to-pink-600/20 text-pink-300 ring-1 ring-pink-500/20" 
-                              : ath.division === "Coed"
-                                ? "bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-300 ring-1 ring-sky-500/20"
-                                : "bg-gradient-to-br from-slate-500/30 to-slate-600/20 text-slate-400 ring-1 ring-slate-500/20"
+                            ath.divisions.length === 2
+                              ? "bg-gradient-to-br from-pink-500/30 to-sky-500/30 text-purple-300 ring-1 ring-purple-500/20"
+                              : ath.divisions.includes("All Girl") 
+                                ? "bg-gradient-to-br from-pink-500/30 to-pink-600/20 text-pink-300 ring-1 ring-pink-500/20" 
+                                : ath.divisions.includes("Coed")
+                                  ? "bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-300 ring-1 ring-sky-500/20"
+                                  : "bg-gradient-to-br from-slate-500/30 to-slate-600/20 text-slate-400 ring-1 ring-slate-500/20"
                           }`}>
                             {ath.name.charAt(0).toUpperCase()}
                           </div>
@@ -418,7 +441,7 @@ export default function AthletesDashboardPage() {
                           
                           {/* Division Pill */}
                           <div className="mt-1.5">
-                            <DivisionPill division={ath.division} size="xs" />
+                            <DivisionPills divisions={ath.divisions} size="xs" />
                           </div>
 
                           {/* Actions — show on hover (desktop), always on mobile */}
@@ -427,7 +450,7 @@ export default function AthletesDashboardPage() {
                               onClick={() => { 
                                 setEditingAthleteId(ath.id); 
                                 setEditingAthleteName(ath.name); 
-                                setEditingAthleteDivision(ath.division || "All Girl"); 
+                                setEditingAthleteDivisions(ath.divisions.length > 0 ? [...ath.divisions] : ["All Girl"]); 
                               }} 
                               className="h-7 w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 active:scale-95 transition-all"
                             >
