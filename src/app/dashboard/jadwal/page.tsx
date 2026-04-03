@@ -1402,6 +1402,111 @@ export default function JadwalPage() {
           </CardContent>
         </Card>
 
+        {/* Piket Matras */}
+        <Card className={glassCardClass}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-white">🧹 Piket Matras</CardTitle>
+            <CardDescription className="text-slate-400 text-sm">
+              Pasang matras (AG) & Kembalikan matras (Coed) — otomatis skip yang izin
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              // Get upcoming training sessions (today + future) for this month
+              const upcomingTraining = schedule.filter(s => 
+                (s.status === "latihan" || s.status === "tambahan") && s.date >= todayStr
+              ).slice(0, 6); // Show max 6 upcoming sessions
+
+              if (upcomingTraining.length === 0) {
+                return <p className="text-slate-500 text-sm">Tidak ada jadwal latihan mendatang.</p>;
+              }
+
+              const agAthletes = dynamicAthletes.filter(a => a.divisions.includes("All Girl"));
+              const coedAthletes = dynamicAthletes.filter(a => a.divisions.includes("Coed"));
+
+              // Deterministic rotation: use date to offset the starting index
+              const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number) => {
+                const absentNames = new Set(
+                  (absences.find(a => a.date === dateStr)?.absences || []).map((a: any) => a.name)
+                );
+                const available = athletes.filter(a => !absentNames.has(a.name));
+                if (available.length === 0) return [];
+
+                // Use date as seed for rotation offset
+                const parts = dateStr.split("-");
+                const dayNum = parseInt(parts[2]) + parseInt(parts[1]) * 31;
+                const offset = dayNum % available.length;
+
+                const result: string[] = [];
+                for (let i = 0; i < Math.min(count, available.length); i++) {
+                  result.push(available[(offset + i) % available.length].name);
+                }
+                return result;
+              };
+
+              return (
+                <div className="space-y-4">
+                  {upcomingTraining.map(entry => {
+                    const d = new Date(entry.date + "T00:00:00");
+                    const isToday = entry.date === todayStr;
+                    const pasangList = getRotation(agAthletes, entry.date, 10);
+                    const kembalikanList = getRotation(coedAthletes, entry.date, 10);
+                    const absCount = getAbsenceCount(entry.date);
+
+                    return (
+                      <div key={entry.date} className={`border rounded-xl p-4 ${isToday ? "border-cyan-500/30 bg-cyan-500/5" : "border-white/10 bg-black/20"}`}>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-semibold text-white">
+                              {d.toLocaleDateString("id-ID", { weekday: "short", day: "numeric", month: "short" })}
+                            </span>
+                            {isToday && <Badge className="bg-cyan-500/20 text-cyan-400 border-cyan-500/30 text-[10px]">HARI INI</Badge>}
+                          </div>
+                          {absCount > 0 && (
+                            <span className="text-[10px] text-red-400">⚠ {absCount} izin</span>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-3">
+                          {/* Pasang Matras — AG */}
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-pink-400 font-semibold mb-1.5">Pasang Matras (AG)</p>
+                            <div className="space-y-0.5">
+                              {pasangList.length > 0 ? pasangList.map((name, i) => (
+                                <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                  <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
+                                  <span className="truncate">{name}</span>
+                                </div>
+                              )) : (
+                                <p className="text-xs text-slate-600 italic">Tidak ada AG tersedia</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Kembalikan Matras — Coed */}
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-blue-400 font-semibold mb-1.5">Kembalikan Matras (Coed)</p>
+                            <div className="space-y-0.5">
+                              {kembalikanList.length > 0 ? kembalikanList.map((name, i) => (
+                                <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                  <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
+                                  <span className="truncate">{name}</span>
+                                </div>
+                              )) : (
+                                <p className="text-xs text-slate-600 italic">Tidak ada Coed tersedia</p>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
         {/* Footer */}
         <div className="text-center text-xs text-slate-600 pb-4">
           👑 Crown Allstar Cheerleading

@@ -285,8 +285,9 @@ export default function KasPage() {
         setRecords((prev) => prev.map(r => r.athleteId === athlete.id ? { ...r, id: newId } : r));
       }
       
-      // Full reload to recalculate summary + unpaid records (including auto-alpa)
-      await loadData();
+      // Update summary in background WITHOUT full reload (prevents scroll jump)
+      const s = await getKasSummary();
+      setSummary(s);
     } catch (error) {
       console.error("Save error:", error);
       await loadData();
@@ -308,8 +309,9 @@ export default function KasPage() {
         
         isSettled,
       });
-      // Full reload to recalculate summary + unpaid records
-      await loadData();
+      // Update summary in background WITHOUT full reload
+      const s = await getKasSummary();
+      setSummary(s);
     } catch (error) {
       console.error(error);
       await loadData();
@@ -343,8 +345,8 @@ export default function KasPage() {
   };
 
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-4 text-slate-100 sm:p-6">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-6">
+    <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-3 text-slate-100 sm:p-4">
+      <div className="mx-auto flex w-full flex-col gap-4">
         
         {/* Header & Tabs */}
         <header className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
