@@ -103,61 +103,22 @@ export default function KasPage() {
       const allRecs = results[3] || [];
       setAllRecords(allRecs);
       
-      // Calculate global unpaid. For dates that have passed, if no record exists, they are considered Alpa (Rp 26000)
-      const todayDateStr = new Date().toISOString().split('T')[0];
-      const athletesMap = new Map(results[0].map((a: KasAthlete) => [a.id, a]));
-      const recordsByDateByAthlete = new Map<string, Map<string, KasRecord>>();
-      
-      allRecs.forEach((r: KasRecord) => {
-        if (!recordsByDateByAthlete.has(r.date)) recordsByDateByAthlete.set(r.date, new Map());
-        recordsByDateByAthlete.get(r.date)!.set(r.athleteId, r);
-      });
-      
+      // Calculate summary from actual Firestore records only (no auto-Alpa)
+      // Auto-Alpa was inflating totals for dates where admin hasn't inputted data yet
       let summaryData = results[1];
-      let autoUnpaidSum = 0;
-      
-      dates.forEach((d: string) => {
-        if (d > todayDateStr) return; // Ignore future dates
-        athletesMap.forEach((athlete: any, athleteId: any) => {
-          if (!recordsByDateByAthlete.get(d)?.get(athleteId as string)) {
-            autoUnpaidSum += 26000;
-          }
-        });
-      });
-      
-      summaryData.totalBilled += autoUnpaidSum;
       setSummary(summaryData);
       // Default selectedDate to latest training if not set
       if (selectedDate === "2026-04-01" && dates.length > 0 && activeTab === "daily" && !selectedDate) {
         setSelectedDate(dates[0]);
       }
       
-      // Calculate global unpaid
+      // Calculate global unpaid — only from actual Firestore records
       const unpaid: KasRecord[] = [];
 
-      dates.forEach((d: string) => {
-        if (d > todayDateStr) return; // Ignore future dates
-        
-        athletesMap.forEach((athlete: any, athleteId: any) => {
-          const record = recordsByDateByAthlete.get(d)?.get(athleteId as string);
-          if (record) {
-             if (record.totalBilled > 0 && !record.isSettled) unpaid.push(record);
-          } else {
-             // Missing record for past date -> Treat as Alpa
-             unpaid.push({
-               date: d,
-               athleteId: athleteId as string,
-               name: athlete.name,
-               division: athlete.division || "Coed" || "Coed",
-               paidKas: true, // Auto Alpa rule
-               isLate: false,
-               noNews: true, // Auto Alpa rule
-               isExcused: false,
-               totalBilled: 26000,
-               isSettled: false
-             });
-          }
-        });
+      allRecs.forEach((r: KasRecord) => {
+        if (r.totalBilled > 0 && !r.isSettled) {
+          unpaid.push(r);
+        }
       });
       setUnpaidRecords(unpaid);
       
@@ -209,17 +170,17 @@ export default function KasPage() {
     const existing = records.find((r) => r.athleteId === athleteId);
     if (existing) return existing;
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const isPastDate = selectedDate < todayStr;
-    
+    // No record = no checkboxes checked, no auto-Alpa
     return {
       athleteId: athleteId as string,
-      paidKas: isPastDate,
+      paidKas: false,
       isLate: false,
-      noNews: isPastDate, // Auto Alpa visually
+      noNews: false,
       isExcused: false,
+      isExcusedWork: false,
+      isExcusedOther: false,
       isSettled: false,
-      totalBilled: isPastDate ? 26000 : 0,
+      totalBilled: 0,
     };
   };
 
@@ -512,19 +473,19 @@ export default function KasPage() {
                   <col className="w-[44px]" />
                   <col className="w-[44px]" />
                   <col className="w-[44px]" />
-                  <col className="w-[44px]" />
-                  <col className="w-[44px]" />
+                  <col className="w-[52px]" />
+                  <col className="w-[52px]" />
                   <col className="w-[90px]" />
                   <col className="w-[70px]" />
                 </colgroup>
-                <thead className="bg-white/5 text-xs uppercase text-slate-400">
+                <thead className="bg-white/5 text-[10px] uppercase text-slate-400">
                   <tr>
-                    <th className="pl-4 pr-2 py-3 font-medium">Nama</th>
-                    <th className="px-1 py-3 text-center font-medium" title="Bayar Kas Rp 13rb">Kas</th>
-                    <th className="px-1 py-3 text-center font-medium" title="Telat Rp 5rb">Telat</th>
-                    <th className="px-1 py-3 text-center font-medium" title="Alpa / Tanpa Kabar Rp 26rb">Alpa</th>
-                    <th className="px-1 py-3 text-center font-medium" title="Izin Kerja/Sekolah (Gratis)">🏢</th>
-                    <th className="px-1 py-3 text-center font-medium" title="Izin Lainnya (Rp 23rb)">📋</th>
+                    <th className="pl-4 pr-2 py-3 font-medium text-left">Nama</th>
+                    <th className="px-1 py-3 text-center font-medium">Kas</th>
+                    <th className="px-1 py-3 text-center font-medium">Telat</th>
+                    <th className="px-1 py-3 text-center font-medium">Alpa</th>
+                    <th className="px-1 py-3 text-center font-medium leading-tight">Izin<br/><span className="text-emerald-400/70 normal-case">Kerja</span></th>
+                    <th className="px-1 py-3 text-center font-medium leading-tight">Izin<br/><span className="text-yellow-400/70 normal-case">Lain</span></th>
                     <th className="px-2 py-3 text-right font-medium">Tagihan</th>
                     <th className="px-2 py-3 text-center font-medium">Status</th>
                   </tr>
@@ -554,10 +515,10 @@ export default function KasPage() {
                           <td className="px-1 py-3 text-center">
                             <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-1 py-3 text-center" title="Izin Kerja/Sekolah (Gratis)">
+                          <td className="px-1 py-3 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-1 py-3 text-center" title="Izin Lainnya (Rp 23rb)">
+                          <td className="px-1 py-3 text-center">
                             <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
                           <td className="px-2 py-3 text-right font-bold text-cyan-400 text-sm">
@@ -587,11 +548,11 @@ export default function KasPage() {
             </div>
             {/* Legend */}
             <div className="px-4 pb-4 pt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 border-t border-white/5">
-              <span>💰 Kas = Rp 13rb</span>
-              <span>⏰ Telat = Rp 5rb</span>
-              <span>❌ Alpa = Rp 26rb</span>
-              <span>🏢 Izin Kerja/Sekolah = Gratis</span>
-              <span>📋 Izin Lainnya = Rp 23rb</span>
+              <span><span className="text-cyan-400">●</span> Kas = Rp 13rb</span>
+              <span><span className="text-orange-400">●</span> Telat = +Rp 5rb</span>
+              <span><span className="text-red-400">●</span> Alpa = Rp 26rb</span>
+              <span><span className="text-emerald-400">●</span> Izin Kerja = Gratis</span>
+              <span><span className="text-yellow-400">●</span> Izin Lain = Rp 23rb</span>
             </div>
           </section>
         )}
