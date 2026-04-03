@@ -29,7 +29,7 @@ export default function KasPage() {
   const [records, setRecords] = useState<KasRecord[]>([]);
   const [transactions, setTransactions] = useState<KasTransaction[]>([]);
   const [allRecords, setAllRecords] = useState<KasRecord[]>([]);
-  const [selectedDate, setSelectedDate] = useState("2026-04-01");
+  const [selectedDate, setSelectedDate] = useState(""); // Will be set on first load
   const { user } = useAuth();
   const [isKasAdmin, setIsKasAdmin] = useState(false);
   
@@ -87,8 +87,10 @@ export default function KasPage() {
         getAllKasRecords() // Always fetch all records to find unpaid ones
       ];
       
-      if (activeTab === "daily") {
+      if (activeTab === "daily" && selectedDate) {
         p.push(getKasRecordsByDate(selectedDate));
+      } else if (activeTab === "daily" && !selectedDate) {
+        p.push(Promise.resolve([])); // Will be fetched after default date is set
       } else if (activeTab === "transactions") {
         p.push(getKasTransactions());
       } else if (activeTab === "recap" || activeTab === "debt") {
@@ -107,9 +109,17 @@ export default function KasPage() {
       // Auto-Alpa was inflating totals for dates where admin hasn't inputted data yet
       let summaryData = results[1];
       setSummary(summaryData);
-      // Default selectedDate to latest training if not set
-      if (selectedDate === "2026-04-01" && dates.length > 0 && activeTab === "daily" && !selectedDate) {
-        setSelectedDate(dates[0]);
+      
+      // Smart default date: today if it's a training day, otherwise closest past training date
+      if (!selectedDate && dates.length > 0 && activeTab === "daily") {
+        const todayISO = new Date().toISOString().split('T')[0];
+        if (dates.includes(todayISO)) {
+          setSelectedDate(todayISO);
+        } else {
+          // dates are sorted desc, find first date <= today
+          const closestPast = dates.find((d: string) => d <= todayISO);
+          setSelectedDate(closestPast || dates[0]);
+        }
       }
       
       // Calculate global unpaid — only from actual Firestore records
@@ -349,70 +359,62 @@ export default function KasPage() {
       <div className="mx-auto flex w-full flex-col gap-4">
         
         {/* Header & Tabs */}
-        <header className="flex flex-col gap-6 rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+        <header className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-4 backdrop-blur-xl">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold text-white tracking-tight">Kas Crown</h1>
-              <p className="mt-1 text-slate-400">
+              <h1 className="text-2xl font-bold text-white tracking-tight">Kas Crown</h1>
+              <p className="text-xs text-slate-400 mt-0.5">
                 Kelola kas harian, denda, uang job, dan saldo.
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              {isKasAdmin && (
-                <>
-                  <button
-                    onClick={() => setShowTrxModal(true)}
-                    className="flex items-center justify-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-4 py-2.5 text-sm font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
-                  >
-                    <Wallet className="h-4 w-4" />
-                    Catat Transaksi
-                  </button>
-                  
-                </>
-              )}
-            </div>
+            {isKasAdmin && (
+              <button
+                onClick={() => setShowTrxModal(true)}
+                className="flex items-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
+              >
+                <Wallet className="h-3.5 w-3.5" />
+                Catat Transaksi
+              </button>
+            )}
           </div>
           
-          <div className="flex gap-2 border-b border-white/10 pb-1 overflow-x-auto">
-            <button onClick={() => setActiveTab("daily")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'daily' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              Absen Kas (Harian)
-            </button>
-            <button onClick={() => setActiveTab("debt")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'debt' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              Tunggakan Atlet
-            </button>
-            <button onClick={() => setActiveTab("transactions")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'transactions' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              Uang Job & Pengeluaran
-            </button>
-
-            <button onClick={() => setActiveTab("recap")} className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === 'recap' ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
-              Export Rekap (CSV)
-            </button>
+          <div className="flex gap-1 border-b border-white/10 pb-1 overflow-x-auto -mx-1 px-1">
+            {([
+              { key: "daily", label: "Harian" },
+              { key: "debt", label: "Tunggakan" },
+              { key: "transactions", label: "Job & Pengeluaran" },
+              { key: "recap", label: "Export CSV" },
+            ] as const).map(tab => (
+              <button key={tab.key} onClick={() => setActiveTab(tab.key)} className={`px-3 py-2 text-xs font-medium whitespace-nowrap transition-colors border-b-2 ${activeTab === tab.key ? 'border-cyan-500 text-cyan-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}>
+                {tab.label}
+              </button>
+            ))}
           </div>
         </header>
 
         {/* Global Summary Cards */}
-        <section className="grid gap-4 md:grid-cols-4">
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-transparent p-6 backdrop-blur-xl relative overflow-hidden group">
-            <p className="text-sm font-medium text-emerald-500/80">Saldo Kas Total (Netto)</p>
-            <p className="mt-2 text-3xl font-bold text-emerald-400">
+        <section className="grid grid-cols-2 gap-2 sm:grid-cols-4 sm:gap-3">
+          <div className="rounded-xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-transparent p-3 backdrop-blur-xl">
+            <p className="text-[10px] font-medium text-emerald-500/80 uppercase tracking-wider">Saldo</p>
+            <p className="mt-1 text-lg font-bold text-emerald-400">
               Rp {summary.currentBalance.toLocaleString("id-ID")}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-            <p className="text-sm text-slate-400">Uang Job & Pemasukan</p>
-            <p className="mt-2 text-2xl font-bold text-cyan-400">
+          <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Pemasukan</p>
+            <p className="mt-1 text-lg font-bold text-cyan-400">
               Rp {(summary.totalJob + summary.totalOtherIn).toLocaleString("id-ID")}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-            <p className="text-sm text-slate-400">Total Atlet Lunas</p>
-            <p className="mt-2 text-2xl font-bold text-cyan-400">
+          <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Lunas</p>
+            <p className="mt-1 text-lg font-bold text-cyan-400">
               Rp {summary.totalSettled.toLocaleString("id-ID")}
             </p>
           </div>
-          <div className="rounded-2xl border border-white/10 bg-black/40 p-6 backdrop-blur-xl">
-            <p className="text-sm text-slate-400">Piutang Belum Lunas</p>
-            <p className="mt-2 text-2xl font-bold text-red-400">
+          <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
+            <p className="text-[10px] text-slate-400 uppercase tracking-wider">Piutang</p>
+            <p className="mt-1 text-lg font-bold text-red-400">
               Rp {(summary.totalBilled - summary.totalSettled).toLocaleString("id-ID")}
             </p>
           </div>
@@ -420,19 +422,21 @@ export default function KasPage() {
 
         {/* TAB 1: KAS HARIAN */}
         {activeTab === "daily" && (
-          <section className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
-            <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
-              <div className="flex items-center gap-3">
-                <Calculator className="h-5 w-5 text-cyan-400" />
-                <h2 className="text-lg font-semibold text-white">Kas Harian Latihan</h2>
+          <section className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
+            <div className="flex flex-col gap-3 border-b border-white/10 bg-white/[0.02] p-3">
+              <div className="flex items-center justify-between">
+                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+                  <Calculator className="h-4 w-4 text-cyan-400" />
+                  Kas Harian
+                </h2>
               </div>
-              <div className="flex items-center gap-3">
-                <label className="text-sm font-medium text-slate-400">Tanggal:</label>
+              <div className="flex items-center gap-2">
+                <label className="text-xs font-medium text-slate-400 shrink-0">Tanggal:</label>
                 {trainingDates.length > 0 ? (
                   <select
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 max-w-xs truncate"
+                    className="rounded-lg border border-white/10 bg-black px-2 py-1.5 text-xs text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 flex-1 min-w-0"
                   >
                     {trainingDates.map(date => (
                       <option key={date} value={date}>
@@ -469,27 +473,27 @@ export default function KasPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300 table-fixed">
+              <table className="w-full text-left text-xs text-slate-300">
                 <colgroup>
                   <col className="w-auto" />
-                  <col className="w-[44px]" />
-                  <col className="w-[44px]" />
-                  <col className="w-[44px]" />
-                  <col className="w-[52px]" />
-                  <col className="w-[52px]" />
-                  <col className="w-[90px]" />
-                  <col className="w-[70px]" />
+                  <col className="w-[36px]" />
+                  <col className="w-[36px]" />
+                  <col className="w-[36px]" />
+                  <col className="w-[40px]" />
+                  <col className="w-[40px]" />
+                  <col className="w-[75px]" />
+                  <col className="w-[58px]" />
                 </colgroup>
-                <thead className="bg-white/5 text-[10px] uppercase text-slate-400">
+                <thead className="bg-white/5 text-[9px] uppercase text-slate-400">
                   <tr>
-                    <th className="pl-4 pr-2 py-3 font-medium text-left">Nama</th>
-                    <th className="px-1 py-3 text-center font-medium">Kas</th>
-                    <th className="px-1 py-3 text-center font-medium">Telat</th>
-                    <th className="px-1 py-3 text-center font-medium">Alpa</th>
-                    <th className="px-1 py-3 text-center font-medium leading-tight">Izin<br/><span className="text-emerald-400/70 normal-case">Kerja</span></th>
-                    <th className="px-1 py-3 text-center font-medium leading-tight">Izin<br/><span className="text-yellow-400/70 normal-case">Lain</span></th>
-                    <th className="px-2 py-3 text-right font-medium">Tagihan</th>
-                    <th className="px-2 py-3 text-center font-medium">Status</th>
+                    <th className="pl-3 pr-1 py-2 font-medium text-left">Nama</th>
+                    <th className="px-0.5 py-2 text-center font-medium">Kas</th>
+                    <th className="px-0.5 py-2 text-center font-medium">Telat</th>
+                    <th className="px-0.5 py-2 text-center font-medium">Alpa</th>
+                    <th className="px-0.5 py-2 text-center font-medium leading-tight"><span className="text-emerald-400/80">Izin</span><br/>Kerja</th>
+                    <th className="px-0.5 py-2 text-center font-medium leading-tight"><span className="text-yellow-400/80">Izin</span><br/>Lain</th>
+                    <th className="px-1 py-2 text-right font-medium">Tagihan</th>
+                    <th className="px-1 py-2 text-center font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
@@ -507,32 +511,31 @@ export default function KasPage() {
                       const isAnyExcused = !!record.isExcusedWork || !!record.isExcusedOther || !!record.isExcused;
                       return (
                         <tr key={athlete.id} className="hover:bg-white/[0.02]">
-                          <td className="pl-4 pr-2 py-3 font-medium text-white truncate text-sm">{athlete.name}</td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-30" />
+                          <td className="pl-3 pr-1 py-2 font-medium text-white truncate text-xs max-w-[100px]">{athlete.name}</td>
+                          <td className="px-0.5 py-2 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
+                          <td className="px-0.5 py-2 text-center">
+                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-30" />
+                          <td className="px-0.5 py-2 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black disabled:opacity-50" />
+                          <td className="px-0.5 py-2 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black disabled:opacity-50" />
+                          <td className="px-0.5 py-2 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-2 py-3 text-right font-bold text-cyan-400 text-sm">
-                            Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
+                          <td className="px-1 py-2 text-right font-bold text-cyan-400 text-[11px]">
+                            {(record.totalBilled || 0) > 0 ? `${((record.totalBilled || 0) / 1000).toFixed(0)}rb` : "-"}
                           </td>
-                          <td className="px-2 py-3 text-center">
+                          <td className="px-1 py-2 text-center">
                             {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
-                                {record.isSettled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
-                                {record.isSettled ? "Lunas" : "Belum"}
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
+                                {record.isSettled ? "✓" : "✗"}
                               </button>
-                            ) : <span className="text-slate-600">-</span>}
+                            ) : <span className="text-slate-700">-</span>}
                           </td>
                         </tr>
                       );
@@ -540,8 +543,10 @@ export default function KasPage() {
                   )}
                   {/* Total Tagihan Hari ini */}
                   <tr className="bg-white/[0.03]">
-                    <td colSpan={6} className="pl-6 pr-3 py-3 text-right font-medium text-slate-400">Total Tagihan Hari Ini:</td>
-                    <td className="px-3 py-3 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
+                    <td colSpan={6} className="pl-3 pr-1 py-2 text-right font-medium text-slate-400 text-xs">Total:</td>
+                    <td className="px-1 py-2 text-right font-bold text-yellow-400 text-xs">
+                      {todayTotal > 0 ? `${(todayTotal / 1000).toFixed(0)}rb` : "-"}
+                    </td>
                     <td></td>
                     <td></td>
                   </tr>
