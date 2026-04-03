@@ -423,20 +423,18 @@ export default function KasPage() {
         {/* TAB 1: KAS HARIAN */}
         {activeTab === "daily" && (
           <section className="rounded-xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
-            <div className="flex flex-col gap-3 border-b border-white/10 bg-white/[0.02] p-3">
-              <div className="flex items-center justify-between">
-                <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-                  <Calculator className="h-4 w-4 text-cyan-400" />
-                  Kas Harian
-                </h2>
-              </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 bg-white/[0.02] p-4">
+              <h2 className="text-base font-semibold text-white flex items-center gap-2">
+                <Calculator className="h-4 w-4 text-cyan-400" />
+                Kas Harian
+              </h2>
               <div className="flex items-center gap-2">
-                <label className="text-xs font-medium text-slate-400 shrink-0">Tanggal:</label>
+                <label className="text-sm font-medium text-slate-400 shrink-0">Tanggal:</label>
                 {trainingDates.length > 0 ? (
                   <select
                     value={selectedDate}
                     onChange={(e) => setSelectedDate(e.target.value)}
-                    className="rounded-lg border border-white/10 bg-black px-2 py-1.5 text-xs text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 flex-1 min-w-0"
+                    className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500 min-w-0"
                   >
                     {trainingDates.map(date => (
                       <option key={date} value={date}>
@@ -459,7 +457,6 @@ export default function KasPage() {
                         if (val && val !== 'manual' && !trainingDates.includes(val)) {
                            if(confirm(`Tanggal ${val} tidak ada di jadwal. Tambahkan sebagai Latihan Tambahan di kalender?`)) {
                              await addCustomTrainingEvent(val);
-                             // Reload data to fetch updated training dates
                              loadData();
                            }
                         }
@@ -473,30 +470,20 @@ export default function KasPage() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs text-slate-300">
-                <colgroup>
-                  <col className="w-auto" />
-                  <col className="w-[36px]" />
-                  <col className="w-[36px]" />
-                  <col className="w-[36px]" />
-                  <col className="w-[40px]" />
-                  <col className="w-[40px]" />
-                  <col className="w-[75px]" />
-                  <col className="w-[58px]" />
-                </colgroup>
-                <thead className="bg-white/5 text-[9px] uppercase text-slate-400">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-white/[0.06] text-xs uppercase text-slate-400 border-b border-white/10">
                   <tr>
-                    <th className="pl-3 pr-1 py-2 font-medium text-left">Nama</th>
-                    <th className="px-0.5 py-2 text-center font-medium">Kas</th>
-                    <th className="px-0.5 py-2 text-center font-medium">Telat</th>
-                    <th className="px-0.5 py-2 text-center font-medium">Alpa</th>
-                    <th className="px-0.5 py-2 text-center font-medium leading-tight"><span className="text-emerald-400/80">Izin</span><br/>Kerja</th>
-                    <th className="px-0.5 py-2 text-center font-medium leading-tight"><span className="text-yellow-400/80">Izin</span><br/>Lain</th>
-                    <th className="px-1 py-2 text-right font-medium">Tagihan</th>
-                    <th className="px-1 py-2 text-center font-medium">Status</th>
+                    <th className="pl-4 sm:pl-6 pr-2 py-3 font-medium text-left">Nama Atlet</th>
+                    <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Kas</th>
+                    <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Telat</th>
+                    <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Alpa</th>
+                    <th className="px-2 py-3 text-center font-medium w-[60px] sm:w-[80px]"><span className="hidden sm:inline">Izin </span><span className="text-emerald-400">Kerja</span></th>
+                    <th className="px-2 py-3 text-center font-medium w-[60px] sm:w-[80px]"><span className="hidden sm:inline">Izin </span><span className="text-yellow-400">Lain</span></th>
+                    <th className="px-3 py-3 text-right font-medium w-[90px] sm:w-[110px]">Tagihan</th>
+                    <th className="px-3 py-3 text-center font-medium w-[70px] sm:w-[90px]">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-white/10">
+                <tbody>
                   {loading ? (
                     <tr>
                       <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Memuat data...</td>
@@ -506,34 +493,35 @@ export default function KasPage() {
                       <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
                     </tr>
                   ) : (
-                    athletes.map((athlete) => {
+                    athletes.map((athlete, idx) => {
                       const record = getAthleteRecord(athlete.id!);
                       const isAnyExcused = !!record.isExcusedWork || !!record.isExcusedOther || !!record.isExcused;
+                      const stripe = idx % 2 === 0 ? "bg-transparent" : "bg-white/[0.025]";
                       return (
-                        <tr key={athlete.id} className="hover:bg-white/[0.02]">
-                          <td className="pl-3 pr-1 py-2 font-medium text-white truncate text-xs max-w-[100px]">{athlete.name}</td>
-                          <td className="px-0.5 py-2 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-30" />
+                        <tr key={athlete.id} className={`${stripe} hover:bg-white/[0.05] transition-colors`}>
+                          <td className="pl-4 sm:pl-6 pr-2 py-3 font-medium text-white truncate max-w-[120px] sm:max-w-none">{athlete.name}</td>
+                          <td className="px-2 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
-                          <td className="px-0.5 py-2 text-center">
-                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
+                          <td className="px-2 py-3 text-center">
+                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
-                          <td className="px-0.5 py-2 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-30" />
+                          <td className="px-2 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
-                          <td className="px-0.5 py-2 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black disabled:opacity-50" />
+                          <td className="px-2 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                           </td>
-                          <td className="px-0.5 py-2 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-3.5 h-3.5 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black disabled:opacity-50" />
+                          <td className="px-2 py-3 text-center">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
                           </td>
-                          <td className="px-1 py-2 text-right font-bold text-cyan-400 text-[11px]">
-                            {(record.totalBilled || 0) > 0 ? `${((record.totalBilled || 0) / 1000).toFixed(0)}rb` : "-"}
+                          <td className="px-3 py-3 text-right font-semibold text-cyan-400">
+                            {(record.totalBilled || 0) > 0 ? `Rp ${((record.totalBilled || 0) / 1000).toFixed(0)}rb` : <span className="text-slate-600">-</span>}
                           </td>
-                          <td className="px-1 py-2 text-center">
+                          <td className="px-3 py-3 text-center">
                             {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
-                                {record.isSettled ? "✓" : "✗"}
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
+                                {record.isSettled ? <><CheckCircle2 className="h-3 w-3 hidden sm:block" />Lunas</> : <><XCircle className="h-3 w-3 hidden sm:block" />Belum</>}
                               </button>
                             ) : <span className="text-slate-700">-</span>}
                           </td>
@@ -541,11 +529,11 @@ export default function KasPage() {
                       );
                     })
                   )}
-                  {/* Total Tagihan Hari ini */}
-                  <tr className="bg-white/[0.03]">
-                    <td colSpan={6} className="pl-3 pr-1 py-2 text-right font-medium text-slate-400 text-xs">Total:</td>
-                    <td className="px-1 py-2 text-right font-bold text-yellow-400 text-xs">
-                      {todayTotal > 0 ? `${(todayTotal / 1000).toFixed(0)}rb` : "-"}
+                  {/* Total Tagihan */}
+                  <tr className="bg-white/[0.04] border-t border-white/10">
+                    <td colSpan={6} className="pl-4 sm:pl-6 pr-2 py-3 text-right font-semibold text-slate-300 text-sm">Total Tagihan Hari Ini</td>
+                    <td className="px-3 py-3 text-right font-bold text-yellow-400 text-sm">
+                      {todayTotal > 0 ? `Rp ${(todayTotal / 1000).toFixed(0)}rb` : "-"}
                     </td>
                     <td></td>
                     <td></td>
@@ -554,12 +542,12 @@ export default function KasPage() {
               </table>
             </div>
             {/* Legend */}
-            <div className="px-4 pb-4 pt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 border-t border-white/5">
-              <span><span className="text-cyan-400">●</span> Kas = Rp 13rb</span>
-              <span><span className="text-orange-400">●</span> Telat = +Rp 5rb</span>
-              <span><span className="text-red-400">●</span> Alpa = Rp 26rb</span>
-              <span><span className="text-emerald-400">●</span> Izin Kerja = Gratis</span>
-              <span><span className="text-yellow-400">●</span> Izin Lain = Rp 23rb</span>
+            <div className="px-4 sm:px-6 pb-4 pt-3 flex flex-wrap gap-x-5 gap-y-1.5 text-xs text-slate-500 border-t border-white/5">
+              <span><span className="inline-block w-2 h-2 rounded-full bg-cyan-500 mr-1.5"></span>Kas = 13rb</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>Telat = +5rb</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>Alpa = 26rb</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Izin Kerja = Gratis</span>
+              <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1.5"></span>Izin Lain = 23rb</span>
             </div>
           </section>
         )}
