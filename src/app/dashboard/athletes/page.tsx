@@ -41,6 +41,7 @@ type Athlete = {
   id: string;
   name: string;
   divisions: string[];
+  kasExempt?: boolean;
 };
 
 const DIVISIONS = ["All Girl", "Coed"] as const;
@@ -91,7 +92,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt };
       }));
     });
     return () => unsub();
@@ -133,6 +134,14 @@ export default function AthletesDashboardPage() {
   const handleDeleteAthlete = async (id: string) => {
     if (window.confirm("Hapus atlit ini dari daftar?")) {
       await deleteDoc(doc(db, "crown-athletes", id));
+    }
+  };
+
+  const handleToggleKasExempt = async (id: string, currentValue: boolean) => {
+    try {
+      await updateDoc(doc(db, "crown-athletes", id), { kasExempt: !currentValue });
+    } catch (e) {
+      console.error(e);
     }
   };
 
@@ -444,8 +453,26 @@ export default function AthletesDashboardPage() {
                             <DivisionPills divisions={ath.divisions} size="xs" />
                           </div>
 
+                          {/* Kas Exempt Badge */}
+                          {ath.kasExempt && (
+                            <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium">
+                              Bebas Kas
+                            </span>
+                          )}
+
                           {/* Actions — show on hover (desktop), always on mobile */}
                           <div className="flex items-center gap-0.5 mt-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                            <button 
+                              onClick={() => handleToggleKasExempt(ath.id, !!ath.kasExempt)}
+                              title={ath.kasExempt ? "Aktifkan kas" : "Bebaskan dari kas"}
+                              className={`h-7 w-7 rounded-md flex items-center justify-center active:scale-95 transition-all ${
+                                ath.kasExempt 
+                                  ? "text-amber-400 bg-amber-500/10 hover:bg-amber-500/20" 
+                                  : "text-slate-500 hover:text-amber-300 hover:bg-amber-500/10"
+                              }`}
+                            >
+                              <span className="text-[9px] font-bold leading-none">Kas</span>
+                            </button>
                             <button 
                               onClick={() => { 
                                 setEditingAthleteId(ath.id); 
