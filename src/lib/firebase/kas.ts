@@ -126,22 +126,33 @@ export async function getTrainingDates(): Promise<string[]> {
   
   const dates = new Set<string>();
   
-  // 1. Get Custom Events (Libur/Tambahan)
-  const q = query(collection(db, "crown-events"));
-  const snapshot = await getDocs(q);
+  // 1. Get Custom Events from crown-events (legacy)
+  const qEvents = query(collection(db, "crown-events"));
+  const snapshotEvents = await getDocs(qEvents);
   const customEvents = new Map<string, any>();
-  snapshot.forEach(doc => {
+  snapshotEvents.forEach(doc => {
     const data = doc.data();
     if (data.date) {
       customEvents.set(data.date, data);
     }
   });
 
-  // 2. Generate Regular Training Days (Wed, Sat, Sun) starting from April 1, 2026
+  // 2. Get Schedules from crown-schedules (jadwal page edits)
+  const qSchedules = query(collection(db, "crown-schedules"));
+  const snapshotSchedules = await getDocs(qSchedules);
+  const customSchedules = new Map<string, any>();
+  snapshotSchedules.forEach(doc => {
+    const data = doc.data();
+    if (data.date) {
+      customSchedules.set(data.date, data);
+    }
+  });
+
+  // 3. Generate Regular Training Days (Wed, Sat, Sun) starting from April 1, 2026
   const TRAINING_START = new Date(2026, 3, 1);
   const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
   
-  // Look 1 month back and 2 months ahead
+  // Look 2 months back and 3 months ahead
   for (let m = -2; m <= 3; m++) {
     const targetDate = new Date(year, month + m, 1);
     const y = targetDate.getFullYear();
@@ -154,13 +165,25 @@ export async function getTrainingDates(): Promise<string[]> {
 
       const dateStr = `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       
+      // Crown-schedules takes priority (jadwal page)
+      if (customSchedules.has(dateStr)) {
+        const sched = customSchedules.get(dateStr);
+        if (sched.status === "latihan" || sched.status === "tambahan") {
+          dates.add(dateStr);
+        }
+        // If status is "libur", skip this date
+        continue;
+      }
+
+      // Then check crown-events (legacy)
       if (customEvents.has(dateStr)) {
         if (customEvents.get(dateStr).status !== "libur") {
-          dates.add(dateStr); // Tambahan atau ganti hari
+          dates.add(dateStr);
         }
         continue;
       }
       
+      // Regular days
       if (REGULAR_DAYS.has(d.getDay())) {
         dates.add(dateStr);
       }

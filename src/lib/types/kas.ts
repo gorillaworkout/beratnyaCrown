@@ -8,6 +8,10 @@ export interface KasRecord {
   isLate: boolean;
   noNews: boolean;
   isExcused: boolean;
+  /** Izin karena kerja/sekolah → free (Rp 0) */
+  isExcusedWork?: boolean;
+  /** Izin lainnya → Rp 23,000 (kas 13rb + denda 10rb) */
+  isExcusedOther?: boolean;
   totalBilled: number;
   isSettled: boolean;
   updatedAt?: any;

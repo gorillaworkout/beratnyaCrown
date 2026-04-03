@@ -223,7 +223,12 @@ export default function KasPage() {
     };
   };
 
-  const calculateTotal = (paidKas: boolean, isLate: boolean, noNews: boolean, isExcused: boolean) => {
+  const calculateTotal = (paidKas: boolean, isLate: boolean, noNews: boolean, isExcused: boolean, isExcusedWork?: boolean, isExcusedOther?: boolean) => {
+    // Izin Kerja/Sekolah → free
+    if (isExcusedWork) return 0;
+    // Izin Lainnya → Rp 23,000 (kas 13rb + denda 10rb)
+    if (isExcusedOther) return 23000;
+    // Legacy isExcused → free (backward compat)
     if (isExcused) return 0;
     if (noNews) return 26000;
     let total = 0;
@@ -234,7 +239,7 @@ export default function KasPage() {
 
   async function handleRecordChange(
     athlete: KasAthlete,
-    field: "paidKas" | "isLate" | "noNews" | "isExcused",
+    field: "paidKas" | "isLate" | "noNews" | "isExcused" | "isExcusedWork" | "isExcusedOther",
     value: boolean,
   ) {
     const existingRecord = getAthleteRecord(athlete.id!);
@@ -242,15 +247,40 @@ export default function KasPage() {
     let newIsLate = !!existingRecord.isLate;
     let newNoNews = !!existingRecord.noNews;
     let newIsExcused = !!existingRecord.isExcused;
+    let newIsExcusedWork = !!existingRecord.isExcusedWork;
+    let newIsExcusedOther = !!existingRecord.isExcusedOther;
 
     if (field === "paidKas") newPaidKas = value;
     if (field === "isLate") newIsLate = value;
+    if (field === "isExcusedWork") {
+      newIsExcusedWork = value;
+      if (value) {
+        newIsExcusedOther = false;
+        newIsExcused = false;
+        newPaidKas = false;
+        newIsLate = false;
+        newNoNews = false;
+      }
+    }
+    if (field === "isExcusedOther") {
+      newIsExcusedOther = value;
+      if (value) {
+        newIsExcusedWork = false;
+        newIsExcused = false;
+        newPaidKas = false;
+        newIsLate = false;
+        newNoNews = false;
+      }
+    }
+    // Legacy isExcused → treat as isExcusedWork
     if (field === "isExcused") {
       newIsExcused = value;
       if (value) {
         newPaidKas = false;
         newIsLate = false;
         newNoNews = false;
+        newIsExcusedWork = false;
+        newIsExcusedOther = false;
       }
     }
     if (field === "noNews") {
@@ -259,10 +289,12 @@ export default function KasPage() {
         newPaidKas = true;
         newIsLate = false;
         newIsExcused = false;
+        newIsExcusedWork = false;
+        newIsExcusedOther = false;
       }
     }
 
-    const totalBilled = calculateTotal(newPaidKas, newIsLate, newNoNews, newIsExcused);
+    const totalBilled = calculateTotal(newPaidKas, newIsLate, newNoNews, newIsExcused, newIsExcusedWork, newIsExcusedOther);
 
     const recordToSave: Partial<KasRecord> = {
       date: selectedDate,
@@ -273,6 +305,8 @@ export default function KasPage() {
       isLate: newIsLate,
       noNews: newNoNews,
       isExcused: newIsExcused,
+      isExcusedWork: newIsExcusedWork,
+      isExcusedOther: newIsExcusedOther,
       totalBilled,
       isSettled: !!existingRecord.isSettled,
     };
@@ -475,55 +509,61 @@ export default function KasPage() {
               <table className="w-full text-left text-sm text-slate-300 table-fixed">
                 <colgroup>
                   <col className="w-auto" />
-                  <col className="w-[52px]" />
-                  <col className="w-[52px]" />
-                  <col className="w-[52px]" />
-                  <col className="w-[52px]" />
-                  <col className="w-[110px]" />
-                  <col className="w-[80px]" />
+                  <col className="w-[44px]" />
+                  <col className="w-[44px]" />
+                  <col className="w-[44px]" />
+                  <col className="w-[44px]" />
+                  <col className="w-[44px]" />
+                  <col className="w-[90px]" />
+                  <col className="w-[70px]" />
                 </colgroup>
                 <thead className="bg-white/5 text-xs uppercase text-slate-400">
                   <tr>
-                    <th className="pl-6 pr-3 py-3 font-medium">Nama Atlet</th>
-                    <th className="px-1 py-3 text-center font-medium">Kas</th>
-                    <th className="px-1 py-3 text-center font-medium">Telat</th>
-                    <th className="px-1 py-3 text-center font-medium">Alpa</th>
-                    <th className="px-1 py-3 text-center font-medium">Izin</th>
-                    <th className="px-3 py-3 text-right font-medium">Tagihan</th>
-                    <th className="px-3 py-3 text-center font-medium">Status</th>
+                    <th className="pl-4 pr-2 py-3 font-medium">Nama</th>
+                    <th className="px-1 py-3 text-center font-medium" title="Bayar Kas Rp 13rb">Kas</th>
+                    <th className="px-1 py-3 text-center font-medium" title="Telat Rp 5rb">Telat</th>
+                    <th className="px-1 py-3 text-center font-medium" title="Alpa / Tanpa Kabar Rp 26rb">Alpa</th>
+                    <th className="px-1 py-3 text-center font-medium" title="Izin Kerja/Sekolah (Gratis)">🏢</th>
+                    <th className="px-1 py-3 text-center font-medium" title="Izin Lainnya (Rp 23rb)">📋</th>
+                    <th className="px-2 py-3 text-right font-medium">Tagihan</th>
+                    <th className="px-2 py-3 text-center font-medium">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
                   {loading ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">Memuat data...</td>
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Memuat data...</td>
                     </tr>
                   ) : athletes.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
+                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
                     </tr>
                   ) : (
                     athletes.map((athlete) => {
                       const record = getAthleteRecord(athlete.id!);
+                      const isAnyExcused = !!record.isExcusedWork || !!record.isExcusedOther || !!record.isExcused;
                       return (
                         <tr key={athlete.id} className="hover:bg-white/[0.02]">
-                          <td className="pl-6 pr-3 py-3 font-medium text-white truncate">{athlete.name}</td>
+                          <td className="pl-4 pr-2 py-3 font-medium text-white truncate text-sm">{athlete.name}</td>
                           <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-50" />
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
                           <td className="px-1 py-3 text-center">
-                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
+                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
                           <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-50" />
+                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black disabled:opacity-30" />
                           </td>
-                          <td className="px-1 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcused} onChange={(e) => handleRecordChange(athlete, "isExcused", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-purple-500 focus:ring-purple-500 focus:ring-offset-black disabled:opacity-50" />
+                          <td className="px-1 py-3 text-center" title="Izin Kerja/Sekolah (Gratis)">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black disabled:opacity-50" />
                           </td>
-                          <td className="px-3 py-3 text-right font-bold text-cyan-400">
+                          <td className="px-1 py-3 text-center" title="Izin Lainnya (Rp 23rb)">
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black disabled:opacity-50" />
+                          </td>
+                          <td className="px-2 py-3 text-right font-bold text-cyan-400 text-sm">
                             Rp {(record.totalBilled || 0).toLocaleString("id-ID")}
                           </td>
-                          <td className="px-3 py-3 text-center">
+                          <td className="px-2 py-3 text-center">
                             {(record.totalBilled || 0) > 0 ? (
                               <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
                                 {record.isSettled ? <CheckCircle2 className="h-3 w-3" /> : <XCircle className="h-3 w-3" />}
@@ -537,12 +577,21 @@ export default function KasPage() {
                   )}
                   {/* Total Tagihan Hari ini */}
                   <tr className="bg-white/[0.03]">
-                    <td colSpan={5} className="pl-6 pr-3 py-3 text-right font-medium text-slate-400">Total Tagihan Hari Ini:</td>
+                    <td colSpan={6} className="pl-6 pr-3 py-3 text-right font-medium text-slate-400">Total Tagihan Hari Ini:</td>
                     <td className="px-3 py-3 text-right font-bold text-yellow-400">Rp {todayTotal.toLocaleString("id-ID")}</td>
+                    <td></td>
                     <td></td>
                   </tr>
                 </tbody>
               </table>
+            </div>
+            {/* Legend */}
+            <div className="px-4 pb-4 pt-2 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500 border-t border-white/5">
+              <span>💰 Kas = Rp 13rb</span>
+              <span>⏰ Telat = Rp 5rb</span>
+              <span>❌ Alpa = Rp 26rb</span>
+              <span>🏢 Izin Kerja/Sekolah = Gratis</span>
+              <span>📋 Izin Lainnya = Rp 23rb</span>
             </div>
           </section>
         )}
