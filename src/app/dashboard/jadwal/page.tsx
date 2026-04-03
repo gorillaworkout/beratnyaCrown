@@ -223,11 +223,19 @@ export default function JadwalPage() {
   const [selectedAbsenceDate, setSelectedAbsenceDate] = useState("");
   const [absenceForm, setAbsenceForm] = useState<{name: string, reason: string}[]>([]);
   const [athleteSearch, setAthleteSearch] = useState("");
-  const [dynamicAthletes, setDynamicAthletes] = useState<string[]>([]);
+  const [dynamicAthletes, setDynamicAthletes] = useState<{name: string, divisions: string[]}[]>([]);
+  const [absenceDivFilter, setAbsenceDivFilter] = useState<"all" | "All Girl" | "Coed">("all");
+  const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(1);
+
+  // Toast helper
+  const showToast = useCallback((message: string, type: 'success' | 'error' = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
   // ─── Firestore Listeners ─────────────────────────────────────────────────
 
@@ -286,10 +294,16 @@ export default function JadwalPage() {
       }
     );
 
-    // Listen to crown-athletes
+    // Listen to crown-athletes (with divisions)
     const unsubAthletes = onSnapshot(collection(db, "crown-athletes"), (snap) => {
-      const names = snap.docs.map(d => d.data().name).filter(Boolean).sort();
-      if (names.length > 0) setDynamicAthletes(names);
+      const athletes = snap.docs.map(d => {
+        const data = d.data();
+        let divisions: string[] = [];
+        if (Array.isArray(data.divisions)) divisions = data.divisions;
+        else if (data.division) divisions = [data.division];
+        return { name: (data.name as string) || "", divisions };
+      }).filter(a => a.name).sort((a, b) => a.name.localeCompare(b.name));
+      if (athletes.length > 0) setDynamicAthletes(athletes);
     });
 
     // Listen to crown-absences
@@ -555,6 +569,7 @@ export default function JadwalPage() {
     triggerCalendarSync();
     setEditDialogOpen(false);
     setEditingDate(null);
+    showToast("Jadwal berhasil disimpan!");
   };
 
   const deleteSchedule = async () => {
@@ -568,6 +583,7 @@ export default function JadwalPage() {
     triggerCalendarSync();
     setEditDialogOpen(false);
     setEditingDate(null);
+    showToast("Jadwal berhasil dihapus!");
   };
 
   const addCustomSchedule = async () => {
@@ -597,6 +613,7 @@ export default function JadwalPage() {
       timeEnd: "22:00",
       note: "",
     });
+    showToast("Jadwal tambahan berhasil ditambahkan!");
   };
 
   // ─── Event Management ────────────────────────────────────────────────────
@@ -612,6 +629,7 @@ export default function JadwalPage() {
     setNewEventName("");
     setNewEventDate("");
     triggerCalendarSync();
+    showToast("Event berhasil ditambahkan!");
   };
 
   const removeEvent = async (id: string) => {
@@ -675,7 +693,7 @@ export default function JadwalPage() {
 
   // ─── Absence Management ──────────────────────────────────────────────
 
-  const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES;
+  const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES.map(n => ({ name: n, divisions: [] as string[] }));
 
   const openAbsenceDialog = (dateStr: string) => {
     setSelectedAbsenceDate(dateStr);
@@ -700,11 +718,17 @@ export default function JadwalPage() {
 
   const saveAbsences = async () => {
     if (!selectedAbsenceDate) return;
-    await setDoc(doc(db, "crown-absences", selectedAbsenceDate), {
-      date: selectedAbsenceDate,
-      absences: absenceForm,
-    });
-    setAbsenceDialogOpen(false);
+    try {
+      await setDoc(doc(db, "crown-absences", selectedAbsenceDate), {
+        date: selectedAbsenceDate,
+        absences: absenceForm,
+      });
+      setAbsenceDialogOpen(false);
+      showToast(`Izin ${absenceForm.length} atlit berhasil disimpan!`);
+    } catch (error) {
+      console.error(error);
+      showToast("Gagal menyimpan izin. Coba lagi.", "error");
+    }
   };
 
   const getAbsenceCount = (dateStr: string): number => {
@@ -1285,8 +1309,27 @@ export default function JadwalPage() {
                         </Badge>
                         {(entry.status === "latihan" || entry.status === "tambahan") && (() => {
                           const absCount = getAbsenceCount(entry.date);
-                          if (absCount > 0) return <Badge className="bg-red-500/20 text-red-400 border-red-500/20 text-[10px] px-1.5">⚠️ Minus {absCount} Orang</Badge>;
-                          return <Badge className="bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-amber-400 border-amber-500/20 text-[10px] px-1.5">🔥 FULL TEAM READY</Badge>;
+                          if (absCount > 0) {
+                            // Division-aware absence badges
+                            const absRec = absences.find(a => a.date === entry.date);
+                            const absentNames = new Set(absRec?.absences?.map((a: any) => a.name) || []);
+                            const agAthletes = dynamicAthletes.filter(a => a.divisions.includes("All Girl"));
+                            const coedAthletes = dynamicAthletes.filter(a => a.divisions.includes("Coed"));
+                            const agAbsent = agAthletes.filter(a => absentNames.has(a.name)).length;
+                            const coedAbsent = coedAthletes.filter(a => absentNames.has(a.name)).length;
+                            const agFull = agAthletes.length > 0 && agAbsent === 0;
+                            const coedFull = coedAthletes.length > 0 && coedAbsent === 0;
+                            return (
+                              <>
+                                <Badge className="bg-red-500/20 text-red-400 border-red-500/20 text-[10px] px-1.5">⚠️ -{absCount}</Badge>
+                                {agFull && <Badge className="bg-pink-500/20 text-pink-300 border-pink-500/20 text-[10px] px-1.5">🔥 AG Full</Badge>}
+                                {coedFull && <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/20 text-[10px] px-1.5">🔥 Coed Full</Badge>}
+                                {!agFull && agAthletes.length > 0 && agAbsent > 0 && <Badge className="bg-pink-500/10 text-pink-400/70 border-pink-500/10 text-[10px] px-1.5">AG -{agAbsent}</Badge>}
+                                {!coedFull && coedAthletes.length > 0 && coedAbsent > 0 && <Badge className="bg-blue-500/10 text-blue-400/70 border-blue-500/10 text-[10px] px-1.5">Coed -{coedAbsent}</Badge>}
+                              </>
+                            );
+                          }
+                          return <Badge className="bg-gradient-to-r from-orange-500/20 to-amber-500/20 text-amber-400 border-amber-500/20 text-[10px] px-1.5">🔥 FULL TEAM</Badge>;
                         })()}
                       </div>
                       
@@ -1498,17 +1541,20 @@ export default function JadwalPage() {
                 Simpan
               </Button>
             </div>
-          </div>
-        
-              {/* Izin Button */}
+
+            {/* Izin Button — inside dialog, clean layout */}
+            {(editForm.status === "latihan" || editForm.status === "tambahan") && (
               <Button
                 onClick={() => { setEditDialogOpen(false); openAbsenceDialog(editingDate || ""); }}
-                className="w-full bg-gradient-to-r from-orange-500 to-amber-600 hover:from-orange-400 hover:to-amber-500 text-white border-0"
+                variant="outline"
+                className="w-full border-orange-500/30 text-orange-400 hover:bg-orange-500/10 mt-1"
               >
                 <UserX className="mr-2 h-4 w-4" />
                 Atur Izin Atlit
               </Button>
-</DialogContent>
+            )}
+          </div>
+        </DialogContent>
       </Dialog>
 
       {/* Add Schedule Dialog */}
@@ -1629,52 +1675,138 @@ export default function JadwalPage() {
         </DialogContent>
       </Dialog>
 
-        {/* Absence Dialog */}
+        {/* Absence Dialog — Redesigned */}
         <Dialog open={absenceDialogOpen} onOpenChange={setAbsenceDialogOpen}>
-          <DialogContent className="bg-slate-900 border-white/10 text-white max-w-lg max-h-[85vh] overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle className="text-white">Atur Izin Atlit</DialogTitle>
-              <DialogDescription className="text-slate-400">
-                Tanggal: {selectedAbsenceDate} — Centang atlit yang izin
-              </DialogDescription>
-            </DialogHeader>
-            <Input
-              placeholder="Cari nama atlit..."
-              value={athleteSearch}
-              onChange={(e) => setAthleteSearch(e.target.value)}
-              className="bg-white/5 border-white/10 text-white mb-2"
-            />
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+          <DialogContent className="bg-slate-900 border-white/10 text-white max-w-lg max-h-[90vh] flex flex-col p-0 gap-0">
+            {/* Header */}
+            <div className="p-4 pb-3 border-b border-white/10">
+              <DialogHeader>
+                <DialogTitle className="text-white flex items-center gap-2">
+                  <UserX className="h-5 w-5 text-orange-400" />
+                  Atur Izin Atlit
+                </DialogTitle>
+                <DialogDescription className="text-slate-400 text-sm">
+                  {selectedAbsenceDate && new Date(selectedAbsenceDate + "T00:00:00").toLocaleDateString("id-ID", {
+                    weekday: "long", day: "numeric", month: "long", year: "numeric"
+                  })}
+                  {absenceForm.length > 0 && (
+                    <span className="ml-2 text-orange-400 font-medium">• {absenceForm.length} izin</span>
+                  )}
+                </DialogDescription>
+              </DialogHeader>
+
+              {/* Division Filter Tabs */}
+              <div className="flex gap-1.5 mt-3">
+                {(["all", "All Girl", "Coed"] as const).map(div => (
+                  <button
+                    key={div}
+                    onClick={() => setAbsenceDivFilter(div)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      absenceDivFilter === div
+                        ? div === "All Girl"
+                          ? "bg-pink-500/20 text-pink-300 ring-1 ring-pink-500/40"
+                          : div === "Coed"
+                          ? "bg-blue-500/20 text-blue-300 ring-1 ring-blue-500/40"
+                          : "bg-white/10 text-white ring-1 ring-white/20"
+                        : "bg-white/5 text-slate-400 hover:bg-white/10"
+                    }`}
+                  >
+                    {div === "all" ? "Semua" : div}
+                    <span className="ml-1 opacity-60">
+                      ({div === "all"
+                        ? athleteList.length
+                        : athleteList.filter(a => a.divisions.includes(div)).length})
+                    </span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Search */}
+              <div className="relative mt-3">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
+                <Input
+                  placeholder="Cari nama atlit..."
+                  value={athleteSearch}
+                  onChange={(e) => setAthleteSearch(e.target.value)}
+                  className="bg-white/5 border-white/10 text-white pl-9 h-9"
+                />
+              </div>
+            </div>
+
+            {/* Athlete List — scrollable */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
               {athleteList
-                .filter(a => a.toLowerCase().includes(athleteSearch.toLowerCase()))
+                .filter(a => {
+                  const matchSearch = a.name.toLowerCase().includes(athleteSearch.toLowerCase());
+                  const matchDiv = absenceDivFilter === "all" || a.divisions.includes(absenceDivFilter);
+                  return matchSearch && matchDiv;
+                })
                 .map(athlete => {
-                  const isChecked = absenceForm.some(a => a.name === athlete);
+                  const isChecked = absenceForm.some(a => a.name === athlete.name);
                   return (
-                    <div key={athlete} className={"flex flex-col gap-1 rounded-lg border p-2 transition-colors " + (isChecked ? "border-orange-500/50 bg-orange-500/10" : "border-white/5 bg-white/5")}>
-                      <div className="flex items-center space-x-2">
+                    <div
+                      key={athlete.name}
+                      className={`rounded-xl border p-3 transition-all ${
+                        isChecked
+                          ? "border-orange-500/40 bg-orange-500/10 shadow-lg shadow-orange-500/5"
+                          : "border-white/5 bg-white/[0.03] hover:bg-white/[0.06]"
+                      }`}
+                    >
+                      <div
+                        className="flex items-center gap-3 cursor-pointer"
+                        onClick={() => toggleAbsenceAthlete(athlete.name)}
+                      >
                         <Checkbox
                           checked={isChecked}
-                          onCheckedChange={() => toggleAbsenceAthlete(athlete)}
+                          onCheckedChange={() => toggleAbsenceAthlete(athlete.name)}
+                          className="data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
                         />
-                        <span className="text-sm text-slate-200">{athlete}</span>
+                        <span className="text-sm text-slate-200 flex-1">{athlete.name}</span>
+                        <div className="flex gap-1">
+                          {athlete.divisions.includes("All Girl") && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/20">AG</span>
+                          )}
+                          {athlete.divisions.includes("Coed") && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/20">Coed</span>
+                          )}
+                        </div>
                       </div>
                       {isChecked && (
                         <Input
-                          placeholder="Alasan (opsional)..."
-                          value={absenceForm.find(a => a.name === athlete)?.reason || ""}
-                          onChange={(e) => updateAbsenceReason(athlete, e.target.value)}
-                          className="h-7 text-xs bg-black/50 border-white/10 text-white ml-6"
+                          placeholder="Alasan izin (opsional)..."
+                          value={absenceForm.find(a => a.name === athlete.name)?.reason || ""}
+                          onChange={(e) => updateAbsenceReason(athlete.name, e.target.value)}
+                          className="h-8 text-xs bg-black/30 border-white/10 text-white mt-2 ml-7"
+                          onClick={(e) => e.stopPropagation()}
                         />
                       )}
                     </div>
                   );
                 })}
             </div>
-            <Button onClick={saveAbsences} className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 mt-2">
-              Simpan ({absenceForm.length} izin)
-            </Button>
+
+            {/* Sticky Save Button */}
+            <div className="p-4 pt-3 border-t border-white/10 bg-slate-900/80 backdrop-blur-sm">
+              <Button
+                onClick={saveAbsences}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 h-11 text-sm font-medium"
+              >
+                Simpan{absenceForm.length > 0 ? ` (${absenceForm.length} izin)` : ""}
+              </Button>
+            </div>
           </DialogContent>
         </Dialog>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] px-5 py-3 rounded-xl text-sm font-medium shadow-2xl transition-all duration-300 ${
+            toast.type === 'success'
+              ? 'bg-emerald-500/90 text-white backdrop-blur-sm shadow-emerald-500/20'
+              : 'bg-rose-500/90 text-white backdrop-blur-sm shadow-rose-500/20'
+          }`}>
+            {toast.type === 'success' ? '✅' : '❌'} {toast.message}
+          </div>
+        )}
     </div>
   );
 }
