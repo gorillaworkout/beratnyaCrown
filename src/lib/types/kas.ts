@@ -21,6 +21,8 @@ export interface KasAthlete {
   id?: string;
   name: string;
   division: string;
+  /** Bebas kas — tidak muncul di tabel kas harian */
+  kasExempt?: boolean;
   createdAt?: any;
 }
 
