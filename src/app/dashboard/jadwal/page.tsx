@@ -755,13 +755,17 @@ export default function JadwalPage() {
   // ─── Piket Matras Management ─────────────────────────────────────────
 
   // HYBRID ALGORITHM: Fair rotation based on piket count
-  const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number, absentNames: Set<string>, type: "pasang" | "kembalikan") => {
+  // Pass localCounter when calculating, use state when displaying
+  const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number, absentNames: Set<string>, type: "pasang" | "kembalikan", localCounter?: Map<string, {pasang: number, kembalikan: number}>) => {
     const available = athletes.filter(a => !absentNames.has(a.name));
     if (available.length === 0) return [];
     
+    // Use localCounter if provided (for calculations), otherwise use state (for display)
+    const counterMap = localCounter || piketCounter;
+    
     // Get current counter for available athletes
     const withCounts = available.map(a => {
-      const counter = piketCounter.get(a.name);
+      const counter = counterMap.get(a.name);
       const currentCount = type === "pasang" ? (counter?.pasang || 0) : (counter?.kembalikan || 0);
       return { name: a.name, count: currentCount };
     });
@@ -845,20 +849,60 @@ export default function JadwalPage() {
       : getRotation(coedAthletes, dateStr, 10, absentNames, type);
   };
 
+  // FUNGSI KHUSUS untuk kalkulasi counter - pakai local counter, BUKAN state!
+  const getPiketForDateCalculation = (
+    dateStr: string, 
+    type: "pasang" | "kembalikan", 
+    localCounter: Map<string, {pasang: number, kembalikan: number}>,
+    localAbsentNames: Set<string>,
+    localAgAthletes: typeof dynamicAthletes,
+    localCoedAthletes: typeof dynamicAthletes,
+    localPiketData: typeof piketData
+  ): string[] => {
+    const agAthletes = localAgAthletes;
+    const coedAthletes = localCoedAthletes;
+    
+    const saved = localPiketData.get(dateStr);
+    if (saved) {
+      const savedList = type === "pasang" ? saved.pasang : saved.kembalikan;
+      const pool = type === "pasang" ? agAthletes : coedAthletes;
+      const filtered = savedList.filter(n => !localAbsentNames.has(n));
+      
+      if (filtered.length >= 10) return filtered.slice(0, 10);
+      
+      const inList = new Set(filtered);
+      const rotation = getRotation(pool, dateStr, pool.length, localAbsentNames, type, localCounter);
+      for (const name of rotation) {
+        if (filtered.length >= 10) break;
+        if (!inList.has(name)) {
+          filtered.push(name);
+          inList.add(name);
+        }
+      }
+      return filtered;
+    }
+    
+    return type === "pasang" 
+      ? getRotation(agAthletes, dateStr, 10, localAbsentNames, type, localCounter)
+      : getRotation(coedAthletes, dateStr, 10, localAbsentNames, type, localCounter);
+  };
+
   // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
   const calculatePiketCounter = useCallback((upToDate?: string): Map<string, {pasang: number, kembalikan: number}> => {
     const counter = new Map<string, {pasang: number, kembalikan: number}>();
     const endDate = upToDate || todayStr;
-    const startDate = "2026-04-01"; // Mulai hitung dari 1 April 2026
+    const startDate = "2026-04-01";
     
-    // Iterasi semua tanggal dari 1 April sampai hari ini (atau upToDate)
+    // Pre-calculate athletes and data for performance
+    const agAthletes = dynamicAthletes.filter(a => a.divisions.includes("All Girl"));
+    const coedAthletes = dynamicAthletes.filter(a => a.divisions.includes("Coed"));
+    
     const current = new Date(startDate + "T00:00:00");
     const end = new Date(endDate + "T00:00:00");
     
     while (current <= end) {
       const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
       
-      // Cek apakah hari ini ada latihan
       const dayOfWeek = current.getDay();
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
       const customSchedule = scheduleData.find((s) => s.date === dateStr);
@@ -874,20 +918,22 @@ export default function JadwalPage() {
       }
       
       if (isTrainingDay) {
-        // Hitung untuk tanggal ini
-        const pasangList = getPiketForDate(dateStr, "pasang");
-        const kembalikanList = getPiketForDate(dateStr, "kembalikan");
+        const absentNames = new Set(
+          (absences.find(a => a.date === dateStr)?.absences || []).map((a: any) => a.name)
+        );
         
-        // Tambah counter pasang (AG)
+        // Use calculation function with LOCAL counter
+        const pasangList = getPiketForDateCalculation(dateStr, "pasang", counter, absentNames, agAthletes, coedAthletes, piketData);
+        const kembalikanList = getPiketForDateCalculation(dateStr, "kembalikan", counter, absentNames, agAthletes, coedAthletes, piketData);
+        
         pasangList.forEach(name => {
-          const current = counter.get(name) || { pasang: 0, kembalikan: 0 };
-          counter.set(name, { ...current, pasang: current.pasang + 1 });
+          const curr = counter.get(name) || { pasang: 0, kembalikan: 0 };
+          counter.set(name, { ...curr, pasang: curr.pasang + 1 });
         });
         
-        // Tambah counter kembalikan (Coed)
         kembalikanList.forEach(name => {
-          const current = counter.get(name) || { pasang: 0, kembalikan: 0 };
-          counter.set(name, { ...current, kembalikan: current.kembalikan + 1 });
+          const curr = counter.get(name) || { pasang: 0, kembalikan: 0 };
+          counter.set(name, { ...curr, kembalikan: curr.kembalikan + 1 });
         });
       }
       
