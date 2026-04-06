@@ -1,4 +1,4 @@
 {
-  "buildCommand": "npm install --legacy-peer-deps && next build",
-  "installCommand": "npm install --legacy-peer-deps"
+  "buildCommand": "rm -rf node_modules .next && npm install && next build",
+  "installCommand": "npm install"
 }
