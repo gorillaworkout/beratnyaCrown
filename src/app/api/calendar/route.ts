@@ -62,7 +62,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
       const snap = await adminDb.collection("crown-schedules")
         .where("date", ">=", `${today.getFullYear()}-${padDate(today.getMonth() + 1)}-01`)
         .get();
-      snap.forEach(doc => {
+      snap.forEach((doc: { data: () => any; }) => {
         const data = doc.data();
         customEventsMap.set(data.date, data);
       });
