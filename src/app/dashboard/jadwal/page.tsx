@@ -1636,7 +1636,7 @@ export default function JadwalPage() {
                                     <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
                                     <span className="truncate flex-1">{name}</span>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${pasangCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-pink-500/20 text-pink-300'}`}>
-                                      ♻️{pasangCount}
+                                      P-{pasangCount}
                                     </span>
                                   </div>
                                 );
@@ -1665,7 +1665,7 @@ export default function JadwalPage() {
                                     <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
                                     <span className="truncate flex-1">{name}</span>
                                     <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${kembalikanCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-blue-500/20 text-blue-300'}`}>
-                                      ♻️{kembalikanCount}
+                                      P-{kembalikanCount}
                                     </span>
                                   </div>
                                 );
