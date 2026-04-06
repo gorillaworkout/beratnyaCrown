@@ -754,17 +754,60 @@ export default function JadwalPage() {
 
   // ─── Piket Matras Management ─────────────────────────────────────────
 
-  const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number, absentNames: Set<string>) => {
+  // HYBRID ALGORITHM: Fair rotation based on piket count
+  const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number, absentNames: Set<string>, type: "pasang" | "kembalikan") => {
     const available = athletes.filter(a => !absentNames.has(a.name));
     if (available.length === 0) return [];
-    const parts = dateStr.split("-");
-    const dayNum = parseInt(parts[2]) + parseInt(parts[1]) * 31;
-    const offset = dayNum % available.length;
-    const result: string[] = [];
-    for (let i = 0; i < Math.min(count, available.length); i++) {
-      result.push(available[(offset + i) % available.length].name);
+    
+    // Get current counter for available athletes
+    const withCounts = available.map(a => {
+      const counter = piketCounter.get(a.name);
+      const currentCount = type === "pasang" ? (counter?.pasang || 0) : (counter?.kembalikan || 0);
+      return { name: a.name, count: currentCount };
+    });
+    
+    // Sort by count (lowest first) - PRIORITAS ADIL!
+    withCounts.sort((a, b) => a.count - b.count);
+    
+    // Check if there's anyone with 0 piket
+    const zeroCount = withCounts.filter(a => a.count === 0).length;
+    
+    if (zeroCount > 0) {
+      // MODE 1: Ada yang belum pernah piket → prioritaskan mereka!
+      const priority = withCounts.filter(a => a.count === 0).slice(0, Math.min(count, zeroCount));
+      const remaining = count - priority.length;
+      
+      if (remaining > 0) {
+        // Fill sisanya dengan yang count-nya paling rendah berikutnya
+        const rest = withCounts
+          .filter(a => a.count > 0)
+          .slice(0, remaining);
+        return [...priority, ...rest].map(a => a.name);
+      }
+      return priority.map(a => a.name);
     }
-    return result;
+    
+    // MODE 2: Semua udah pernah piket → find the MIN count group
+    const minCount = withCounts[0]?.count || 0;
+    const minGroup = withCounts.filter(a => a.count === minCount);
+    
+    if (minGroup.length >= count) {
+      // Cukup ambil dari min group pakai deterministic shuffle by date
+      const parts = dateStr.split("-");
+      const dayNum = parseInt(parts[2]) + parseInt(parts[1]) * 31;
+      const offset = dayNum % minGroup.length;
+      const result: string[] = [];
+      for (let i = 0; i < Math.min(count, minGroup.length); i++) {
+        result.push(minGroup[(offset + i) % minGroup.length].name);
+      }
+      return result;
+    }
+    
+    // Min group kurang dari count → ambil semua min group + sisanya dari next level
+    const result = [...minGroup];
+    const remaining = count - minGroup.length;
+    const nextLevel = withCounts.filter(a => a.count > minCount).slice(0, remaining);
+    return [...result, ...nextLevel].map(a => a.name);
   };
 
   const getPiketForDate = (dateStr: string, type: "pasang" | "kembalikan") => {
@@ -785,7 +828,7 @@ export default function JadwalPage() {
       
       // Backfill from rotation (skip those already in list)
       const inList = new Set(filtered);
-      const rotation = getRotation(pool, dateStr, pool.length, absentNames);
+      const rotation = getRotation(pool, dateStr, pool.length, absentNames, type);
       for (const name of rotation) {
         if (filtered.length >= 10) break;
         if (!inList.has(name)) {
@@ -798,8 +841,8 @@ export default function JadwalPage() {
     
     // No saved data → use auto rotation
     return type === "pasang" 
-      ? getRotation(agAthletes, dateStr, 10, absentNames)
-      : getRotation(coedAthletes, dateStr, 10, absentNames);
+      ? getRotation(agAthletes, dateStr, 10, absentNames, type)
+      : getRotation(coedAthletes, dateStr, 10, absentNames, type);
   };
 
   // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
@@ -2252,7 +2295,7 @@ export default function JadwalPage() {
                   const pool = piketEditType === "pasang"
                     ? dynamicAthletes.filter(a => a.divisions.includes("All Girl"))
                     : dynamicAthletes.filter(a => a.divisions.includes("Coed"));
-                  setPiketEditList(getRotation(pool, piketEditDate || "", 10, absentNames));
+                  setPiketEditList(getRotation(pool, piketEditDate || "", 10, absentNames, piketEditType));
                 }}
                 variant="outline"
                 className="border-white/10 text-slate-400 hover:bg-white/5 text-xs"
