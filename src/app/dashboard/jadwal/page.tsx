@@ -1626,9 +1626,58 @@ export default function JadwalPage() {
           </CardHeader>
           <CardContent>
             {(() => {
-              const upcomingTraining = schedule.filter(s => 
-                (s.status === "latihan" || s.status === "tambahan") && s.date >= todayStr
-              ).slice(0, 6);
+              // Generate upcoming training from today onwards - INDEPENDENT of currentMonth view!
+              const upcomingTraining: ScheduleEntry[] = [];
+              const current = new Date();
+              current.setHours(0, 0, 0, 0);
+              
+              while (upcomingTraining.length < 6) {
+                const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+                const dayOfWeek = current.getDay();
+                const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
+                const holidayName = isHoliday(dateStr);
+                
+                // Check custom schedule from Firestore
+                const customSchedule = scheduleData.find((s) => s.date === dateStr);
+                const isEvent = events.find((e) => e.date === dateStr);
+                
+                let isTrainingDay = false;
+                let status: ScheduleStatus = "latihan";
+                let timeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+                let timeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
+                
+                if (customSchedule) {
+                  if (customSchedule.status === "latihan" || customSchedule.status === "tambahan") {
+                    isTrainingDay = true;
+                    status = customSchedule.status;
+                    timeStart = customSchedule.timeStart || timeStart;
+                    timeEnd = customSchedule.timeEnd || timeEnd;
+                  }
+                } else if (isRegular && !isEvent) {
+                  isTrainingDay = true;
+                }
+                
+                if (isTrainingDay) {
+                  upcomingTraining.push({
+                    date: dateStr,
+                    dayName: DAY_NAMES_ID[dayOfWeek],
+                    isRegular,
+                    status,
+                    timeStart,
+                    timeEnd,
+                    holidayName: holidayName || undefined,
+                    eventName: isEvent?.name,
+                    eventEmoji: isEvent?.emoji,
+                  });
+                }
+                
+                current.setDate(current.getDate() + 1);
+                
+                // Safety: stop if we've gone too far (e.g., past Kejurnas or 90 days)
+                if (upcomingTraining.length === 0 && current.getTime() - new Date().getTime() > 90 * 24 * 60 * 60 * 1000) {
+                  break;
+                }
+              }
 
               if (upcomingTraining.length === 0) {
                 return <p className="text-slate-500 text-sm">Tidak ada jadwal latihan mendatang.</p>;
