@@ -1635,8 +1635,8 @@ export default function JadwalPage() {
                                   <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
                                     <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
                                     <span className="truncate flex-1">{name}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${pasangCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-pink-500/20 text-pink-300'}`}>
-                                      P-{pasangCount}
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${pasangCount === 0 ? 'bg-slate-700 text-slate-400 border-slate-600' : pasangCount <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-pink-500/20 text-pink-300 border-pink-500/30'}`}>
+                                      Piket ke-{pasangCount}
                                     </span>
                                   </div>
                                 );
@@ -1664,8 +1664,8 @@ export default function JadwalPage() {
                                   <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
                                     <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
                                     <span className="truncate flex-1">{name}</span>
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${kembalikanCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-blue-500/20 text-blue-300'}`}>
-                                      P-{kembalikanCount}
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${kembalikanCount === 0 ? 'bg-slate-700 text-slate-400 border-slate-600' : kembalikanCount <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'}`}>
+                                      Piket ke-{kembalikanCount}
                                     </span>
                                   </div>
                                 );
@@ -1678,6 +1678,80 @@ export default function JadwalPage() {
                       </div>
                     );
                   })}
+                </div>
+              );
+            })()}
+          </CardContent>
+        </Card>
+
+        {/* Rekap Piket Matras - Fairness Check */}
+        <Card className={glassCardClass}>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-lg text-white">📊 Rekap Piket Matras</CardTitle>
+            <CardDescription className="text-slate-400 text-sm">
+              Statistik total piket tiap atlet (dari 1 April 2026) — yang warna kuning masih dikit
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {(() => {
+              // Hitung total piket per orang
+              const agAthletes = dynamicAthletes.filter(a => a.divisions.includes("All Girl"));
+              const coedAthletes = dynamicAthletes.filter(a => a.divisions.includes("Coed"));
+              
+              const agStats = agAthletes.map(a => {
+                const counter = piketCounter.get(a.name);
+                return { name: a.name, count: counter?.pasang || 0 };
+              }).sort((a, b) => a.count - b.count);
+              
+              const coedStats = coedAthletes.map(a => {
+                const counter = piketCounter.get(a.name);
+                return { name: a.name, count: counter?.kembalikan || 0 };
+              }).sort((a, b) => a.count - b.count);
+              
+              const maxAg = Math.max(...agStats.map(s => s.count), 0);
+              const maxCoed = Math.max(...coedStats.map(s => s.count), 0);
+              
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {/* AG Stats */}
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-pink-400 font-semibold mb-3">Pasang Matras (AG)</p>
+                    <div className="space-y-1">
+                      {agStats.map(({ name, count }) => (
+                        <div key={name} className="flex items-center gap-2">
+                          <span className="text-xs text-slate-300 flex-1 truncate">{name}</span>
+                          <div className="flex items-center gap-1">
+                            <div className="h-1.5 rounded-full bg-pink-500/30 overflow-hidden" style={{ width: `${Math.max(count * 10, 20)}px` }}>
+                              <div className="h-full bg-pink-500 rounded-full" style={{ width: `${maxAg > 0 ? (count / maxAg) * 100 : 0}%` }}></div>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${count === 0 ? 'bg-red-500/20 text-red-300 border-red-500/30' : count <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-pink-500/20 text-pink-300 border-pink-500/30'}`}>
+                              {count}x
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Coed Stats */}
+                  <div>
+                    <p className="text-xs uppercase tracking-wider text-blue-400 font-semibold mb-3">Kembalikan Matras (Coed)</p>
+                    <div className="space-y-1">
+                      {coedStats.map(({ name, count }) => (
+                        <div key={name} className="flex items-center gap-2">
+                          <span className="text-xs text-slate-300 flex-1 truncate">{name}</span>
+                          <div className="flex items-center gap-1">
+                            <div className="h-1.5 rounded-full bg-blue-500/30 overflow-hidden" style={{ width: `${Math.max(count * 10, 20)}px` }}>
+                              <div className="h-full bg-blue-500 rounded-full" style={{ width: `${maxCoed > 0 ? (count / maxCoed) * 100 : 0}%` }}></div>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${count === 0 ? 'bg-red-500/20 text-red-300 border-red-500/30' : count <= 2 ? 'bg-amber-500/20 text-amber-300 border-blue-500/30' : 'bg-blue-500/20 text-blue-300 border-blue-500/30'}`}>
+                              {count}x
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               );
             })()}
