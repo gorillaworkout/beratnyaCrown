@@ -962,10 +962,8 @@ export default function JadwalPage() {
   // Calculate up to the last upcoming training date shown (6 sessions ahead) for accuracy
   useEffect(() => {
     if (!firestoreLoading) {
-      // Find the last upcoming training date (approx 90 days out to cover 6 sessions)
-      const futureDate = new Date();
-      futureDate.setDate(futureDate.getDate() + 90);
-      const futureDateStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, "0")}-${String(futureDate.getDate()).padStart(2, "0")}`;
+      // Calculate up to end of Kejurnas month (July 2026) to cover all piket assignments
+      const futureDateStr = "2026-07-31";
       
       const { counter, byDate, assignments } = calculatePiketCounter(futureDateStr);
       setPiketCounter(counter);
