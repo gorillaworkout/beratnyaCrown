@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   try {
     // Ambil SEMUA user dari Firebase Auth (Gorillatix + Crown)
