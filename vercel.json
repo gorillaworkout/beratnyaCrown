@@ -1,4 +1,4 @@
 {
-  "buildCommand": "rm -rf node_modules .next && npm install && next build",
-  "installCommand": "npm install"
+  "installCommand": "npm install",
+  "buildCommand": "next build"
 }
