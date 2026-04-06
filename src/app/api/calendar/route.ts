@@ -1,6 +1,19 @@
 import { NextResponse } from "next/server";
-import { adminDb } from "@/lib/firebase-admin";
 import { isHoliday } from "@/lib/holidays";
+
+// Dynamic import firebase admin to avoid build issues
+let adminDb: any = null;
+async function getAdminDb() {
+  if (!adminDb) {
+    try {
+      const { adminDb: db } = await import("@/lib/firebase-admin");
+      adminDb = db;
+    } catch (e) {
+      console.warn("Firebase admin not available");
+    }
+  }
+  return adminDb;
+}
 
 const SHIRT_COLORS = [
   { name: "Merah", hex: "#ef4444", emoji: "🔴" },
@@ -54,12 +67,13 @@ type ScheduleEntry = {
 async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[]> {
   const schedule: ScheduleEntry[] = [];
   const today = new Date();
+  const db = await getAdminDb();
   
   // Custom dates from Firestore override regular logic
   const customEventsMap = new Map<string, any>();
-  if (adminDb) {
+  if (db) {
     try {
-      const snap = await adminDb.collection("crown-schedules")
+      const snap = await db.collection("crown-schedules")
         .where("date", ">=", `${today.getFullYear()}-${padDate(today.getMonth() + 1)}-01`)
         .get();
       snap.forEach((doc: { data: () => any; }) => {
