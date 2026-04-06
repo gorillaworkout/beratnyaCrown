@@ -236,6 +236,10 @@ export default function JadwalPage() {
   const [piketSearch, setPiketSearch] = useState("");
   // Piket counter state - hitung dari 1 April 2026
   const [piketCounter, setPiketCounter] = useState<Map<string, {pasang: number, kembalikan: number}>>(new Map());
+  // Per-date piket counter: "date:name" -> {pasang, kembalikan} (cumulative UP TO that date)
+  const [piketCounterByDate, setPiketCounterByDate] = useState<Map<string, Map<string, {pasang: number, kembalikan: number}>>>(new Map());
+  // Per-date piket assignments: dateStr -> {pasang: string[], kembalikan: string[]}
+  const [piketAssignmentsByDate, setPiketAssignmentsByDate] = useState<Map<string, {pasang: string[], kembalikan: string[]}>>(new Map());
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -888,8 +892,11 @@ export default function JadwalPage() {
   };
 
   // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
-  const calculatePiketCounter = useCallback((upToDate?: string): Map<string, {pasang: number, kembalikan: number}> => {
+  // Returns { counter, byDate, assignments } where byDate maps dateStr -> snapshot of counter AFTER that date
+  const calculatePiketCounter = useCallback((upToDate?: string): { counter: Map<string, {pasang: number, kembalikan: number}>, byDate: Map<string, Map<string, {pasang: number, kembalikan: number}>>, assignments: Map<string, {pasang: string[], kembalikan: string[]}> } => {
     const counter = new Map<string, {pasang: number, kembalikan: number}>();
+    const byDate = new Map<string, Map<string, {pasang: number, kembalikan: number}>>();
+    const assignments = new Map<string, {pasang: string[], kembalikan: string[]}>();
     const endDate = upToDate || todayStr;
     const startDate = "2026-04-01";
     
@@ -935,19 +942,35 @@ export default function JadwalPage() {
           const curr = counter.get(name) || { pasang: 0, kembalikan: 0 };
           counter.set(name, { ...curr, kembalikan: curr.kembalikan + 1 });
         });
+        
+        // Save a snapshot of the counter AFTER processing this training date
+        const snapshot = new Map<string, {pasang: number, kembalikan: number}>();
+        counter.forEach((v, k) => snapshot.set(k, { ...v }));
+        byDate.set(dateStr, snapshot);
+        
+        // Save the assignments for this date
+        assignments.set(dateStr, { pasang: pasangList, kembalikan: kembalikanList });
       }
       
       current.setDate(current.getDate() + 1);
     }
     
-    return counter;
+    return { counter, byDate, assignments };
   }, [scheduleData, events, absences, piketData, dynamicAthletes]);
 
   // Update counter setiap kali data berubah
+  // Calculate up to the last upcoming training date shown (6 sessions ahead) for accuracy
   useEffect(() => {
     if (!firestoreLoading) {
-      const counter = calculatePiketCounter();
+      // Find the last upcoming training date (approx 90 days out to cover 6 sessions)
+      const futureDate = new Date();
+      futureDate.setDate(futureDate.getDate() + 90);
+      const futureDateStr = `${futureDate.getFullYear()}-${String(futureDate.getMonth() + 1).padStart(2, "0")}-${String(futureDate.getDate()).padStart(2, "0")}`;
+      
+      const { counter, byDate, assignments } = calculatePiketCounter(futureDateStr);
       setPiketCounter(counter);
+      setPiketCounterByDate(byDate);
+      setPiketAssignmentsByDate(assignments);
     }
   }, [firestoreLoading, scheduleData, events, absences, piketData, dynamicAthletes, calculatePiketCounter]);
 
@@ -1734,8 +1757,8 @@ export default function JadwalPage() {
                   {upcomingTraining.map(entry => {
                     const d = new Date(entry.date + "T00:00:00");
                     const isToday = entry.date === todayStr;
-                    const pasangList = getPiketForDate(entry.date, "pasang");
-                    const kembalikanList = getPiketForDate(entry.date, "kembalikan");
+                    const pasangList = piketAssignmentsByDate.get(entry.date)?.pasang || getPiketForDate(entry.date, "pasang");
+                    const kembalikanList = piketAssignmentsByDate.get(entry.date)?.kembalikan || getPiketForDate(entry.date, "kembalikan");
                     const absCount = getAbsenceCount(entry.date);
                     const hasSavedPiket = piketData.has(entry.date);
 
@@ -1767,7 +1790,8 @@ export default function JadwalPage() {
                             </div>
                             <div className="space-y-0.5">
                               {pasangList.length > 0 ? pasangList.map((name, i) => {
-                                const counter = piketCounter.get(name);
+                                const dateCounter = piketCounterByDate.get(entry.date);
+                                const counter = dateCounter?.get(name);
                                 const pasangCount = counter?.pasang || 0;
                                 return (
                                   <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
@@ -1796,7 +1820,8 @@ export default function JadwalPage() {
                             </div>
                             <div className="space-y-0.5">
                               {kembalikanList.length > 0 ? kembalikanList.map((name, i) => {
-                                const counter = piketCounter.get(name);
+                                const dateCounter = piketCounterByDate.get(entry.date);
+                                const counter = dateCounter?.get(name);
                                 const kembalikanCount = counter?.kembalikan || 0;
                                 return (
                                   <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
