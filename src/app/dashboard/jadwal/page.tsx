@@ -234,6 +234,8 @@ export default function JadwalPage() {
   const [piketEditList, setPiketEditList] = useState<string[]>([]);
   const [piketDialogOpen, setPiketDialogOpen] = useState(false);
   const [piketSearch, setPiketSearch] = useState("");
+  // Piket counter state - hitung dari 1 April 2026
+  const [piketCounter, setPiketCounter] = useState<Map<string, {pasang: number, kembalikan: number}>>(new Map());
 
   // Sync state
   const [isSyncing, setIsSyncing] = useState(false);
@@ -799,6 +801,66 @@ export default function JadwalPage() {
       ? getRotation(agAthletes, dateStr, 10, absentNames)
       : getRotation(coedAthletes, dateStr, 10, absentNames);
   };
+
+  // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
+  const calculatePiketCounter = useCallback((upToDate?: string): Map<string, {pasang: number, kembalikan: number}> => {
+    const counter = new Map<string, {pasang: number, kembalikan: number}>();
+    const endDate = upToDate || todayStr;
+    const startDate = "2026-04-01"; // Mulai hitung dari 1 April 2026
+    
+    // Iterasi semua tanggal dari 1 April sampai hari ini (atau upToDate)
+    const current = new Date(startDate + "T00:00:00");
+    const end = new Date(endDate + "T00:00:00");
+    
+    while (current <= end) {
+      const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
+      
+      // Cek apakah hari ini ada latihan
+      const dayOfWeek = current.getDay();
+      const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
+      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      const isEvent = events.some((e) => e.date === dateStr);
+      
+      let isTrainingDay = false;
+      if (customSchedule) {
+        if (customSchedule.status === "latihan" || customSchedule.status === "tambahan") {
+          isTrainingDay = true;
+        }
+      } else if (isRegular && !isEvent) {
+        isTrainingDay = true;
+      }
+      
+      if (isTrainingDay) {
+        // Hitung untuk tanggal ini
+        const pasangList = getPiketForDate(dateStr, "pasang");
+        const kembalikanList = getPiketForDate(dateStr, "kembalikan");
+        
+        // Tambah counter pasang (AG)
+        pasangList.forEach(name => {
+          const current = counter.get(name) || { pasang: 0, kembalikan: 0 };
+          counter.set(name, { ...current, pasang: current.pasang + 1 });
+        });
+        
+        // Tambah counter kembalikan (Coed)
+        kembalikanList.forEach(name => {
+          const current = counter.get(name) || { pasang: 0, kembalikan: 0 };
+          counter.set(name, { ...current, kembalikan: current.kembalikan + 1 });
+        });
+      }
+      
+      current.setDate(current.getDate() + 1);
+    }
+    
+    return counter;
+  }, [scheduleData, events, absences, piketData, dynamicAthletes]);
+
+  // Update counter setiap kali data berubah
+  useEffect(() => {
+    if (!firestoreLoading) {
+      const counter = calculatePiketCounter();
+      setPiketCounter(counter);
+    }
+  }, [firestoreLoading, scheduleData, events, absences, piketData, dynamicAthletes, calculatePiketCounter]);
 
   const openPiketEdit = (dateStr: string, type: "pasang" | "kembalikan") => {
     setPiketEditDate(dateStr);
@@ -1566,12 +1628,19 @@ export default function JadwalPage() {
                               )}
                             </div>
                             <div className="space-y-0.5">
-                              {pasangList.length > 0 ? pasangList.map((name, i) => (
-                                <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
-                                  <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
-                                  <span className="truncate">{name}</span>
-                                </div>
-                              )) : (
+                              {pasangList.length > 0 ? pasangList.map((name, i) => {
+                                const counter = piketCounter.get(name);
+                                const pasangCount = counter?.pasang || 0;
+                                return (
+                                  <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                    <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
+                                    <span className="truncate flex-1">{name}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${pasangCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-pink-500/20 text-pink-300'}`}>
+                                      ♻️{pasangCount}
+                                    </span>
+                                  </div>
+                                );
+                              }) : (
                                 <p className="text-xs text-slate-600 italic">Tidak ada AG tersedia</p>
                               )}
                             </div>
@@ -1588,12 +1657,19 @@ export default function JadwalPage() {
                               )}
                             </div>
                             <div className="space-y-0.5">
-                              {kembalikanList.length > 0 ? kembalikanList.map((name, i) => (
-                                <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
-                                  <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
-                                  <span className="truncate">{name}</span>
-                                </div>
-                              )) : (
+                              {kembalikanList.length > 0 ? kembalikanList.map((name, i) => {
+                                const counter = piketCounter.get(name);
+                                const kembalikanCount = counter?.kembalikan || 0;
+                                return (
+                                  <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                    <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
+                                    <span className="truncate flex-1">{name}</span>
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${kembalikanCount === 0 ? 'bg-slate-700 text-slate-400' : 'bg-blue-500/20 text-blue-300'}`}>
+                                      ♻️{kembalikanCount}
+                                    </span>
+                                  </div>
+                                );
+                              }) : (
                                 <p className="text-xs text-slate-600 italic">Tidak ada Coed tersedia</p>
                               )}
                             </div>
