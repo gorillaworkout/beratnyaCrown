@@ -113,7 +113,7 @@ export default function AbsensiPage() {
   const [locationsLoading, setLocationsLoading] = useState(true);
   const [activeIdx, setActiveIdx] = useState(0);
   const [showLocManager, setShowLocManager] = useState(false);
-  const [newLoc, setNewLoc] = useState({ name: "", lat: "", lng: "", radius: "500", maps: "" });
+  const [newLoc, setNewLoc] = useState({ name: "", lat: "", lng: "", radius: "1000", maps: "" });
   const [detecting, setDetecting] = useState(false);
   const [savingLoc, setSavingLoc] = useState(false);
 
@@ -155,7 +155,7 @@ export default function AbsensiPage() {
             name: "Crown Allstar Cheerleading",
             lat: -6.9164893,
             lng: 107.624465,
-            radius: 200,
+            radius: 1000,
             mapsUrl: "https://maps.app.goo.gl/rrZPnXS51HhDQvbs7",
             isDefault: true,
           });
@@ -164,7 +164,7 @@ export default function AbsensiPage() {
             name: "Crown Allstar Cheerleading",
             lat: -6.9164893,
             lng: 107.624465,
-            radius: 200,
+            radius: 1000,
             mapsUrl: "https://maps.app.goo.gl/rrZPnXS51HhDQvbs7",
             isDefault: true,
           }]);
@@ -179,7 +179,7 @@ export default function AbsensiPage() {
           name: "Crown Allstar Cheerleading",
           lat: -6.9164893,
           lng: 107.624465,
-          radius: 200,
+          radius: 1000,
           mapsUrl: "https://maps.app.goo.gl/rrZPnXS51HhDQvbs7",
         }]);
       }
@@ -244,7 +244,8 @@ export default function AbsensiPage() {
         const snap = await getDocs(query(collection(db, "crown-attendance"), where("date", "==", todayStr)));
         setTodayRecords(snap.docs.map(parseRecord).sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0)));
       } else {
-        setResult({ success: false, message: `Lokasi terlalu jauh! Jarak kamu ${Math.round(distance)}m dari ${activeLoc.name} (max ${activeLoc.radius}m).`, distance: Math.round(distance) });
+        const over = Math.round(distance) - activeLoc.radius;
+        setResult({ success: false, message: `Lokasi terlalu jauh! Jarak kamu ${Math.round(distance)}m dari ${activeLoc.name} (max ${activeLoc.radius}m). Kamu ${over}m di luar radius.`, distance: Math.round(distance) });
       }
     } catch (err: unknown) {
       const geoErr = err as GeolocationPositionError;
@@ -267,7 +268,7 @@ export default function AbsensiPage() {
         name: newLoc.name,
         lat: parseFloat(newLoc.lat),
         lng: parseFloat(newLoc.lng),
-        radius: parseInt(newLoc.radius) || 500,
+        radius: parseInt(newLoc.radius) || 1000,
         mapsUrl: newLoc.maps || null,
         isDefault: false,
       });
@@ -276,10 +277,10 @@ export default function AbsensiPage() {
         name: newLoc.name,
         lat: parseFloat(newLoc.lat),
         lng: parseFloat(newLoc.lng),
-        radius: parseInt(newLoc.radius) || 500,
+        radius: parseInt(newLoc.radius) || 1000,
         mapsUrl: newLoc.maps || undefined,
       }]);
-      setNewLoc({ name: "", lat: "", lng: "", radius: "500", maps: "" });
+      setNewLoc({ name: "", lat: "", lng: "", radius: "1000", maps: "" });
     } catch (err) {
       console.error("Failed to add location:", err);
       alert("Gagal menyimpan lokasi.");
