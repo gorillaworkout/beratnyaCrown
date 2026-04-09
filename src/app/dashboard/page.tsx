@@ -24,6 +24,7 @@ import { collection, onSnapshot, doc, deleteDoc, addDoc, updateDoc, orderBy, que
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { InstallPrompt } from "@/components/install-prompt";
 
 const glassCardClass =
   "border-white/10 bg-white/5 backdrop-blur-md shadow-xl text-slate-100 transition-all hover:bg-white/[0.07]";
@@ -150,6 +151,9 @@ export default function InfoDashboardPage() {
             Pusat informasi pembayaran, event, dan pengumuman tim Crown Allstar.
           </p>
         </div>
+
+        {/* Install App Banner */}
+        <InstallPrompt />
 
         {/* Progress Tracker (Timeline) */}
         <div className="pt-2">
