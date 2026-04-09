@@ -43,6 +43,16 @@ export function InstallPrompt() {
   const [dismissed, setDismissed] = useState(false);
   const [platform, setPlatform] = useState<Platform>("unknown");
 
+  // Listen for re-show event (from InstallLink)
+  useEffect(() => {
+    const handler = () => {
+      setDismissed(false);
+      localStorage.removeItem("pwa-dismissed-at");
+    };
+    window.addEventListener("pwa-show-install", handler);
+    return () => window.removeEventListener("pwa-show-install", handler);
+  }, []);
+
   useEffect(() => {
     if (
       window.matchMedia("(display-mode: standalone)").matches ||
@@ -94,7 +104,9 @@ export function InstallPrompt() {
         await globalDeferredPrompt.prompt();
         const { outcome } = await globalDeferredPrompt.userChoice;
         if (outcome === "accepted") setIsInstalled(true);
-      } catch {}
+      } catch (e) {
+        // prompt() can only be called once
+      }
       globalDeferredPrompt = null;
       setCanInstall(false);
     }
@@ -262,5 +274,42 @@ export function InstallPrompt() {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Small footer link to re-show the install banner after dismiss.
+ * Only visible when app is not installed and banner was dismissed.
+ */
+export function InstallLink() {
+  const [show, setShow] = useState(false);
+
+  useEffect(() => {
+    // Show link only if dismissed and not in standalone
+    const isStandalone =
+      window.matchMedia("(display-mode: standalone)").matches ||
+      (window.navigator as any).standalone;
+
+    if (isStandalone) return;
+
+    const dismissedAt = localStorage.getItem("pwa-dismissed-at");
+    if (dismissedAt) {
+      setShow(true);
+    }
+  }, []);
+
+  if (!show) return null;
+
+  return (
+    <button
+      onClick={() => {
+        window.dispatchEvent(new Event("pwa-show-install"));
+        setShow(false);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }}
+      className="text-xs text-amber-400/60 hover:text-amber-400 transition-colors"
+    >
+      📲 Install CrownHub di HP
+    </button>
   );
 }

@@ -24,7 +24,7 @@ import { collection, onSnapshot, doc, deleteDoc, addDoc, updateDoc, orderBy, que
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { InstallPrompt } from "@/components/install-prompt";
+import { InstallPrompt, InstallLink } from "@/components/install-prompt";
 
 const glassCardClass =
   "border-white/10 bg-white/5 backdrop-blur-md shadow-xl text-slate-100 transition-all hover:bg-white/[0.07]";
@@ -695,10 +695,11 @@ export default function InfoDashboardPage() {
         </div>
 
         {/* Footer */}
-        <div className="mt-8 border-t border-white/10 pt-6 text-center">
+        <div className="mt-8 border-t border-white/10 pt-6 text-center space-y-3">
           <p className="text-xs text-slate-500">
             Punya pertanyaan terkait informasi di atas? Silakan hubungi pengurus tim atau pelatih.
           </p>
+          <InstallLink />
 
         {/* Biaya Kompetisi Card - Full Width */}
         <Card className={glassCardClass}>
