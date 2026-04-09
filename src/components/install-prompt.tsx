@@ -1,17 +1,15 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Download, X, Share } from "lucide-react";
+import { Download, X, Share, MoreVertical } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 }
 
-// Store prompt globally so it survives re-renders
 let globalDeferredPrompt: BeforeInstallPromptEvent | null = null;
 
-// Listen immediately (before React hydrates)
 if (typeof window !== "undefined") {
   window.addEventListener("beforeinstallprompt", (e) => {
     e.preventDefault();
@@ -24,10 +22,9 @@ export function InstallPrompt() {
   const [isInstalled, setIsInstalled] = useState(false);
   const [dismissed, setDismissed] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
-  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
-    // Check if already in standalone mode
+    // Already installed (standalone)
     if (
       window.matchMedia("(display-mode: standalone)").matches ||
       (window.navigator as any).standalone
@@ -43,17 +40,22 @@ export function InstallPrompt() {
       (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
     setIsIOS(isiOS);
 
-    // Check session dismiss
-    if (sessionStorage.getItem("pwa-dismissed")) {
-      setDismissed(true);
+    // Check dismiss (localStorage — persists across sessions, reset after 7 days)
+    const dismissedAt = localStorage.getItem("pwa-dismissed-at");
+    if (dismissedAt) {
+      const daysAgo = (Date.now() - parseInt(dismissedAt)) / (1000 * 60 * 60 * 24);
+      if (daysAgo < 7) {
+        setDismissed(true);
+      } else {
+        localStorage.removeItem("pwa-dismissed-at");
+      }
     }
 
-    // Check if prompt was already captured globally
+    // Check global prompt
     if (globalDeferredPrompt) {
       setCanInstall(true);
     }
 
-    // Listen for future prompt events
     const handler = (e: Event) => {
       e.preventDefault();
       globalDeferredPrompt = e as BeforeInstallPromptEvent;
@@ -88,18 +90,14 @@ export function InstallPrompt() {
       }
       globalDeferredPrompt = null;
       setCanInstall(false);
-    } else {
-      // No deferred prompt — show manual instructions
-      setShowGuide(true);
     }
   }, []);
 
   const handleDismiss = () => {
     setDismissed(true);
-    sessionStorage.setItem("pwa-dismissed", "1");
+    localStorage.setItem("pwa-dismissed-at", Date.now().toString());
   };
 
-  // Don't show if installed or dismissed
   if (isInstalled || dismissed) return null;
 
   return (
@@ -107,89 +105,85 @@ export function InstallPrompt() {
       {/* Dismiss */}
       <button
         onClick={handleDismiss}
-        className="absolute top-2 right-2 p-1 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-10"
+        className="absolute top-2 right-2 p-1.5 rounded-full text-slate-400 hover:text-white hover:bg-white/10 transition-colors z-10"
         aria-label="Tutup"
       >
         <X className="h-4 w-4" />
       </button>
 
-      <div className="flex items-center gap-4">
-        {/* Icon */}
-        <div className="flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-3 shadow-lg shadow-amber-500/20">
-          <Download className="h-6 w-6 text-white" />
+      {/* Header */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex-shrink-0 rounded-xl bg-gradient-to-br from-amber-500 to-amber-700 p-2.5 shadow-lg shadow-amber-500/20">
+          <Download className="h-5 w-5 text-white" />
         </div>
-
-        {/* Text */}
-        <div className="flex-1 min-w-0">
+        <div>
           <h3 className="font-bold text-white text-sm sm:text-base">
-            Install CrownHub
+            Install CrownHub di HP kamu
           </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Akses lebih cepat langsung dari home screen — tanpa buka browser!
+          <p className="text-xs text-slate-400">
+            Buka langsung dari home screen — tanpa buka browser!
           </p>
         </div>
-
-        {/* Install Button — always visible */}
-        <button
-          onClick={handleInstall}
-          className="flex-shrink-0 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-sm px-4 py-2.5 transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 active:scale-95"
-        >
-          Install
-        </button>
       </div>
 
-      {/* Manual Guide (shows when prompt not available) */}
-      {showGuide && (
-        <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+      {/* Auto Install Button (Chrome Android) */}
+      {canInstall && (
+        <button
+          onClick={handleInstall}
+          className="w-full rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-sm px-4 py-3 transition-all shadow-lg shadow-amber-500/20 hover:shadow-amber-500/30 active:scale-[0.98] mb-3"
+        >
+          ⚡ Install Sekarang
+        </button>
+      )}
+
+      {/* Manual Steps — always visible if not auto-installable */}
+      {!canInstall && (
+        <div className="space-y-2.5">
           {isIOS ? (
             <>
-              <p className="text-xs font-semibold text-amber-400 mb-2">
-                Untuk iPhone/iPad (Safari):
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                Cara Install (Safari):
               </p>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">1.</span>
-                <span>
-                  Tap tombol{" "}
-                  <Share className="inline h-4 w-4 text-blue-400 -mt-0.5" />{" "}
-                  <strong>Share</strong> di bawah Safari
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">1</div>
+                <span className="text-sm text-slate-300">
+                  Tap <Share className="inline h-4 w-4 text-blue-400 -mt-0.5 mx-0.5" /> <strong className="text-white">Share</strong> di bawah layar
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">2.</span>
-                <span>
-                  Scroll ke bawah, tap{" "}
-                  <strong>&quot;Add to Home Screen&quot;</strong>
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">2</div>
+                <span className="text-sm text-slate-300">
+                  Pilih <strong className="text-white">&quot;Add to Home Screen&quot;</strong>
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">3.</span>
-                <span>
-                  Tap <strong>&quot;Add&quot;</strong> — selesai! 🎉
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">3</div>
+                <span className="text-sm text-slate-300">
+                  Tap <strong className="text-white">&quot;Add&quot;</strong> — selesai! 🎉
                 </span>
               </div>
             </>
           ) : (
             <>
-              <p className="text-xs font-semibold text-amber-400 mb-2">
-                Untuk Android (Chrome):
+              <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                Cara Install (Chrome):
               </p>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">1.</span>
-                <span>
-                  Tap <strong>⋮</strong> (titik tiga) di kanan atas Chrome
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">1</div>
+                <span className="text-sm text-slate-300">
+                  Tap <MoreVertical className="inline h-4 w-4 text-slate-300 -mt-0.5 mx-0.5" /> <strong className="text-white">(titik tiga)</strong> di kanan atas Chrome
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">2.</span>
-                <span>
-                  Tap <strong>&quot;Install app&quot;</strong> atau{" "}
-                  <strong>&quot;Add to Home screen&quot;</strong>
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">2</div>
+                <span className="text-sm text-slate-300">
+                  Pilih <strong className="text-white">&quot;Add to Home screen&quot;</strong> atau <strong className="text-white">&quot;Install app&quot;</strong>
                 </span>
               </div>
-              <div className="flex items-start gap-2 text-sm text-slate-300">
-                <span className="text-amber-400 font-bold">3.</span>
-                <span>
-                  Tap <strong>&quot;Install&quot;</strong> — selesai! 🎉
+              <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+                <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">3</div>
+                <span className="text-sm text-slate-300">
+                  Tap <strong className="text-white">&quot;Install&quot;</strong> — selesai! 🎉
                 </span>
               </div>
             </>
