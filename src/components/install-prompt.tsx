@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { Download, X, Share, MoreVertical, ExternalLink } from "lucide-react";
+import { Download, X, Share, MoreVertical } from "lucide-react";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt(): Promise<void>;
@@ -105,11 +105,6 @@ export function InstallPrompt() {
     localStorage.setItem("pwa-dismissed-at", Date.now().toString());
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText("https://app.crownallstar.com/dashboard");
-    alert("Link sudah di-copy! Buka Safari dan paste di address bar.");
-  };
-
   if (isInstalled || dismissed) return null;
 
   return (
@@ -148,62 +143,55 @@ export function InstallPrompt() {
         </button>
       )}
 
-      {/* Chrome iOS — needs Safari */}
-      {!canInstall && platform === "ios-chrome" && (
+      {/* iOS (Chrome or Safari — same steps, must use Safari) */}
+      {!canInstall && (platform === "ios-chrome" || platform === "ios-safari") && (
         <div className="space-y-2.5">
-          <div className="rounded-lg bg-rose-500/10 border border-rose-500/20 p-3 mb-2">
-            <p className="text-xs text-rose-300">
-              ⚠️ <strong>Chrome di iPhone tidak bisa install app.</strong> Buka di <strong>Safari</strong> untuk install.
-            </p>
-          </div>
-          <button
-            onClick={handleCopyLink}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white font-bold text-sm px-4 py-3 transition-all active:scale-[0.98]"
-          >
-            <ExternalLink className="h-4 w-4" />
-            Copy Link — Buka di Safari
-          </button>
-          <p className="text-xs text-slate-500 text-center">
-            Setelah di Safari, ikuti langkah: <strong>Share → Add to Home Screen → Add</strong>
-          </p>
-        </div>
-      )}
-
-      {/* iOS Safari */}
-      {!canInstall && platform === "ios-safari" && (
-        <div className="space-y-2.5">
+          {platform === "ios-chrome" && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 mb-1">
+              <p className="text-xs text-amber-300">
+                💡 Buka halaman ini di <strong>Safari</strong> dulu, lalu ikuti langkah di bawah.
+              </p>
+            </div>
+          )}
           <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
-            Cara Install:
+            Cara Install di iPhone:
           </p>
-          <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs mt-0.5">
               1
             </div>
-            <span className="text-sm text-slate-300">
-              Tap{" "}
-              <Share className="inline h-4 w-4 text-blue-400 -mt-0.5 mx-0.5" />{" "}
-              <strong className="text-white">Share</strong> di bawah layar
-            </span>
+            <div className="text-sm text-slate-300">
+              <p>Buka <strong className="text-white">Safari</strong>, ketik di address bar:</p>
+              <p className="mt-1 font-mono text-xs text-amber-300 bg-black/30 rounded px-2 py-1 select-all">app.crownallstar.com</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs mt-0.5">
               2
             </div>
-            <span className="text-sm text-slate-300">
-              Pilih{" "}
-              <strong className="text-white">
-                &quot;Add to Home Screen&quot;
-              </strong>
-            </span>
+            <div className="text-sm text-slate-300">
+              <p>Tap tombol <Share className="inline h-4 w-4 text-blue-400 -mt-0.5 mx-0.5" /> <strong className="text-white">Share</strong> di <strong className="text-white">bawah layar</strong> (kotak dengan panah ke atas)</p>
+            </div>
           </div>
-          <div className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
-            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs">
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs mt-0.5">
               3
             </div>
-            <span className="text-sm text-slate-300">
-              Tap <strong className="text-white">&quot;Add&quot;</strong> —
-              selesai! 🎉
-            </span>
+            <div className="text-sm text-slate-300">
+              <p>Scroll ke bawah di menu Share, cari dan tap:</p>
+              <p className="mt-1 inline-flex items-center gap-1.5 bg-white/10 rounded-lg px-3 py-1.5 text-white font-medium text-xs">
+                <span className="text-base">➕</span> Add to Home Screen
+              </p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 rounded-lg bg-white/5 border border-white/10 p-3">
+            <div className="flex-shrink-0 w-7 h-7 rounded-full bg-amber-500/20 flex items-center justify-center text-amber-400 font-bold text-xs mt-0.5">
+              4
+            </div>
+            <div className="text-sm text-slate-300">
+              <p>Tap <strong className="text-white">&quot;Add&quot;</strong> di kanan atas — selesai! 🎉</p>
+              <p className="text-xs text-slate-500 mt-1">Icon CrownHub akan muncul di home screen kamu</p>
+            </div>
           </div>
         </div>
       )}
