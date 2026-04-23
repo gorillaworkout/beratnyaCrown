@@ -98,7 +98,8 @@ const DEFAULT_EVENTS: Omit<CrownEvent, "id">[] = [
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type PiketMatrasData = {matras1: string[], matras2: string[], matras3: string[], matras4: string[]};
+type PiketMatrasPhase = {matras1: string[], matras2: string[], matras3: string[], matras4: string[]};
+type PiketMatrasData = {ambil: PiketMatrasPhase, kembalikan: PiketMatrasPhase};
 
 const SHIRT_COLORS = [
   { name: "Merah", hex: "#ef4444" },
@@ -225,22 +226,23 @@ export default function JadwalPage() {
   const [selectedAbsenceDate, setSelectedAbsenceDate] = useState("");
   const [absenceForm, setAbsenceForm] = useState<{name: string, reason: string}[]>([]);
   const [athleteSearch, setAthleteSearch] = useState("");
-  const [dynamicAthletes, setDynamicAthletes] = useState<{name: string, divisions: string[]}[]>([]);
+  const [dynamicAthletes, setDynamicAthletes] = useState<{name: string, divisions: string[], gender: string, role: string}[]>([]);
   const [absenceDivFilter, setAbsenceDivFilter] = useState<"all" | "All Girl" | "Coed">("all");
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
-  // Piket matras state — 4 matras, each 4 people = 16 total
+  // Piket matras state — 2 phases × 4 matras × 3 people = 24 total
   const [piketData, setPiketData] = useState<Map<string, PiketMatrasData>>(new Map());
   const [piketEditDate, setPiketEditDate] = useState<string | null>(null);
   const [piketEditMatras, setPiketEditMatras] = useState<1|2|3|4>(1);
+  const [piketEditPhase, setPiketEditPhase] = useState<"ambil" | "kembalikan">("ambil");
   const [piketEditList, setPiketEditList] = useState<string[]>([]);
   const [piketDialogOpen, setPiketDialogOpen] = useState(false);
   const [piketSearch, setPiketSearch] = useState("");
-  // Piket counter state - hitung dari 1 April 2026 (single count per person)
-  const [piketCounter, setPiketCounter] = useState<Map<string, number>>(new Map());
+  // Piket counter state - hitung dari 1 April 2026 (separate ambil/kembalikan)
+  const [piketCounter, setPiketCounter] = useState<Map<string, {ambil: number, kembalikan: number}>>(new Map());
   // Per-date piket counter: cumulative UP TO that date
-  const [piketCounterByDate, setPiketCounterByDate] = useState<Map<string, Map<string, number>>>(new Map());
-  // Per-date piket assignments: dateStr -> {matras1..4}
+  const [piketCounterByDate, setPiketCounterByDate] = useState<Map<string, Map<string, {ambil: number, kembalikan: number}>>>(new Map());
+  // Per-date piket assignments: dateStr -> {ambil: {matras1..4}, kembalikan: {matras1..4}}
   const [piketAssignmentsByDate, setPiketAssignmentsByDate] = useState<Map<string, PiketMatrasData>>(new Map());
 
   // Sync state
@@ -310,14 +312,14 @@ export default function JadwalPage() {
       }
     );
 
-    // Listen to crown-athletes (with divisions)
+    // Listen to crown-athletes (with divisions, gender, role)
     const unsubAthletes = onSnapshot(collection(db, "crown-athletes"), (snap) => {
       const athletes = snap.docs.map(d => {
         const data = d.data();
         let divisions: string[] = [];
         if (Array.isArray(data.divisions)) divisions = data.divisions;
         else if (data.division) divisions = [data.division];
-        return { name: (data.name as string) || "", divisions };
+        return { name: (data.name as string) || "", divisions, gender: (data.gender as string) || "", role: (data.role as string) || "athlete" };
       }).filter(a => a.name).sort((a, b) => a.name.localeCompare(b.name));
       if (athletes.length > 0) setDynamicAthletes(athletes);
     });
@@ -350,21 +352,22 @@ export default function JadwalPage() {
       }
     );
 
-    // Listen to crown-piket (matras duty assignments — 4 matras)
+    // Listen to crown-piket (matras duty assignments — 2 phases × 4 matras)
     const unsubPiket = onSnapshot(collection(db, "crown-piket"), (snap) => {
       const data = new Map<string, PiketMatrasData>();
+      const emptyPhase = (): PiketMatrasPhase => ({ matras1: [], matras2: [], matras3: [], matras4: [] });
       snap.docs.forEach(d => {
         const dd = d.data() as any;
-        // Support new 4-matras format; gracefully handle old pasang/kembalikan format
-        if (dd.matras1 || dd.matras2 || dd.matras3 || dd.matras4) {
+        // Support new nested {ambil, kembalikan} format
+        if (dd.ambil || dd.kembalikan) {
+          const ambil = dd.ambil || {};
+          const kembalikan = dd.kembalikan || {};
           data.set(d.id, {
-            matras1: dd.matras1 || [],
-            matras2: dd.matras2 || [],
-            matras3: dd.matras3 || [],
-            matras4: dd.matras4 || [],
+            ambil: { matras1: ambil.matras1 || [], matras2: ambil.matras2 || [], matras3: ambil.matras3 || [], matras4: ambil.matras4 || [] },
+            kembalikan: { matras1: kembalikan.matras1 || [], matras2: kembalikan.matras2 || [], matras3: kembalikan.matras3 || [], matras4: kembalikan.matras4 || [] },
           });
         }
-        // Old format (pasang/kembalikan) is ignored — will be auto-generated fresh
+        // Old flat format (matras1..4 at top level) — ignored, will be auto-generated fresh
       });
       setPiketData(data);
     });
@@ -729,7 +732,7 @@ export default function JadwalPage() {
 
   // ─── Absence Management ──────────────────────────────────────────────
 
-  const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES.map(n => ({ name: n, divisions: [] as string[] }));
+  const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES.map(n => ({ name: n, divisions: [] as string[], gender: "", role: "athlete" }));
 
   const openAbsenceDialog = (dateStr: string) => {
     setSelectedAbsenceDate(dateStr);
@@ -769,19 +772,19 @@ export default function JadwalPage() {
 
   // ─── Piket Matras Management ─────────────────────────────────────────
 
-  // HYBRID ALGORITHM: Fair rotation based on piket count — ALL athletes combined
-  // Returns `count` people sorted by lowest piket count
-  const getRotation = (athletes: {name: string, divisions: string[]}[], dateStr: string, count: number, absentNames: Set<string>, localCounter?: Map<string, number>) => {
+  // HYBRID ALGORITHM: Fair rotation based on piket count — filtered by division pool
+  // Returns `count` people sorted by lowest piket count, with gender mixing
+  const getRotation = (athletes: {name: string, divisions: string[], gender: string, role: string}[], dateStr: string, count: number, absentNames: Set<string>, localCounter?: Map<string, number>) => {
     const available = athletes.filter(a => !absentNames.has(a.name));
     if (available.length === 0) return [];
     
-    // Use localCounter if provided (for calculations), otherwise use state (for display)
-    const counterMap = localCounter || piketCounter;
+    // Use localCounter if provided (for calculations), otherwise derive from state
+    const counterMap = localCounter || new Map<string, number>();
     
     // Get current counter for available athletes
     const withCounts = available.map(a => {
       const currentCount = counterMap.get(a.name) || 0;
-      return { name: a.name, count: currentCount };
+      return { name: a.name, count: currentCount, gender: a.gender };
     });
     
     // Sort by count (lowest first) - PRIORITAS ADIL!
@@ -828,98 +831,165 @@ export default function JadwalPage() {
     return [...result, ...nextLevel].map(a => a.name);
   };
 
+  // Split 12 selected people into 4 matras of 3 with gender mixing
+  const splitWithGenderMix = (selected: string[], athletes: {name: string, gender: string}[]): PiketMatrasPhase => {
+    const genderMap = new Map(athletes.map(a => [a.name, a.gender]));
+    const males = selected.filter(n => genderMap.get(n) === "L");
+    const females = selected.filter(n => genderMap.get(n) !== "L"); // P or unknown = female pool
+    
+    const matras: string[][] = [[], [], [], []];
+    
+    // Distribute males round-robin across matras first
+    males.forEach((name, i) => {
+      const matrasIdx = i % 4;
+      if (matras[matrasIdx].length < 3) {
+        matras[matrasIdx].push(name);
+      }
+    });
+    
+    // Fill remaining slots with females
+    let femIdx = 0;
+    for (let m = 0; m < 4; m++) {
+      while (matras[m].length < 3 && femIdx < females.length) {
+        matras[m].push(females[femIdx]);
+        femIdx++;
+      }
+    }
+    
+    // If still not full (edge case: not enough people), leave as is
+    return { matras1: matras[0], matras2: matras[1], matras3: matras[2], matras4: matras[3] };
+  };
+
   const getPiketForDate = (dateStr: string): PiketMatrasData => {
     const absentNames = new Set(
       (absences.find(a => a.date === dateStr)?.absences || []).map((a: any) => a.name)
     );
-    const allAthletes = dynamicAthletes;
+    
+    // Filter athletes: exclude coaches
+    const nonCoaches = dynamicAthletes.filter(a => a.role !== "coach");
+    const agPool = nonCoaches.filter(a => a.divisions.includes("All Girl"));
+    const coedPool = nonCoaches.filter(a => a.divisions.includes("Coed"));
     
     const saved = piketData.get(dateStr);
     if (saved) {
-      // Validate and backfill saved data
-      const result: PiketMatrasData = { matras1: [], matras2: [], matras3: [], matras4: [] };
-      const usedNames = new Set<string>();
+      // Validate and backfill saved data for both phases
+      const result: PiketMatrasData = {
+        ambil: { matras1: [], matras2: [], matras3: [], matras4: [] },
+        kembalikan: { matras1: [], matras2: [], matras3: [], matras4: [] },
+      };
       
-      for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
-        const savedList = saved[key].filter(n => !absentNames.has(n));
-        result[key] = savedList.slice(0, 4);
-        savedList.slice(0, 4).forEach(n => usedNames.add(n));
-      }
-      
-      // Backfill any matras that has less than 4
-      const rotation = getRotation(allAthletes, dateStr, allAthletes.length, absentNames);
-      for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
-        for (const name of rotation) {
-          if (result[key].length >= 4) break;
-          if (!usedNames.has(name)) {
-            result[key].push(name);
-            usedNames.add(name);
+      for (const phase of ["ambil", "kembalikan"] as const) {
+        const pool = phase === "ambil" ? agPool : coedPool;
+        const usedNames = new Set<string>();
+        
+        for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
+          const savedList = (saved[phase]?.[key] || []).filter(n => !absentNames.has(n));
+          result[phase][key] = savedList.slice(0, 3);
+          savedList.slice(0, 3).forEach(n => usedNames.add(n));
+        }
+        
+        // Backfill any matras that has less than 3
+        const phaseCounter = new Map<string, number>();
+        piketCounter.forEach((v, k) => phaseCounter.set(k, phase === "ambil" ? v.ambil : v.kembalikan));
+        const rotation = getRotation(pool, dateStr, pool.length, absentNames, phaseCounter);
+        for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
+          for (const name of rotation) {
+            if (result[phase][key].length >= 3) break;
+            if (!usedNames.has(name)) {
+              result[phase][key].push(name);
+              usedNames.add(name);
+            }
           }
         }
       }
       return result;
     }
     
-    // No saved data → use auto rotation (16 people split into 4 matras of 4)
-    const selected = getRotation(allAthletes, dateStr, 16, absentNames);
+    // No saved data → use auto rotation
+    const agCounter = new Map<string, number>();
+    piketCounter.forEach((v, k) => agCounter.set(k, v.ambil));
+    const coedCounter = new Map<string, number>();
+    piketCounter.forEach((v, k) => coedCounter.set(k, v.kembalikan));
+    
+    const agSelected = getRotation(agPool, dateStr, 12, absentNames, agCounter);
+    const coedSelected = getRotation(coedPool, dateStr, 12, absentNames, coedCounter);
+    
+    const agAthleteInfo = agPool.map(a => ({ name: a.name, gender: a.gender }));
+    const coedAthleteInfo = coedPool.map(a => ({ name: a.name, gender: a.gender }));
+    
     return {
-      matras1: selected.slice(0, 4),
-      matras2: selected.slice(4, 8),
-      matras3: selected.slice(8, 12),
-      matras4: selected.slice(12, 16),
+      ambil: splitWithGenderMix(agSelected, agAthleteInfo),
+      kembalikan: splitWithGenderMix(coedSelected, coedAthleteInfo),
     };
   };
 
   // FUNGSI KHUSUS untuk kalkulasi counter - pakai local counter, BUKAN state!
   const getPiketForDateCalculation = (
     dateStr: string, 
-    localCounter: Map<string, number>,
+    localCounter: Map<string, {ambil: number, kembalikan: number}>,
     localAbsentNames: Set<string>,
     localAllAthletes: typeof dynamicAthletes,
     localPiketData: typeof piketData
   ): PiketMatrasData => {
-    const allAthletes = localAllAthletes;
+    const nonCoaches = localAllAthletes.filter(a => a.role !== "coach");
+    const agPool = nonCoaches.filter(a => a.divisions.includes("All Girl"));
+    const coedPool = nonCoaches.filter(a => a.divisions.includes("Coed"));
     
     const saved = localPiketData.get(dateStr);
     if (saved) {
-      const result: PiketMatrasData = { matras1: [], matras2: [], matras3: [], matras4: [] };
-      const usedNames = new Set<string>();
+      const result: PiketMatrasData = {
+        ambil: { matras1: [], matras2: [], matras3: [], matras4: [] },
+        kembalikan: { matras1: [], matras2: [], matras3: [], matras4: [] },
+      };
       
-      for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
-        const savedList = saved[key].filter(n => !localAbsentNames.has(n));
-        result[key] = savedList.slice(0, 4);
-        savedList.slice(0, 4).forEach(n => usedNames.add(n));
-      }
-      
-      const rotation = getRotation(allAthletes, dateStr, allAthletes.length, localAbsentNames, localCounter);
-      for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
-        for (const name of rotation) {
-          if (result[key].length >= 4) break;
-          if (!usedNames.has(name)) {
-            result[key].push(name);
-            usedNames.add(name);
+      for (const phase of ["ambil", "kembalikan"] as const) {
+        const pool = phase === "ambil" ? agPool : coedPool;
+        const usedNames = new Set<string>();
+        
+        for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
+          const savedList = (saved[phase]?.[key] || []).filter(n => !localAbsentNames.has(n));
+          result[phase][key] = savedList.slice(0, 3);
+          savedList.slice(0, 3).forEach(n => usedNames.add(n));
+        }
+        
+        const phaseCounter = new Map<string, number>();
+        localCounter.forEach((v, k) => phaseCounter.set(k, phase === "ambil" ? v.ambil : v.kembalikan));
+        const rotation = getRotation(pool, dateStr, pool.length, localAbsentNames, phaseCounter);
+        for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
+          for (const name of rotation) {
+            if (result[phase][key].length >= 3) break;
+            if (!usedNames.has(name)) {
+              result[phase][key].push(name);
+              usedNames.add(name);
+            }
           }
         }
       }
       return result;
     }
     
-    const selected = getRotation(allAthletes, dateStr, 16, localAbsentNames, localCounter);
+    const agCounter = new Map<string, number>();
+    localCounter.forEach((v, k) => agCounter.set(k, v.ambil));
+    const coedCounter = new Map<string, number>();
+    localCounter.forEach((v, k) => coedCounter.set(k, v.kembalikan));
+    
+    const agSelected = getRotation(agPool, dateStr, 12, localAbsentNames, agCounter);
+    const coedSelected = getRotation(coedPool, dateStr, 12, localAbsentNames, coedCounter);
+    
+    const agAthleteInfo = agPool.map(a => ({ name: a.name, gender: a.gender }));
+    const coedAthleteInfo = coedPool.map(a => ({ name: a.name, gender: a.gender }));
+    
     return {
-      matras1: selected.slice(0, 4),
-      matras2: selected.slice(4, 8),
-      matras3: selected.slice(8, 12),
-      matras4: selected.slice(12, 16),
+      ambil: splitWithGenderMix(agSelected, agAthleteInfo),
+      kembalikan: splitWithGenderMix(coedSelected, coedAthleteInfo),
     };
   };
 
   // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
-  // Returns { counter, byDate, assignments } where byDate maps dateStr -> snapshot of counter AFTER that date
-  // Fungsi hitung counter piket per orang dari 1 April 2026 sampai tanggal tertentu
-  // Returns { counter, byDate, assignments } — single count per person, 4 matras structure
-  const calculatePiketCounter = useCallback((upToDate?: string): { counter: Map<string, number>, byDate: Map<string, Map<string, number>>, assignments: Map<string, PiketMatrasData> } => {
-    const counter = new Map<string, number>();
-    const byDate = new Map<string, Map<string, number>>();
+  // Returns { counter, byDate, assignments } — separate ambil/kembalikan counts
+  const calculatePiketCounter = useCallback((upToDate?: string): { counter: Map<string, {ambil: number, kembalikan: number}>, byDate: Map<string, Map<string, {ambil: number, kembalikan: number}>>, assignments: Map<string, PiketMatrasData> } => {
+    const counter = new Map<string, {ambil: number, kembalikan: number}>();
+    const byDate = new Map<string, Map<string, {ambil: number, kembalikan: number}>>();
     const assignments = new Map<string, PiketMatrasData>();
     const endDate = upToDate || todayStr;
     const startDate = "2026-04-01";
@@ -954,21 +1024,35 @@ export default function JadwalPage() {
         // Use calculation function with LOCAL counter
         const piketResult = getPiketForDateCalculation(dateStr, counter, absentNames, allAthletes, piketData);
         
-        // Count all people assigned to any matras
-        const allAssigned = [
-          ...piketResult.matras1,
-          ...piketResult.matras2,
-          ...piketResult.matras3,
-          ...piketResult.matras4,
+        // Count ambil assignments
+        const ambilAssigned = [
+          ...piketResult.ambil.matras1,
+          ...piketResult.ambil.matras2,
+          ...piketResult.ambil.matras3,
+          ...piketResult.ambil.matras4,
         ];
         
-        allAssigned.forEach(name => {
-          counter.set(name, (counter.get(name) || 0) + 1);
+        ambilAssigned.forEach(name => {
+          const cur = counter.get(name) || { ambil: 0, kembalikan: 0 };
+          counter.set(name, { ...cur, ambil: cur.ambil + 1 });
+        });
+        
+        // Count kembalikan assignments
+        const kembalikanAssigned = [
+          ...piketResult.kembalikan.matras1,
+          ...piketResult.kembalikan.matras2,
+          ...piketResult.kembalikan.matras3,
+          ...piketResult.kembalikan.matras4,
+        ];
+        
+        kembalikanAssigned.forEach(name => {
+          const cur = counter.get(name) || { ambil: 0, kembalikan: 0 };
+          counter.set(name, { ...cur, kembalikan: cur.kembalikan + 1 });
         });
         
         // Save a snapshot of the counter AFTER processing this training date
-        const snapshot = new Map<string, number>();
-        counter.forEach((v, k) => snapshot.set(k, v));
+        const snapshot = new Map<string, {ambil: number, kembalikan: number}>();
+        counter.forEach((v, k) => snapshot.set(k, { ...v }));
         byDate.set(dateStr, snapshot);
         
         // Save the assignments for this date
@@ -993,12 +1077,13 @@ export default function JadwalPage() {
     }
   }, [firestoreLoading, scheduleData, events, absences, piketData, dynamicAthletes, calculatePiketCounter]);
 
-  const openPiketEdit = (dateStr: string, matrasNum: 1|2|3|4) => {
+  const openPiketEdit = (dateStr: string, phase: "ambil" | "kembalikan", matrasNum: 1|2|3|4) => {
     setPiketEditDate(dateStr);
+    setPiketEditPhase(phase);
     setPiketEditMatras(matrasNum);
     const piket = getPiketForDate(dateStr);
-    const matrasKey = `matras${matrasNum}` as keyof PiketMatrasData;
-    setPiketEditList([...piket[matrasKey]]);
+    const matrasKey = `matras${matrasNum}` as keyof PiketMatrasPhase;
+    setPiketEditList([...piket[phase][matrasKey]]);
     setPiketSearch("");
     setPiketDialogOpen(true);
   };
@@ -1006,9 +1091,11 @@ export default function JadwalPage() {
   const savePiket = async () => {
     if (!piketEditDate) return;
     try {
-      const existing = piketData.get(piketEditDate) || { matras1: [], matras2: [], matras3: [], matras4: [] };
-      const matrasKey = `matras${piketEditMatras}` as keyof PiketMatrasData;
-      const updated = { ...existing, [matrasKey]: piketEditList };
+      const emptyPhase: PiketMatrasPhase = { matras1: [], matras2: [], matras3: [], matras4: [] };
+      const existing = piketData.get(piketEditDate) || { ambil: { ...emptyPhase }, kembalikan: { ...emptyPhase } };
+      const matrasKey = `matras${piketEditMatras}` as keyof PiketMatrasPhase;
+      const updatedPhase = { ...existing[piketEditPhase], [matrasKey]: piketEditList };
+      const updated = { ...existing, [piketEditPhase]: updatedPhase };
       await setDoc(doc(db, "crown-piket", piketEditDate), updated);
       setPiketDialogOpen(false);
       showToast("Piket matras berhasil disimpan!");
@@ -1021,7 +1108,7 @@ export default function JadwalPage() {
   const togglePiketAthlete = (name: string) => {
     setPiketEditList(prev => {
       if (prev.includes(name)) return prev.filter(n => n !== name);
-      if (prev.length >= 4) return prev;
+      if (prev.length >= 3) return prev;
       return [...prev, name];
     });
   };
@@ -1712,7 +1799,7 @@ export default function JadwalPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-white">🧹 Piket Matras</CardTitle>
             <CardDescription className="text-slate-400 text-sm">
-              4 matras × 4 orang = 16 per latihan — otomatis skip yang izin
+              Ambil (AG) &amp; Kembalikan (Coed) — 4 matras × 3 orang
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -1779,6 +1866,14 @@ export default function JadwalPage() {
                 { label: "Matras 4", color: "text-amber-400", badge: "bg-amber-500/20 text-amber-300 border-amber-500/30" },
               ];
 
+              // Helper to get gender icon
+              const genderIcon = (name: string) => {
+                const athlete = dynamicAthletes.find(a => a.name === name);
+                if (athlete?.gender === "L") return <span className="text-blue-400 text-[9px]" title="Laki-laki">♂</span>;
+                if (athlete?.gender === "P") return <span className="text-pink-400 text-[9px]" title="Perempuan">♀</span>;
+                return null;
+              };
+
               return (
                 <div className="space-y-4">
                   {upcomingTraining.map(entry => {
@@ -1787,7 +1882,53 @@ export default function JadwalPage() {
                     const piketResult = piketAssignmentsByDate.get(entry.date) || getPiketForDate(entry.date);
                     const absCount = getAbsenceCount(entry.date);
                     const hasSavedPiket = piketData.has(entry.date);
-                    const matrasArrays = [piketResult.matras1, piketResult.matras2, piketResult.matras3, piketResult.matras4];
+
+                    const renderPhase = (phase: "ambil" | "kembalikan", label: string, emoji: string) => {
+                      const phaseData = piketResult[phase];
+                      const matrasArrays = [phaseData.matras1, phaseData.matras2, phaseData.matras3, phaseData.matras4];
+                      return (
+                        <div>
+                          <p className="text-[11px] font-semibold text-slate-300 mb-2">{emoji} {label}</p>
+                          <div className="grid grid-cols-2 gap-3">
+                            {matrasArrays.map((matrasList, matrasIdx) => {
+                              const mc = MATRAS_COLORS[matrasIdx];
+                              const matrasNum = (matrasIdx + 1) as 1|2|3|4;
+                              return (
+                                <div key={matrasIdx}>
+                                  <div className="flex items-center justify-between mb-1.5">
+                                    <p className={`text-[10px] uppercase tracking-wider ${mc.color} font-semibold`}>{mc.label}</p>
+                                    {isAdmin && (
+                                      <button onClick={() => openPiketEdit(entry.date, phase, matrasNum)} className={`text-[10px] text-slate-500 hover:${mc.color} transition-colors`}>
+                                        <Edit2 className="h-3 w-3" />
+                                      </button>
+                                    )}
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {matrasList.length > 0 ? matrasList.map((name, i) => {
+                                      const dateCounter = piketCounterByDate.get(entry.date);
+                                      const piketCount = dateCounter?.get(name);
+                                      const phaseCount = phase === "ambil" ? (piketCount?.ambil || 0) : (piketCount?.kembalikan || 0);
+                                      return (
+                                        <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
+                                          <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
+                                          {genderIcon(name)}
+                                          <span className="truncate flex-1">{name}</span>
+                                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${phaseCount === 0 ? 'bg-slate-700 text-slate-400 border-slate-600' : phaseCount <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : mc.badge}`}>
+                                            {phaseCount}x
+                                          </span>
+                                        </div>
+                                      );
+                                    }) : (
+                                      <p className="text-xs text-slate-600 italic">—</p>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    };
 
                     return (
                       <div key={entry.date} className={`border rounded-xl p-4 ${isToday ? "border-cyan-500/30 bg-cyan-500/5" : "border-white/10 bg-black/20"}`}>
@@ -1804,40 +1945,10 @@ export default function JadwalPage() {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-2 gap-3">
-                          {matrasArrays.map((matrasList, matrasIdx) => {
-                            const mc = MATRAS_COLORS[matrasIdx];
-                            const matrasNum = (matrasIdx + 1) as 1|2|3|4;
-                            return (
-                              <div key={matrasIdx}>
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <p className={`text-[10px] uppercase tracking-wider ${mc.color} font-semibold`}>{mc.label}</p>
-                                  {isAdmin && (
-                                    <button onClick={() => openPiketEdit(entry.date, matrasNum)} className={`text-[10px] text-slate-500 hover:${mc.color} transition-colors`}>
-                                      <Edit2 className="h-3 w-3" />
-                                    </button>
-                                  )}
-                                </div>
-                                <div className="space-y-0.5">
-                                  {matrasList.length > 0 ? matrasList.map((name, i) => {
-                                    const dateCounter = piketCounterByDate.get(entry.date);
-                                    const piketCount = dateCounter?.get(name) || 0;
-                                    return (
-                                      <div key={name} className="flex items-center gap-1.5 text-xs text-slate-300">
-                                        <span className="text-slate-600 w-4 text-right">{i + 1}.</span>
-                                        <span className="truncate flex-1">{name}</span>
-                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full border ${piketCount === 0 ? 'bg-slate-700 text-slate-400 border-slate-600' : piketCount <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : mc.badge}`}>
-                                          {piketCount}x
-                                        </span>
-                                      </div>
-                                    );
-                                  }) : (
-                                    <p className="text-xs text-slate-600 italic">—</p>
-                                  )}
-                                </div>
-                              </div>
-                            );
-                          })}
+                        <div className="space-y-4">
+                          {renderPhase("ambil", "Ambil Matras (AG)", "📥")}
+                          <div className="border-t border-white/5" />
+                          {renderPhase("kembalikan", "Kembalikan Matras (Coed)", "📤")}
                         </div>
                       </div>
                     );
@@ -1853,34 +1964,56 @@ export default function JadwalPage() {
           <CardHeader className="pb-3">
             <CardTitle className="text-lg text-white">📊 Rekap Piket Matras</CardTitle>
             <CardDescription className="text-slate-400 text-sm">
-              Statistik total piket tiap atlet (dari 1 April 2026) — yang warna kuning masih dikit
+              Statistik piket tiap atlet (dari 1 April 2026) — Ambil (AG) &amp; Kembalikan (Coed)
             </CardDescription>
           </CardHeader>
           <CardContent>
             {(() => {
-              // Single unified stats for all athletes
-              const allStats = dynamicAthletes.map(a => {
-                const count = piketCounter.get(a.name) || 0;
-                return { name: a.name, count };
-              }).sort((a, b) => a.count - b.count);
+              const nonCoaches = dynamicAthletes.filter(a => a.role !== "coach");
+              const agAthletes = nonCoaches.filter(a => a.divisions.includes("All Girl"));
+              const coedAthletes = nonCoaches.filter(a => a.divisions.includes("Coed"));
               
-              const maxCount = Math.max(...allStats.map(s => s.count), 0);
+              const gIcon = (gender: string) => gender === "L" ? "♂" : gender === "P" ? "♀" : "";
+              
+              const renderSection = (title: string, athletes: typeof dynamicAthletes, phase: "ambil" | "kembalikan") => {
+                const stats = athletes.map(a => {
+                  const counts = piketCounter.get(a.name) || { ambil: 0, kembalikan: 0 };
+                  const count = phase === "ambil" ? counts.ambil : counts.kembalikan;
+                  return { name: a.name, count, gender: a.gender };
+                }).sort((a, b) => a.count - b.count);
+                
+                const maxCount = Math.max(...stats.map(s => s.count), 0);
+                
+                return (
+                  <div>
+                    <p className="text-xs font-semibold text-slate-300 mb-2">{title}</p>
+                    <div className="space-y-1">
+                      {stats.map(({ name, count, gender }) => (
+                        <div key={name} className="flex items-center gap-2">
+                          <span className={`text-[10px] w-3 ${gender === "L" ? "text-blue-400" : gender === "P" ? "text-pink-400" : "text-slate-600"}`}>
+                            {gIcon(gender)}
+                          </span>
+                          <span className="text-xs text-slate-300 flex-1 truncate">{name}</span>
+                          <div className="flex items-center gap-1">
+                            <div className="h-1.5 rounded-full bg-cyan-500/30 overflow-hidden" style={{ width: `${Math.max(count * 10, 20)}px` }}>
+                              <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${maxCount > 0 ? (count / maxCount) * 100 : 0}%` }}></div>
+                            </div>
+                            <span className={`text-[10px] px-1.5 py-0.5 rounded border ${count === 0 ? 'bg-red-500/20 text-red-300 border-red-500/30' : count <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'}`}>
+                              {count}x
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              };
               
               return (
-                <div className="space-y-1">
-                  {allStats.map(({ name, count }) => (
-                    <div key={name} className="flex items-center gap-2">
-                      <span className="text-xs text-slate-300 flex-1 truncate">{name}</span>
-                      <div className="flex items-center gap-1">
-                        <div className="h-1.5 rounded-full bg-cyan-500/30 overflow-hidden" style={{ width: `${Math.max(count * 10, 20)}px` }}>
-                          <div className="h-full bg-cyan-500 rounded-full" style={{ width: `${maxCount > 0 ? (count / maxCount) * 100 : 0}%` }}></div>
-                        </div>
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded border ${count === 0 ? 'bg-red-500/20 text-red-300 border-red-500/30' : count <= 2 ? 'bg-amber-500/20 text-amber-300 border-amber-500/30' : 'bg-cyan-500/20 text-cyan-300 border-cyan-500/30'}`}>
-                          {count}x
-                        </span>
-                      </div>
-                    </div>
-                  ))}
+                <div className="space-y-4">
+                  {renderSection("📥 Ambil Matras — All Girl", agAthletes, "ambil")}
+                  <div className="border-t border-white/5" />
+                  {renderSection("📤 Kembalikan Matras — Coed", coedAthletes, "kembalikan")}
                 </div>
               );
             })()}
@@ -2288,13 +2421,13 @@ export default function JadwalPage() {
             <div className="p-4 pb-3 border-b border-white/10">
               <DialogHeader>
                 <DialogTitle className="text-white flex items-center gap-2">
-                  🧹 Piket Matras {piketEditMatras}
+                  {piketEditPhase === "ambil" ? "📥" : "📤"} {piketEditPhase === "ambil" ? "Ambil" : "Kembalikan"} Matras {piketEditMatras}
                 </DialogTitle>
                 <DialogDescription className="text-slate-400 text-sm">
                   {piketEditDate && new Date(piketEditDate + "T00:00:00").toLocaleDateString("id-ID", {
                     weekday: "long", day: "numeric", month: "long"
                   })}
-                  {" — "}Pilih max 4 orang ({piketEditList.length}/4)
+                  {" — "}Pilih max 3 orang ({piketEditList.length}/3) — {piketEditPhase === "ambil" ? "All Girl" : "Coed"}
                 </DialogDescription>
               </DialogHeader>
 
@@ -2314,43 +2447,54 @@ export default function JadwalPage() {
               <div className="px-4 py-2 border-b border-white/10 bg-white/[0.02]">
                 <p className="text-[10px] uppercase text-slate-500 mb-1.5">Terpilih ({piketEditList.length})</p>
                 <div className="flex flex-wrap gap-1">
-                  {piketEditList.map((name, i) => (
-                    <button
-                      key={name}
-                      onClick={() => togglePiketAthlete(name)}
-                      className="text-[11px] px-2 py-0.5 rounded-full border transition-colors bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30"
-                    >
-                      {i + 1}. {name} ×
-                    </button>
-                  ))}
+                  {piketEditList.map((name, i) => {
+                    const athlete = dynamicAthletes.find(a => a.name === name);
+                    const gIcon = athlete?.gender === "L" ? "♂ " : athlete?.gender === "P" ? "♀ " : "";
+                    return (
+                      <button
+                        key={name}
+                        onClick={() => togglePiketAthlete(name)}
+                        className="text-[11px] px-2 py-0.5 rounded-full border transition-colors bg-cyan-500/20 text-cyan-300 border-cyan-500/30 hover:bg-cyan-500/30"
+                      >
+                        {i + 1}. {gIcon}{name} ×
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
-            {/* Available athletes — ALL athletes, no division filter */}
+            {/* Available athletes — filtered by phase division, excluding coaches */}
             <div className="flex-1 overflow-y-auto p-4 space-y-1 min-h-0">
               {(() => {
                 const absentNames = new Set(
                   (absences.find(a => a.date === piketEditDate)?.absences || []).map((a: any) => a.name)
                 );
-                // Get names already assigned to OTHER matras for this date
+                // Get names already assigned to OTHER matras for this date+phase
                 const otherMatrasNames = new Set<string>();
                 if (piketEditDate) {
                   const piket = piketAssignmentsByDate.get(piketEditDate) || getPiketForDate(piketEditDate);
+                  const phaseData = piket[piketEditPhase];
                   for (const key of ['matras1', 'matras2', 'matras3', 'matras4'] as const) {
                     const num = parseInt(key.replace('matras', ''));
                     if (num !== piketEditMatras) {
-                      piket[key].forEach(n => otherMatrasNames.add(n));
+                      phaseData[key].forEach(n => otherMatrasNames.add(n));
                     }
                   }
                 }
                 
-                return dynamicAthletes
+                // Filter pool by phase: AG for ambil, Coed for kembalikan; exclude coaches
+                const pool = dynamicAthletes
+                  .filter(a => a.role !== "coach")
+                  .filter(a => piketEditPhase === "ambil" ? a.divisions.includes("All Girl") : a.divisions.includes("Coed"));
+                
+                return pool
                   .filter(a => a.name.toLowerCase().includes(piketSearch.toLowerCase()))
                   .map(athlete => {
                     const isSelected = piketEditList.includes(athlete.name);
                     const isAbsent = absentNames.has(athlete.name);
                     const isOnOtherMatras = otherMatrasNames.has(athlete.name);
+                    const gIcon = athlete.gender === "L" ? "♂ " : athlete.gender === "P" ? "♀ " : "";
                     return (
                       <button
                         key={athlete.name}
@@ -2366,7 +2510,10 @@ export default function JadwalPage() {
                             : "text-slate-300 hover:bg-white/5 border border-transparent"
                         }`}
                       >
-                        <span>{athlete.name}</span>
+                        <span>
+                          <span className={athlete.gender === "L" ? "text-blue-400" : athlete.gender === "P" ? "text-pink-400" : ""}>{gIcon}</span>
+                          {athlete.name}
+                        </span>
                         {isAbsent && <span className="text-[10px] text-red-400">Izin</span>}
                         {isOnOtherMatras && <span className="text-[10px] text-slate-500">Matras lain</span>}
                         {isSelected && <span className="text-[10px]">✓</span>}
@@ -2380,12 +2527,18 @@ export default function JadwalPage() {
             <div className="p-4 pt-3 border-t border-white/10 flex gap-2">
               <Button
                 onClick={() => {
-                  // Reset to auto rotation for this matras
+                  // Reset to auto rotation for this matras + phase
                   const absentNames = new Set(
                     (absences.find(a => a.date === piketEditDate)?.absences || []).map((a: any) => a.name)
                   );
-                  const fullPiket = getRotation(dynamicAthletes, piketEditDate || "", 16, absentNames);
-                  const matrasSlice = fullPiket.slice((piketEditMatras - 1) * 4, piketEditMatras * 4);
+                  const nonCoaches = dynamicAthletes.filter(a => a.role !== "coach");
+                  const pool = piketEditPhase === "ambil"
+                    ? nonCoaches.filter(a => a.divisions.includes("All Girl"))
+                    : nonCoaches.filter(a => a.divisions.includes("Coed"));
+                  const phaseCounter = new Map<string, number>();
+                  piketCounter.forEach((v, k) => phaseCounter.set(k, piketEditPhase === "ambil" ? v.ambil : v.kembalikan));
+                  const fullPiket = getRotation(pool, piketEditDate || "", 12, absentNames, phaseCounter);
+                  const matrasSlice = fullPiket.slice((piketEditMatras - 1) * 3, piketEditMatras * 3);
                   setPiketEditList(matrasSlice);
                 }}
                 variant="outline"
@@ -2397,7 +2550,7 @@ export default function JadwalPage() {
                 onClick={savePiket}
                 className="flex-1 text-white border-0 h-10 text-sm font-medium bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500"
               >
-                Simpan ({piketEditList.length}/4)
+                Simpan ({piketEditList.length}/3)
               </Button>
             </div>
           </DialogContent>
