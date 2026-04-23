@@ -37,11 +37,16 @@ type FirebaseUser = {
   lastLoginCrown: string;
 };
 
+type Gender = "L" | "P" | "";
+type AthleteRole = "athlete" | "coach";
+
 type Athlete = {
   id: string;
   name: string;
   divisions: string[];
   kasExempt?: boolean;
+  gender?: Gender;
+  role?: AthleteRole;
 };
 
 const DIVISIONS = ["All Girl", "Coed"] as const;
@@ -75,9 +80,13 @@ export default function AthletesDashboardPage() {
   const [crownAthletes, setCrownAthletes] = useState<Athlete[]>([]);
   const [newAthleteName, setNewAthleteName] = useState("");
   const [newAthleteDivisions, setNewAthleteDivisions] = useState<string[]>(["All Girl"]);
+  const [newAthleteGender, setNewAthleteGender] = useState<Gender>("");
+  const [newAthleteRole, setNewAthleteRole] = useState<AthleteRole>("athlete");
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
   const [editingAthleteName, setEditingAthleteName] = useState("");
   const [editingAthleteDivisions, setEditingAthleteDivisions] = useState<string[]>([]);
+  const [editingAthleteGender, setEditingAthleteGender] = useState<Gender>("");
+  const [editingAthleteRole, setEditingAthleteRole] = useState<AthleteRole>("athlete");
   const [filterDivision, setFilterDivision] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
 
@@ -92,7 +101,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, gender: data.gender || "", role: data.role || "athlete" };
       }));
     });
     return () => unsub();
@@ -113,19 +122,33 @@ export default function AthletesDashboardPage() {
 
   const handleAddAthlete = async () => {
     if (!newAthleteName.trim()) return;
-    await addDoc(collection(db, "crown-athletes"), { name: newAthleteName.trim(), divisions: newAthleteDivisions });
+    await addDoc(collection(db, "crown-athletes"), { 
+      name: newAthleteName.trim(), 
+      divisions: newAthleteDivisions,
+      gender: newAthleteGender,
+      role: newAthleteRole,
+    });
     setNewAthleteName("");
     setNewAthleteDivisions(["All Girl"]);
+    setNewAthleteGender("");
+    setNewAthleteRole("athlete");
     setShowAddForm(false);
   };
 
   const handleUpdateAthlete = async (id: string) => {
     if (!editingAthleteName.trim()) return;
     try {
-      await updateDoc(doc(db, "crown-athletes", id), { name: editingAthleteName.trim(), divisions: editingAthleteDivisions });
+      await updateDoc(doc(db, "crown-athletes", id), { 
+        name: editingAthleteName.trim(), 
+        divisions: editingAthleteDivisions,
+        gender: editingAthleteGender,
+        role: editingAthleteRole,
+      });
       setEditingAthleteId(null);
       setEditingAthleteName("");
       setEditingAthleteDivisions([]);
+      setEditingAthleteGender("");
+      setEditingAthleteRole("athlete");
     } catch (e) {
       console.error(e);
     }
@@ -339,6 +362,48 @@ export default function AthletesDashboardPage() {
                       );
                     })}
                   </div>
+                  {/* Gender */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Gender</p>
+                    <div className="flex gap-2">
+                      {([["L", "♂ Laki-laki", "sky"], ["P", "♀ Perempuan", "pink"]] as const).map(([val, label, color]) => (
+                        <button
+                          key={val}
+                          onClick={() => setNewAthleteGender(newAthleteGender === val ? "" : val)}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                            newAthleteGender === val
+                              ? color === "sky"
+                                ? "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                                : "bg-pink-500/20 text-pink-300 border-pink-500/40"
+                              : "bg-black/20 text-slate-400 border-white/10 hover:bg-white/5"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {/* Role */}
+                  <div className="space-y-1.5">
+                    <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Role</p>
+                    <div className="flex gap-2">
+                      {([["athlete", "🏃 Atlet"], ["coach", "🎓 Coach"]] as const).map(([val, label]) => (
+                        <button
+                          key={val}
+                          onClick={() => setNewAthleteRole(val)}
+                          className={`flex-1 py-2 rounded-lg text-sm font-medium border transition-all ${
+                            newAthleteRole === val
+                              ? val === "coach"
+                                ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                              : "bg-black/20 text-slate-400 border-white/10 hover:bg-white/5"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                   <Button 
                     onClick={handleAddAthlete} 
                     disabled={!newAthleteName.trim()}
@@ -410,6 +475,42 @@ export default function AthletesDashboardPage() {
                               );
                             })}
                           </div>
+                          {/* Gender Edit */}
+                          <div className="flex gap-1.5">
+                            {([["L", "♂ L", "sky"], ["P", "♀ P", "pink"]] as const).map(([val, label, color]) => (
+                              <button
+                                key={val}
+                                onClick={() => setEditingAthleteGender(editingAthleteGender === val ? "" : val)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                  editingAthleteGender === val
+                                    ? color === "sky"
+                                      ? "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                                      : "bg-pink-500/20 text-pink-300 border-pink-500/40"
+                                    : "bg-black/20 text-slate-500 border-white/10"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                          {/* Role Edit */}
+                          <div className="flex gap-1.5">
+                            {([["athlete", "🏃 Atlet"], ["coach", "🎓 Coach"]] as const).map(([val, label]) => (
+                              <button
+                                key={val}
+                                onClick={() => setEditingAthleteRole(val)}
+                                className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
+                                  editingAthleteRole === val
+                                    ? val === "coach"
+                                      ? "bg-amber-500/20 text-amber-300 border-amber-500/40"
+                                      : "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                    : "bg-black/20 text-slate-500 border-white/10"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
                           <div className="flex gap-1.5">
                             <Button 
                               onClick={() => handleUpdateAthlete(ath.id)} 
@@ -449,9 +550,25 @@ export default function AthletesDashboardPage() {
                           <p className="text-xs font-medium text-white truncate w-full leading-tight">{ath.name}</p>
                           
                           {/* Division Pill */}
-                          <div className="mt-1.5">
+                          <div className="mt-1.5 flex items-center gap-1 flex-wrap justify-center">
                             <DivisionPills divisions={ath.divisions} size="xs" />
+                            {ath.gender && (
+                              <span className={`inline-flex items-center rounded-full font-medium text-[10px] px-1.5 py-0.5 border ${
+                                ath.gender === "L"
+                                  ? "bg-sky-500/15 text-sky-300 border-sky-500/25"
+                                  : "bg-pink-500/15 text-pink-300 border-pink-500/25"
+                              }`}>
+                                {ath.gender === "L" ? "♂" : "♀"}
+                              </span>
+                            )}
                           </div>
+
+                          {/* Role Badge */}
+                          {ath.role === "coach" && (
+                            <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-400 border border-amber-500/20 font-medium">
+                              🎓 Coach
+                            </span>
+                          )}
 
                           {/* Kas Exempt Badge */}
                           {ath.kasExempt && (
@@ -478,6 +595,8 @@ export default function AthletesDashboardPage() {
                                 setEditingAthleteId(ath.id); 
                                 setEditingAthleteName(ath.name); 
                                 setEditingAthleteDivisions(ath.divisions.length > 0 ? [...ath.divisions] : ["All Girl"]); 
+                                setEditingAthleteGender(ath.gender || "");
+                                setEditingAthleteRole(ath.role || "athlete");
                               }} 
                               className="h-7 w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 active:scale-95 transition-all"
                             >
