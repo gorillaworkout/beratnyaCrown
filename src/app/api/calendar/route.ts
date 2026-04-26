@@ -22,6 +22,8 @@ const SHIRT_COLORS = [
   { name: "Orange", hex: "#f97316", emoji: "🟠" },
   { name: "Ungu", hex: "#8b5cf6", emoji: "🟣" },
   { name: "Pink", hex: "#ec4899", emoji: "🩷" },
+  { name: "Kuning", hex: "#eab308", emoji: "🟡" },
+  { name: "Hijau", hex: "#22c55e", emoji: "🟢" },
 ];
 
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat

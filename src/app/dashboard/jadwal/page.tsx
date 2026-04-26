@@ -108,6 +108,8 @@ const SHIRT_COLORS = [
   { name: "Orange", hex: "#f97316" },
   { name: "Ungu", hex: "#8b5cf6" },
   { name: "Pink", hex: "#ec4899" },
+  { name: "Kuning", hex: "#eab308" },
+  { name: "Hijau", hex: "#22c55e" },
 ];
 
 type ScheduleStatus = "latihan" | "libur" | "tambahan" | "event";
@@ -1180,6 +1182,8 @@ export default function JadwalPage() {
           case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
           case "Ungu": return "bg-gradient-to-br from-purple-500 to-purple-700";
           case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
+          case "Kuning": return "bg-gradient-to-br from-yellow-500 to-yellow-700";
+          case "Hijau": return "bg-gradient-to-br from-green-500 to-green-700";
         }
     }
     
