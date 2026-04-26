@@ -29,18 +29,31 @@ const SHIRT_COLORS = [
 const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
 const TRAINING_START = new Date(2026, 3, 1); // April 1, 2026
 
-function getDeterministicShirtColor(dateStr: string, prevColorIndex: number): number {
-  let hash = 0;
-  for (let i = 0; i < dateStr.length; i++) {
-    const char = dateStr.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash;
-  }
-  let colorIndex = Math.abs(hash) % SHIRT_COLORS.length;
-  if (colorIndex === prevColorIndex) {
-    colorIndex = (colorIndex + 1) % SHIRT_COLORS.length;
-  }
-  return colorIndex;
+function getDeterministicShirtColor(dateStr: string): number {
+  const parts = dateStr.split("-");
+  if (parts.length !== 3) return 0;
+  const date = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
+  const dayOfWeek = date.getDay(); // 0: Minggu, 3: Rabu, 6: Sabtu
+  
+  // Hitung selisih hari dari patokan awal (Rabu, 1 April 2026)
+  const refDate = new Date(2026, 3, 1);
+  const utc1 = Date.UTC(date.getFullYear(), date.getMonth(), date.getDate());
+  const utc2 = Date.UTC(refDate.getFullYear(), refDate.getMonth(), refDate.getDate());
+  const diffDays = Math.floor((utc1 - utc2) / (1000 * 60 * 60 * 24));
+  
+  const weekNumber = Math.floor(diffDays / 7);
+  
+  let sessionIndexInWeek = 0;
+  if (dayOfWeek === 3) sessionIndexInWeek = 0; // Rabu
+  else if (dayOfWeek === 6) sessionIndexInWeek = 1; // Sabtu
+  else if (dayOfWeek === 0) sessionIndexInWeek = 2; // Minggu
+  else return Math.abs(diffDays) % SHIRT_COLORS.length; // Hari lain
+  
+  // Hitung index sesi global (3 kali latihan per minggu)
+  const globalSessionIndex = (weekNumber * 3) + sessionIndexInWeek;
+  
+  // Menggunakan array colors berurutan dan berulang sempurna (Round-Robin)
+  return Math.abs(globalSessionIndex) % SHIRT_COLORS.length;
 }
 
 function getDaysInMonth(year: number, month: number): number {
@@ -118,7 +131,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           }
           
           if (colorIdx === -1 && customData.status === 'latihan') {
-              colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+              colorIdx = getDeterministicShirtColor(dateStr);
           }
           
           if (colorIdx !== -1) prevColorIdx = colorIdx;
@@ -146,7 +159,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
              timeStart: d.getDay() === 0 ? "10:00" : "19:00",
              timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
              holidayName: holidayCheck,
-             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr, prevColorIdx)]
+             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr)]
            });
         }
         continue;
@@ -154,7 +167,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
 
       // Regular schedule
       if (REGULAR_DAYS.has(d.getDay())) {
-        const colorIdx = getDeterministicShirtColor(dateStr, prevColorIdx);
+        const colorIdx = getDeterministicShirtColor(dateStr);
         prevColorIdx = colorIdx;
         schedule.push({
           date: dateStr,
