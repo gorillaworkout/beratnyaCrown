@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Calculator, CheckCircle2, Plus, XCircle, Wallet, ArrowUpCircle, ArrowDownCircle, Trash2, TrendingUp, Download } from "lucide-react";
 import {
-  
+
   getKasAthletes,
   getKasRecordsByDate,
   getKasSummary,
@@ -32,7 +32,7 @@ export default function KasPage() {
   const [selectedDate, setSelectedDate] = useState(""); // Will be set on first load
   const { user } = useAuth();
   const [isKasAdmin, setIsKasAdmin] = useState(false);
-  
+
   useEffect(() => {
     if (user?.email === "darmawanbayu1@gmail.com") {
       setIsKasAdmin(true);
@@ -47,26 +47,25 @@ export default function KasPage() {
     }
   }, [user]);
   const [loading, setLoading] = useState(true);
-  
-  const [summary, setSummary] = useState({ 
-    totalBilled: 0, totalSettled: 0, totalJob: 0, totalOtherIn: 0, totalExpense: 0, currentBalance: 0 
+
+  const [summary, setSummary] = useState({
+    totalBilled: 0, totalSettled: 0, totalJob: 0, totalOtherIn: 0, totalExpense: 0, currentBalance: 0
   });
 
   // Modal Add Athlete
-  
-  
-  
+
+
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Modal Transaction
   const [trainingDates, setTrainingDates] = useState<string[]>([]);
   const [unpaidRecords, setUnpaidRecords] = useState<KasRecord[]>([]);
-  
+
   // Bulk Payment Modal State
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedAthleteForBulk, setSelectedAthleteForBulk] = useState<KasAthlete | null>(null);
-  const [bulkPaymentAmount, setBulkPaymentAmount] = useState<string>("");
-  const [bulkPaymentRecords, setBulkPaymentRecords] = useState<{record: KasRecord, toPay: number}[]>([]);
+  const [bulkPaymentRecords, setBulkPaymentRecords] = useState<{ record: KasRecord, toPay: number, selected: boolean }[]>([]);
 
   const [showTrxModal, setShowTrxModal] = useState(false);
   const [trxType, setTrxType] = useState<TransactionType>("IN_JOB");
@@ -86,7 +85,7 @@ export default function KasPage() {
         getTrainingDates(),
         getAllKasRecords() // Always fetch all records to find unpaid ones
       ];
-      
+
       if (activeTab === "daily" && selectedDate) {
         p.push(getKasRecordsByDate(selectedDate));
       } else if (activeTab === "daily" && !selectedDate) {
@@ -101,15 +100,15 @@ export default function KasPage() {
       setAthletes(results[0].filter((a: KasAthlete) => !a.kasExempt).sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
       const dates = results[2];
       setTrainingDates(dates);
-      
+
       const allRecs = results[3] || [];
       setAllRecords(allRecs);
-      
+
       // Calculate summary from actual Firestore records only (no auto-Alpa)
       // Auto-Alpa was inflating totals for dates where admin hasn't inputted data yet
       let summaryData = results[1];
       setSummary(summaryData);
-      
+
       // Smart default date: today if it's a training day, otherwise closest past training date
       if (!selectedDate && dates.length > 0 && activeTab === "daily") {
         const todayISO = new Date().toISOString().split('T')[0];
@@ -121,7 +120,7 @@ export default function KasPage() {
           setSelectedDate(closestPast || dates[0]);
         }
       }
-      
+
       // Calculate global unpaid — only from actual Firestore records
       const unpaid: KasRecord[] = [];
 
@@ -131,7 +130,7 @@ export default function KasPage() {
         }
       });
       setUnpaidRecords(unpaid);
-      
+
       if (activeTab === "daily") setRecords(results[4] || []);
       else if (activeTab === "transactions") setTransactions(results[4] || []);
 
@@ -142,7 +141,7 @@ export default function KasPage() {
     }
   }
 
-  
+
 
   async function handleAddTransaction(e: React.FormEvent) {
     e.preventDefault();
@@ -167,7 +166,7 @@ export default function KasPage() {
   }
 
   async function handleDeleteTrx(id: string) {
-    if(!confirm("Yakin hapus transaksi ini?")) return;
+    if (!confirm("Yakin hapus transaksi ini?")) return;
     try {
       await deleteKasTransaction(id);
       await loadData();
@@ -179,7 +178,7 @@ export default function KasPage() {
   const getAthleteRecord = (athleteId: string): Partial<KasRecord> => {
     const existing = records.find((r) => r.athleteId === athleteId);
     if (existing) return existing;
-    
+
     // No record = no checkboxes checked, no auto-Alpa
     return {
       athleteId: athleteId as string,
@@ -214,7 +213,7 @@ export default function KasPage() {
     value: boolean,
   ) {
     const existingRecord = getAthleteRecord(athlete.id!);
-        let newPaidKas = !!existingRecord.paidKas;
+    let newPaidKas = !!existingRecord.paidKas;
     let newIsLate = !!existingRecord.isLate;
     let newNoNews = !!existingRecord.noNews;
     let newIsExcused = !!existingRecord.isExcused;
@@ -271,7 +270,7 @@ export default function KasPage() {
       date: selectedDate,
       athleteId: athlete.id!,
       name: athlete.name,
-      
+
       paidKas: newPaidKas,
       isLate: newIsLate,
       noNews: newNoNews,
@@ -289,12 +288,12 @@ export default function KasPage() {
         return [...filtered, recordToSave as KasRecord];
       });
       const newId = await saveKasRecord(recordToSave);
-      
+
       // Update local state with the new ID so subsequent clicks update the same document!
       if (!recordToSave.id) {
         setRecords((prev) => prev.map(r => r.athleteId === athlete.id ? { ...r, id: newId } : r));
       }
-      
+
       // Update summary in background WITHOUT full reload (prevents scroll jump)
       const s = await getKasSummary();
       setSummary(s);
@@ -316,7 +315,7 @@ export default function KasPage() {
         date: selectedDate,
         athleteId: athlete.id!,
         name: athlete.name,
-        
+
         isSettled,
       });
       // Update summary in background WITHOUT full reload
@@ -339,12 +338,12 @@ export default function KasPage() {
     const rows = allRecords.map(r => [
       r.date, r.name, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.isExcused ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
     ]);
-    
+
     let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n";
     rows.forEach(row => {
       csvContent += row.join(",") + "\\n";
     });
-    
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -357,7 +356,7 @@ export default function KasPage() {
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-3 text-slate-100 sm:p-4">
       <div className="mx-auto flex w-full flex-col gap-4">
-        
+
         {/* Header & Tabs */}
         <header className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-4 backdrop-blur-xl">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -377,7 +376,7 @@ export default function KasPage() {
               </button>
             )}
           </div>
-          
+
           <div className="flex gap-1 border-b border-white/10 pb-1 overflow-x-auto -mx-1 px-1">
             {([
               { key: "daily", label: "Harian" },
@@ -438,7 +437,7 @@ export default function KasPage() {
                   >
                     {trainingDates.map(date => (
                       <option key={date} value={date}>
-                        {format(new Date(date), 'EEEE, dd MMM yyyy', {locale: idLocale})}
+                        {format(new Date(date), 'EEEE, dd MMM yyyy', { locale: idLocale })}
                       </option>
                     ))}
                     <option value="manual">-- Input Manual --</option>
@@ -455,10 +454,10 @@ export default function KasPage() {
                         const val = e.target.value;
                         setSelectedDate(val);
                         if (val && val !== 'manual' && !trainingDates.includes(val)) {
-                           if(confirm(`Tanggal ${val} tidak ada di jadwal. Tambahkan sebagai Latihan Tambahan di kalender?`)) {
-                             await addCustomTrainingEvent(val);
-                             loadData();
-                           }
+                          if (confirm(`Tanggal ${val} tidak ada di jadwal. Tambahkan sebagai Latihan Tambahan di kalender?`)) {
+                            await addCustomTrainingEvent(val);
+                            loadData();
+                          }
                         }
                       }}
                       className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none focus:ring-1 focus:ring-cyan-500"
@@ -581,11 +580,11 @@ export default function KasPage() {
                   ) : (
                     transactions.map((trx) => (
                       <tr key={trx.id} className="hover:bg-white/[0.02]">
-                        <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', {locale: idLocale})}</td>
+                        <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', { locale: idLocale })}</td>
                         <td className="px-6 py-4">
-                          {trx.type === 'IN_JOB' && <span className="inline-flex items-center gap-1 text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3"/> Uang Job</span>}
-                          {trx.type === 'IN_OTHER' && <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3"/> Pemasukan</span>}
-                          {trx.type === 'OUT_EXPENSE' && <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs"><ArrowDownCircle className="w-3 h-3"/> Pengeluaran</span>}
+                          {trx.type === 'IN_JOB' && <span className="inline-flex items-center gap-1 text-indigo-400 bg-indigo-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3" /> Uang Job</span>}
+                          {trx.type === 'IN_OTHER' && <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3" /> Pemasukan</span>}
+                          {trx.type === 'OUT_EXPENSE' && <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs"><ArrowDownCircle className="w-3 h-3" /> Pengeluaran</span>}
                         </td>
                         <td className="px-6 py-4 text-white">
                           {trx.description}
@@ -594,7 +593,7 @@ export default function KasPage() {
                           {trx.type === 'OUT_EXPENSE' ? '-' : '+'} Rp {trx.amount.toLocaleString('id-ID')}
                         </td>
                         <td className="px-4 py-4 text-center">
-                          {isKasAdmin && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto"/></button>}
+                          {isKasAdmin && <button onClick={() => handleDeleteTrx(trx.id!)} className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4 mx-auto" /></button>}
                         </td>
                       </tr>
                     ))
@@ -605,7 +604,7 @@ export default function KasPage() {
           </section>
         )}
 
-        
+
 
         {/* TAB 3: RECAP */}
         {activeTab === "recap" && (
@@ -614,7 +613,7 @@ export default function KasPage() {
               <TrendingUp className="w-12 h-12 text-cyan-500/50 mb-4" />
               <h2 className="text-xl font-semibold text-white mb-2">Rekap Kas Semua Tanggal</h2>
               <p className="text-slate-400 max-w-md mb-6">Unduh file CSV untuk melihat riwayat absensi, tagihan, dan tunggakan seluruh atlet di semua tanggal latihan.</p>
-              
+
               <button
                 onClick={exportToCSV}
                 className="flex items-center justify-center gap-2 rounded-xl bg-white text-black px-6 py-3 font-semibold transition-all hover:bg-slate-200 active:scale-95"
@@ -626,7 +625,7 @@ export default function KasPage() {
           </section>
         )}
 
-        
+
         {/* TAB 2: TUNGGAKAN ATLET (BULK PAYMENT) */}
         {activeTab === "debt" && (
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
@@ -651,10 +650,11 @@ export default function KasPage() {
                         </div>
                         <button
                           onClick={() => {
-                            if(!isKasAdmin) return;
+                            if (!isKasAdmin) return;
                             setSelectedAthleteForBulk(athlete);
-                            setBulkPaymentAmount(totalUnpaid.toString());
-                            setBulkPaymentRecords(athleteUnpaid.map(r => ({record: r, toPay: r.totalBilled})));
+                            setBulkPaymentRecords(athleteUnpaid
+                              .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                              .map(r => ({ record: r, toPay: r.totalBilled, selected: false })));
                             setShowBulkModal(true);
                           }}
                           className={`w-full rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isKasAdmin ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-white/5 text-slate-500 cursor-not-allowed"}`}
@@ -706,96 +706,121 @@ export default function KasPage() {
           </div>
         )}
 
-        
-        {/* MODAL BULK PAYMENT */}
-        {showBulkModal && selectedAthleteForBulk && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
-            <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold text-white">Bayar Tagihan {selectedAthleteForBulk.name}</h3>
-                <button onClick={() => setShowBulkModal(false)}><XCircle className="w-6 h-6 text-slate-400 hover:text-white transition-colors" /></button>
-              </div>
-              <div className="space-y-4">
-                <div className="rounded-xl bg-white/5 border border-white/10 p-4 max-h-48 overflow-y-auto">
-                  <p className="text-sm font-bold text-slate-300 mb-2">Rincian Latihan Belum Lunas:</p>
-                  <ul className="space-y-2 text-sm">
+
+        {/* MODAL BULK PAYMENT - Pilih tanggal latihan yang mau dibayar */}
+        {showBulkModal && selectedAthleteForBulk && (() => {
+          const selectedTotal = bulkPaymentRecords.filter(r => r.selected).reduce((sum, r) => sum + r.toPay, 0);
+          const selectedCount = bulkPaymentRecords.filter(r => r.selected).length;
+          const allSelected = bulkPaymentRecords.length > 0 && selectedCount === bulkPaymentRecords.length;
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+              <div className="w-full max-w-lg rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl max-h-[90vh] flex flex-col">
+                <div className="flex justify-between items-center mb-4">
+                  <div>
+                    <h3 className="text-xl font-bold text-white">Bayar Tagihan</h3>
+                    <p className="text-sm text-slate-400 mt-0.5">{selectedAthleteForBulk.name}</p>
+                  </div>
+                  <button onClick={() => setShowBulkModal(false)}><XCircle className="w-6 h-6 text-slate-400 hover:text-white transition-colors" /></button>
+                </div>
+
+                {/* Select All / Deselect All */}
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-sm font-semibold text-slate-300">Pilih latihan yang mau dibayar:</p>
+                  <button
+                    onClick={() => {
+                      const newVal = !allSelected;
+                      setBulkPaymentRecords(prev => prev.map(r => ({ ...r, selected: newVal })));
+                    }}
+                    className="text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
+                  >
+                    {allSelected ? "Batal Semua" : "Pilih Semua"}
+                  </button>
+                </div>
+
+                {/* Scrollable list of training dates with checkboxes */}
+                <div className="rounded-xl bg-white/5 border border-white/10 overflow-y-auto max-h-[40vh] flex-1 min-h-0">
+                  <ul className="divide-y divide-white/5">
                     {bulkPaymentRecords.map((r, i) => (
-                      <li key={i} className="flex justify-between text-slate-400">
-                        <span>{r.record.date} {r.record.isLate ? '(Telat)' : ''}{r.record.noNews ? '(Bolos)' : ''}</span>
-                        <span className="text-cyan-400">Rp {r.toPay.toLocaleString('id-ID')}</span>
+                      <li
+                        key={i}
+                        onClick={() => {
+                          setBulkPaymentRecords(prev => prev.map((item, idx) =>
+                            idx === i ? { ...item, selected: !item.selected } : item
+                          ));
+                        }}
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-colors ${r.selected ? 'bg-cyan-500/10' : 'hover:bg-white/[0.03]'}`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={r.selected}
+                          onChange={() => { }}
+                          className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black pointer-events-none"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-white font-medium">
+                            {format(new Date(r.record.date), 'EEEE, dd MMM yyyy', { locale: idLocale })}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">
+                            {r.record.noNews ? '🔴 Bolos (Alpa)' : r.record.isExcusedOther ? '🟡 Izin Lainnya' : r.record.isLate ? '🟠 Hadir + Telat' : '🔵 Kas Latihan'}
+                          </p>
+                        </div>
+                        <span className={`text-sm font-bold shrink-0 ${r.selected ? 'text-cyan-400' : 'text-slate-400'}`}>
+                          Rp {r.toPay.toLocaleString('id-ID')}
+                        </span>
                       </li>
                     ))}
                   </ul>
                 </div>
-                
-                <div>
-                  <label className="mb-2 block text-sm font-medium text-slate-400">Masukkan Nominal Bayar (Rp)</label>
-                  <input
-                    type="number"
-                    value={bulkPaymentAmount}
-                    onChange={(e) => setBulkPaymentAmount(e.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white placeholder-slate-600 font-bold text-lg"
-                    placeholder="Contoh: 50000"
-                  />
-                  <p className="text-xs text-slate-500 mt-2">Jika nominal kurang dari total tagihan, sistem akan melunasi latihan terlama terlebih dahulu.</p>
+
+                {/* Summary footer */}
+                <div className="mt-4 rounded-xl bg-white/5 border border-white/10 p-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <p className="text-xs text-slate-400">Dipilih: {selectedCount} dari {bulkPaymentRecords.length} latihan</p>
+                      <p className="text-lg font-black text-cyan-400 mt-0.5">
+                        Rp {selectedTotal.toLocaleString('id-ID')}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-              </div>
-              
-              <div className="mt-8">
+
                 <button
                   onClick={async () => {
+                    const toSettle = bulkPaymentRecords.filter(r => r.selected);
+                    if (toSettle.length === 0) return;
                     setIsSubmitting(true);
-                    let nominal = Number(bulkPaymentAmount);
-                    if (nominal <= 0) {
-                      setIsSubmitting(false);
-                      return;
-                    }
-                    
+
                     try {
-                      // Sort oldest first
-                      const sorted = [...bulkPaymentRecords].sort((a,b) => new Date(a.record.date).getTime() - new Date(b.record.date).getTime());
-                      
-                      for (const r of sorted) {
-                        if (nominal <= 0) break;
-                        
-                        if (nominal >= r.toPay) {
-                          // Lunas full
-                          await saveKasRecord({
-                            id: r.record.id,
-                            isSettled: true,
-                            date: r.record.date,
-                            athleteId: r.record.athleteId,
-                            name: r.record.name,
-                            
-                          });
-                          nominal -= r.toPay;
-                        } else {
-                          // TODO: Partial payment support
-                          // For now, if nominal doesn't cover full, we break
-                          break;
-                        }
+                      for (const r of toSettle) {
+                        await saveKasRecord({
+                          id: r.record.id,
+                          isSettled: true,
+                          date: r.record.date,
+                          athleteId: r.record.athleteId,
+                          name: r.record.name,
+                        });
                       }
-                      
+
                       setShowBulkModal(false);
                       await loadData();
-                    } catch(e) {
+                    } catch (e) {
                       console.error(e);
                     } finally {
                       setIsSubmitting(false);
                     }
                   }}
-                  disabled={isSubmitting || Number(bulkPaymentAmount) <= 0}
-                  className="w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50"
+                  disabled={isSubmitting || selectedCount === 0}
+                  className="mt-4 w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50 transition-colors"
                 >
-                  {isSubmitting ? "Memproses..." : `Proses Pembayaran Rp ${Number(bulkPaymentAmount).toLocaleString('id-ID')}`}
+                  {isSubmitting ? "Memproses..." : selectedCount === 0 ? "Pilih latihan yang mau dibayar" : `Lunasi ${selectedCount} Latihan — Rp ${selectedTotal.toLocaleString('id-ID')}`}
                 </button>
               </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
 
-        </div>
+      </div>
     </main>
   );
 }
