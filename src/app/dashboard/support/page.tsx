@@ -2,12 +2,13 @@
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { db } from "@/lib/firebase";
+import { db, storage } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, orderBy, query } from "firebase/firestore";
+import { ref, deleteObject } from "firebase/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shirt, CheckCircle2, Clock, Trash2, Edit } from "lucide-react";
+import { Shirt, CheckCircle2, Clock, Trash2, Edit, ImageIcon } from "lucide-react";
 
 interface ShirtOrder {
   id?: string;
@@ -17,6 +18,7 @@ interface ShirtOrder {
   ukuran: string;
   referral: string;
   status: "pending" | "lunas";
+  buktiTransferUrl?: string;
   createdAt?: any;
 }
 
@@ -29,6 +31,7 @@ export default function DanusSupportPage() {
   // Edit Dialog
   const [open, setOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<ShirtOrder | null>(null);
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
     // Only fetch if admin
@@ -62,6 +65,16 @@ export default function DanusSupportPage() {
 
   const handleDelete = async (id: string) => {
     if (confirm("Hapus pesanan baju ini?")) {
+      // Jika pesanan memiliki gambar, hapus juga dari Storage
+      if (editingOrder?.buktiTransferUrl) {
+        try {
+          const imageRef = ref(storage, editingOrder.buktiTransferUrl);
+          await deleteObject(imageRef);
+        } catch (error) {
+          console.error("Gagal menghapus gambar dari storage:", error);
+        }
+      }
+      
       await deleteDoc(doc(db, "danus_shirts", id));
       setOpen(false);
     }
@@ -151,15 +164,27 @@ export default function DanusSupportPage() {
                       </td>
                       <td className="p-4 text-slate-400 italic text-sm">{order.referral || '-'}</td>
                       <td className="p-4">
-                        {order.status === "lunas" ? (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold uppercase">
-                            <CheckCircle2 className="w-3.5 h-3.5" /> Lunas
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase">
-                            <Clock className="w-3.5 h-3.5" /> Pending
-                          </span>
-                        )}
+                        <div className="flex items-center gap-3">
+                          {order.status === "lunas" ? (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-xs font-bold uppercase">
+                              <CheckCircle2 className="w-3.5 h-3.5" /> Lunas
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-500/20 text-amber-400 border border-amber-500/30 text-xs font-bold uppercase">
+                              <Clock className="w-3.5 h-3.5" /> Pending
+                            </span>
+                          )}
+                          {order.buktiTransferUrl && (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img 
+                              src={order.buktiTransferUrl} 
+                              alt="Bukti"
+                              className="w-10 h-10 object-cover rounded-md cursor-pointer border border-white/20 hover:opacity-80 transition-opacity shadow-lg shadow-black/50"
+                              onClick={() => setPreviewImage(order.buktiTransferUrl!)}
+                              title="Klik untuk melihat bukti transfer"
+                            />
+                          )}
+                        </div>
                       </td>
                       <td className="p-4 text-right">
                         <Button 
@@ -209,6 +234,28 @@ export default function DanusSupportPage() {
               </Select>
             </div>
 
+            {editingOrder?.buktiTransferUrl && (
+              <div className="mt-4 p-4 border border-white/10 rounded-xl bg-black/30">
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Bukti Transfer</label>
+                <div className="flex justify-center">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img 
+                    src={editingOrder.buktiTransferUrl} 
+                    alt="Bukti Transfer" 
+                    className="max-w-full max-h-[300px] rounded-lg object-contain border border-white/5"
+                  />
+                </div>
+                <a 
+                  href={editingOrder.buktiTransferUrl} 
+                  target="_blank" 
+                  rel="noreferrer"
+                  className="block text-center text-xs text-blue-400 mt-2 hover:underline"
+                >
+                  Buka gambar di tab baru
+                </a>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4 border-t border-white/10 mt-6">
               {editingOrder?.id && (
                 <Button 
@@ -224,6 +271,30 @@ export default function DanusSupportPage() {
               <Button onClick={handleSave} className="flex-1 bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]">Simpan</Button>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+      {/* Image Preview Dialog */}
+      <Dialog open={!!previewImage} onOpenChange={() => setPreviewImage(null)}>
+        <DialogContent className="bg-zinc-900 border-white/10 p-6 max-w-3xl flex flex-col items-center">
+          <DialogHeader className="w-full text-left mb-4">
+            <DialogTitle className="text-xl font-bold text-white">Bukti Transfer</DialogTitle>
+          </DialogHeader>
+          <div className="bg-black/50 p-2 rounded-xl border border-white/10 w-full flex justify-center shadow-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img 
+              src={previewImage || ""} 
+              alt="Preview Bukti Transfer" 
+              className="max-w-full max-h-[70vh] rounded-lg object-contain" 
+            />
+          </div>
+          <a 
+            href={previewImage || ""} 
+            target="_blank" 
+            rel="noreferrer"
+            className="text-blue-400 font-medium text-sm mt-6 hover:underline hover:text-blue-300 transition-colors"
+          >
+            Buka gambar ukuran penuh di tab baru
+          </a>
         </DialogContent>
       </Dialog>
     </div>
