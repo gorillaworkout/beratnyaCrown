@@ -81,8 +81,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     
     try {
-      // Selalu gunakan Popup. Redirect bermasalah di iOS/Safari dan In-App Browsers
-      // karena adanya sistem Storage Partitioning (ITP) yang memblokir sessionStorage.
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error("Login error:", err);
