@@ -6,16 +6,16 @@ const siteUrl =
   process.env.NEXT_PUBLIC_BASE_URL ??
   (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 
-const ogImageUrl = new URL("/crown-logo.png", siteUrl);
+const ogImageUrl = new URL("/logo-crown-new.png", siteUrl);
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
   title: "Crown Allstar Cheerleading",
   description: "Platform Manajemen Tim & Atlet Crown Allstar - Track Jadwal, Absensi, Progress Latihan, dan Informasi Tim secara Real-time.",
   icons: {
-    icon: [{ url: "/crown-logo.png", type: "image/png" }],
-    shortcut: "/crown-logo.png",
-    apple: "/crown-logo.png"
+    icon: [{ url: "/logo-crown-new.png", type: "image/png" }],
+    shortcut: "/logo-crown-new.png",
+    apple: "/logo-crown-new.png"
   },
   openGraph: {
     title: "Crown Allstar Cheerleading",
