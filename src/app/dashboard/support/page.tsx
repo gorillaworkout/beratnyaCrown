@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { db, storage } from "@/lib/firebase";
 import { collection, onSnapshot, doc, updateDoc, deleteDoc, orderBy, query } from "firebase/firestore";
-import { ref, deleteObject } from "firebase/storage";
+import { ref, deleteObject, uploadBytes, getDownloadURL } from "firebase/storage";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -32,6 +32,8 @@ export default function DanusSupportPage() {
   const [open, setOpen] = useState(false);
   const [editingOrder, setEditingOrder] = useState<ShirtOrder | null>(null);
   const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [adminPaymentFile, setAdminPaymentFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   useEffect(() => {
     const q = query(collection(db, "danus_shirts"), orderBy("createdAt", "desc"));
@@ -45,16 +47,33 @@ export default function DanusSupportPage() {
 
   const handleOpenEdit = (order: ShirtOrder) => {
     setEditingOrder({ ...order });
+    setAdminPaymentFile(null);
     setOpen(true);
   };
 
   const handleSave = async () => {
     if (!editingOrder?.id) return;
     
-    await updateDoc(doc(db, "danus_shirts", editingOrder.id), {
-      status: editingOrder.status
-    });
-    setOpen(false);
+    setIsUploading(true);
+    try {
+      let updatedData: any = {
+        status: editingOrder.status
+      };
+
+      if (adminPaymentFile) {
+        const fileRef = ref(storage, `danus_payments/${editingOrder.id}_${adminPaymentFile.name}`);
+        await uploadBytes(fileRef, adminPaymentFile);
+        const url = await getDownloadURL(fileRef);
+        updatedData.buktiTransferUrl = url;
+      }
+
+      await updateDoc(doc(db, "danus_shirts", editingOrder.id), updatedData);
+      setOpen(false);
+    } catch (error) {
+      console.error("Gagal menyimpan pesanan:", error);
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleDelete = async (id: string) => {
@@ -244,6 +263,29 @@ export default function DanusSupportPage() {
               </div>
             )}
 
+            {!editingOrder?.buktiTransferUrl && (
+              <div className="mt-4 p-4 border border-white/10 rounded-xl bg-black/30">
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Upload Bukti Transfer (Admin)</label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={(e) => {
+                    if (e.target.files && e.target.files[0]) {
+                      setAdminPaymentFile(e.target.files[0]);
+                    }
+                  }}
+                  disabled={isUploading}
+                  className="block w-full text-sm text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-red-600/10 file:text-red-500
+                    hover:file:bg-red-600/20 transition-all disabled:opacity-50"
+                />
+                {adminPaymentFile && <p className="text-xs text-emerald-400 mt-2 truncate">File: {adminPaymentFile.name}</p>}
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4 border-t border-white/10 mt-6">
               {editingOrder?.id && (
                 <Button 
@@ -255,8 +297,10 @@ export default function DanusSupportPage() {
                   <Trash2 className="w-4 h-4" />
                 </Button>
               )}
-              <Button variant="outline" onClick={() => setOpen(false)} className="flex-1 bg-transparent border-white/10 text-white hover:bg-white/5">Batal</Button>
-              <Button onClick={handleSave} className="flex-1 bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]">Simpan</Button>
+              <Button variant="outline" onClick={() => setOpen(false)} disabled={isUploading} className="flex-1 bg-transparent border-white/10 text-white hover:bg-white/5">Batal</Button>
+              <Button onClick={handleSave} disabled={isUploading} className="flex-1 bg-red-600 hover:bg-red-500 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)]">
+                {isUploading ? "Menyimpan..." : "Simpan"}
+              </Button>
             </div>
           </div>
         </DialogContent>
