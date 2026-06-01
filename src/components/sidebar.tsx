@@ -38,6 +38,11 @@ const getNavItems = (isAdmin: boolean) => [
     href: "/dashboard/kas",
     icon: Calculator,
   },
+  {
+    label: "Pesanan Danus",
+    href: "/dashboard/support",
+    icon: Shirt,
+  },
   ...(isAdmin
     ? [
         // {
@@ -49,11 +54,6 @@ const getNavItems = (isAdmin: boolean) => [
           label: "Data Atlet",
           href: "/dashboard/athletes",
           icon: ShieldAlert,
-        },
-        {
-          label: "Pesanan Danus",
-          href: "/dashboard/support",
-          icon: Shirt,
         },
       ]
     : []),

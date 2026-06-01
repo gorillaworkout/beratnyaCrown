@@ -34,12 +34,6 @@ export default function DanusSupportPage() {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
   useEffect(() => {
-    // Only fetch if admin
-    if (!isAdmin) {
-      setLoading(false);
-      return;
-    }
-
     const q = query(collection(db, "danus_shirts"), orderBy("createdAt", "desc"));
     const unsub = onSnapshot(q, (snap) => {
       const data = snap.docs.map(d => ({ id: d.id, ...d.data() } as ShirtOrder));
@@ -79,14 +73,6 @@ export default function DanusSupportPage() {
       setOpen(false);
     }
   };
-
-  if (!isAdmin && !loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center p-4">
-        <p className="text-red-400">Anda tidak memiliki akses ke halaman ini.</p>
-      </div>
-    );
-  }
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center p-4">
@@ -148,7 +134,7 @@ export default function DanusSupportPage() {
                     <th className="p-4 font-bold">Ukuran</th>
                     <th className="p-4 font-bold">Referral</th>
                     <th className="p-4 font-bold">Status</th>
-                    <th className="p-4 font-bold text-right">Aksi</th>
+                    {isAdmin && <th className="p-4 font-bold text-right">Aksi</th>}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -186,16 +172,18 @@ export default function DanusSupportPage() {
                           )}
                         </div>
                       </td>
-                      <td className="p-4 text-right">
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          onClick={() => handleOpenEdit(order)}
-                          className="text-slate-400 hover:text-white hover:bg-slate-800"
-                        >
-                          <Edit className="w-4 h-4 mr-2" /> Edit
-                        </Button>
-                      </td>
+                      {isAdmin && (
+                        <td className="p-4 text-right">
+                          <Button 
+                            variant="ghost" 
+                            size="sm" 
+                            onClick={() => handleOpenEdit(order)}
+                            className="text-slate-400 hover:text-white hover:bg-slate-800"
+                          >
+                            <Edit className="w-4 h-4 mr-2" /> Edit
+                          </Button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
