@@ -23,6 +23,8 @@ export interface KasAthlete {
   division: string;
   /** Bebas kas — tidak muncul di tabel kas harian */
   kasExempt?: boolean;
+  /** Bebas iuran pelatih */
+  coachFeeExempt?: boolean;
   createdAt?: any;
 }
 

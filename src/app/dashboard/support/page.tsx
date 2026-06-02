@@ -153,7 +153,7 @@ export default function DanusSupportPage() {
                     <th className="p-4 font-bold">Ukuran</th>
                     <th className="p-4 font-bold">Referral</th>
                     <th className="p-4 font-bold">Status</th>
-                    {isAdmin && <th className="p-4 font-bold text-right">Aksi</th>}
+                    <th className="p-4 font-bold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -191,18 +191,16 @@ export default function DanusSupportPage() {
                           )}
                         </div>
                       </td>
-                      {isAdmin && (
-                        <td className="p-4 text-right">
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            onClick={() => handleOpenEdit(order)}
-                            className="text-slate-400 hover:text-white hover:bg-slate-800"
-                          >
-                            <Edit className="w-4 h-4 mr-2" /> Edit
-                          </Button>
-                        </td>
-                      )}
+                      <td className="p-4 text-right">
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => handleOpenEdit(order)}
+                          className="text-slate-400 hover:text-white hover:bg-slate-800"
+                        >
+                          <Edit className="w-4 h-4 mr-2" /> Edit
+                        </Button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -218,28 +216,43 @@ export default function DanusSupportPage() {
           <DialogHeader>
             <DialogTitle className="text-xl font-bold">Edit Pesanan</DialogTitle>
             <DialogDescription className="text-slate-400">
-              Update status pembayaran untuk pesanan {editingOrder?.nama}.
+              Update data pesanan untuk {editingOrder?.nama}.
             </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4 pt-4">
-            <div>
-              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Status Pembayaran</label>
-              <Select 
-                value={editingOrder?.status || "pending"} 
-                onValueChange={(v: any) => setEditingOrder(prev => prev ? {...prev, status: v} : null)}
-              >
-                <SelectTrigger className={`bg-black/50 border-white/10 ${
-                  editingOrder?.status === "lunas" ? "text-emerald-400" : "text-amber-400"
-                }`}>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-white/10 text-white">
-                  <SelectItem value="pending">Pending</SelectItem>
-                  <SelectItem value="lunas">Lunas</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {isAdmin && (
+              <div>
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Status Pembayaran</label>
+                <Select 
+                  value={editingOrder?.status || "pending"} 
+                  onValueChange={(v: any) => setEditingOrder(prev => prev ? {...prev, status: v} : null)}
+                >
+                  <SelectTrigger className={`bg-black/50 border-white/10 ${
+                    editingOrder?.status === "lunas" ? "text-emerald-400" : "text-amber-400"
+                  }`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-white/10 text-white">
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="lunas">Lunas</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {!isAdmin && (
+              <div>
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Status Pembayaran</label>
+                <div className="p-3 bg-black/50 border border-white/10 rounded-md">
+                  <span className={`text-sm font-bold capitalize ${
+                    editingOrder?.status === "lunas" ? "text-emerald-400" : "text-amber-400"
+                  }`}>
+                    {editingOrder?.status}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {editingOrder?.buktiTransferUrl && (
               <div className="mt-4 p-4 border border-white/10 rounded-xl bg-black/30">
@@ -265,7 +278,7 @@ export default function DanusSupportPage() {
 
             {!editingOrder?.buktiTransferUrl && (
               <div className="mt-4 p-4 border border-white/10 rounded-xl bg-black/30">
-                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Upload Bukti Transfer (Admin)</label>
+                <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-2 block">Upload Bukti Transfer</label>
                 <input
                   type="file"
                   accept="image/*"
@@ -287,7 +300,7 @@ export default function DanusSupportPage() {
             )}
 
             <div className="flex gap-3 pt-4 border-t border-white/10 mt-6">
-              {editingOrder?.id && (
+              {isAdmin && editingOrder?.id && (
                 <Button 
                   variant="outline" 
                   onClick={() => handleDelete(editingOrder.id!)} 

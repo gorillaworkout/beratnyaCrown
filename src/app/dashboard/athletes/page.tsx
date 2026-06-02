@@ -45,6 +45,7 @@ type Athlete = {
   name: string;
   divisions: string[];
   kasExempt?: boolean;
+  coachFeeExempt?: boolean;
   gender?: Gender;
   role?: AthleteRole;
 };
@@ -101,7 +102,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, gender: data.gender || "", role: data.role || "athlete" };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", role: data.role || "athlete" };
       }));
     });
     return () => unsub();
@@ -163,6 +164,14 @@ export default function AthletesDashboardPage() {
   const handleToggleKasExempt = async (id: string, currentValue: boolean) => {
     try {
       await updateDoc(doc(db, "crown-athletes", id), { kasExempt: !currentValue });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleCoachExempt = async (id: string, currentValue: boolean) => {
+    try {
+      await updateDoc(doc(db, "crown-athletes", id), { coachFeeExempt: !currentValue });
     } catch (e) {
       console.error(e);
     }
@@ -577,6 +586,13 @@ export default function AthletesDashboardPage() {
                             </span>
                           )}
 
+                          {/* Coach Fee Exempt Badge */}
+                          {ath.coachFeeExempt && (
+                            <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-cyan-500/15 text-cyan-400 border border-cyan-500/20 font-medium">
+                              Bebas Iuran Pelatih
+                            </span>
+                          )}
+
                           {/* Actions — show on hover (desktop), always on mobile */}
                           <div className="flex items-center gap-0.5 mt-2 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                             <button 
@@ -589,6 +605,17 @@ export default function AthletesDashboardPage() {
                               }`}
                             >
                               <span className="text-[9px] font-bold leading-none">Kas</span>
+                            </button>
+                            <button 
+                              onClick={() => handleToggleCoachExempt(ath.id, !!ath.coachFeeExempt)}
+                              title={ath.coachFeeExempt ? "Wajib Iuran Pelatih" : "Bebas Iuran Pelatih"}
+                              className={`h-7 w-7 rounded-md flex items-center justify-center active:scale-95 transition-all ${
+                                ath.coachFeeExempt 
+                                  ? "text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20" 
+                                  : "text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10"
+                              }`}
+                            >
+                              <span className="text-[9px] font-bold leading-none">Iuran</span>
                             </button>
                             <button 
                               onClick={() => { 
