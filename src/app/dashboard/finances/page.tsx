@@ -13,7 +13,8 @@ import {
 import { getKasAthletes } from "@/lib/firebase/kas";
 import type { KasAthlete } from "@/lib/types/kas";
 import { getCoachFeesByMonth, saveCoachFeeRecord, CoachFeeRecord, CoachFeeStatus } from "@/lib/firebase/coach_fees";
-import { Wallet, TrendingUp, TrendingDown, AlertCircle, Plus, Trash2, CheckCircle2, Edit, RotateCcw } from "lucide-react";
+import { getFinanceNeeds, addFinanceNeed, deleteFinanceNeed, updateFinanceNeed, FinanceNeed } from "@/lib/firebase/needs";
+import { Wallet, TrendingUp, TrendingDown, AlertCircle, Plus, Trash2, CheckCircle2, Edit, RotateCcw, ShoppingCart } from "lucide-react";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 
@@ -21,12 +22,17 @@ export default function FinancesPage() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<FinanceRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<"transactions" | "debt" | "coach_fees">("transactions");
+  const [activeTab, setActiveTab] = useState<"transactions" | "debt" | "coach_fees" | "needs">("transactions");
   
   // Coach Fees state
   const [coachMonth, setCoachMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [athletes, setAthletes] = useState<KasAthlete[]>([]);
   const [coachFees, setCoachFees] = useState<CoachFeeRecord[]>([]);
+  
+  // Needs state
+  const [needs, setNeeds] = useState<FinanceNeed[]>([]);
+  const [showNeedModal, setShowNeedModal] = useState(false);
+  const [needFormData, setNeedFormData] = useState({ itemName: "", estimatedPrice: "" });
   
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -56,6 +62,9 @@ export default function FinancesPage() {
       // Filter out exempted kas athletes if needed, but here we probably show all 
       // or we just show everyone and let coach exempt them.
       setAthletes(athletesData);
+
+      const needsData = await getFinanceNeeds();
+      setNeeds(needsData);
     } catch (error) {
       console.error("Error loading finances:", error);
     } finally {
@@ -226,6 +235,68 @@ export default function FinancesPage() {
     }
   }
 
+  async function handleAddNeed(e: React.FormEvent) {
+    e.preventDefault();
+    if (!needFormData.itemName || !needFormData.estimatedPrice) return;
+    setIsSubmitting(true);
+    try {
+      await addFinanceNeed({
+        itemName: needFormData.itemName,
+        estimatedPrice: Number(needFormData.estimatedPrice),
+        status: 'BELUM_DIBELI'
+      });
+      setShowNeedModal(false);
+      setNeedFormData({ itemName: "", estimatedPrice: "" });
+      await loadData();
+    } catch(error) {
+      console.error("Failed to add need:", error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteNeed(id: string) {
+    if (!confirm("Hapus kebutuhan ini?")) return;
+    try {
+      await deleteFinanceNeed(id);
+      await loadData();
+    } catch(err) {
+      console.error(err);
+    }
+  }
+
+  async function handleMarkNeedBought(need: FinanceNeed) {
+    const actualPriceStr = prompt(`Berapa harga asli saat membeli ${need.itemName}?\n(Estimasi: Rp ${need.estimatedPrice.toLocaleString('id-ID')})`, need.estimatedPrice.toString());
+    if (actualPriceStr === null) return;
+    
+    const actualPrice = Number(actualPriceStr.replace(/\D/g, ""));
+    if (isNaN(actualPrice)) return alert("Harga tidak valid");
+
+    const isLunas = confirm("Apakah pembelian ini sudah DIBAYAR LUNAS (Kas)?\n\n[OK] = Ya, Lunas (Masuk Pengeluaran)\n[Cancel] = Tidak, Ngutang (Masuk Hutang Belum Dibayar)");
+
+    try {
+      // 1. Add to finances
+      const newRecord: Omit<FinanceRecord, "id" | "createdAt"> = {
+        type: isLunas ? 'EXPENSE' : 'DEBT',
+        amount: actualPrice,
+        description: `Beli: ${need.itemName}`,
+        date: new Date().toISOString().split("T")[0],
+      };
+      if (!isLunas) newRecord.status = 'PENDING';
+      
+      await addFinanceRecord(newRecord);
+
+      // 2. Update need status
+      await updateFinanceNeed(need.id!, { status: 'SUDAH_DIBELI' });
+      
+      await loadData();
+      alert("Berhasil dicatat ke Keuangan!");
+    } catch(error) {
+      console.error("Error updating need status:", error);
+      alert("Gagal mengupdate status.");
+    }
+  }
+
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-black">
       <div className="animate-spin rounded-full border-2 border-indigo-500/50 border-t-indigo-500 w-12 h-12"></div>
@@ -259,13 +330,22 @@ export default function FinancesPage() {
                 Catat pemasukan job, pengeluaran umum, dan hutang (di luar uang kas rutin).
               </p>
             </div>
-            <button
-              onClick={() => openModal()}
-              className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"
-            >
-              <Plus className="h-4 w-4" />
-              Catat Keuangan
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setShowNeedModal(true)}
+                className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 text-sm font-semibold text-white transition-all"
+              >
+                <ShoppingCart className="h-4 w-4" />
+                Wishlist
+              </button>
+              <button
+                onClick={() => openModal()}
+                className="flex items-center gap-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition-all shadow-[0_0_15px_rgba(79,70,229,0.3)]"
+              >
+                <Plus className="h-4 w-4" />
+                Catat Keuangan
+              </button>
+            </div>
           </div>
         </header>
 
@@ -316,6 +396,12 @@ export default function FinancesPage() {
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "coach_fees" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
           >
             Uang Pelatih
+          </button>
+          <button 
+            onClick={() => setActiveTab("needs")} 
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "needs" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
+          >
+            Kebutuhan Tim
           </button>
         </div>
 
@@ -496,6 +582,66 @@ export default function FinancesPage() {
           </div>
         )}
 
+        {/* Tab Content: Needs */}
+        {activeTab === "needs" && (
+          <div className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden flex flex-col">
+            <div className="p-4 sm:p-6 border-b border-white/10 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
+              <div>
+                <h2 className="text-lg font-bold text-white">Kebutuhan Tim (Wishlist)</h2>
+                <p className="text-sm text-slate-400">Daftar barang/keperluan yang akan dibeli. Jika dibeli, bisa langsung masuk ke Pengeluaran/Hutang.</p>
+              </div>
+              <button 
+                onClick={() => setShowNeedModal(true)}
+                className="rounded-xl border border-white/10 bg-black px-4 py-2 text-white hover:bg-white/5 transition-colors text-sm font-medium flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Tambah
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-white/5 text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">Nama Kebutuhan</th>
+                    <th className="px-6 py-4 font-medium text-right">Estimasi Harga</th>
+                    <th className="px-6 py-4 font-medium text-center">Status</th>
+                    <th className="px-6 py-4 font-medium text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {needs.length === 0 ? (
+                    <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">Belum ada daftar kebutuhan.</td></tr>
+                  ) : (
+                    needs.map((need) => (
+                      <tr key={need.id} className="hover:bg-white/[0.02]">
+                        <td className="px-6 py-4 font-medium text-white">{need.itemName}</td>
+                        <td className="px-6 py-4 text-right font-bold text-amber-400">
+                          Rp {need.estimatedPrice.toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          {need.status === 'BELUM_DIBELI' 
+                            ? <span className="inline-block px-2 py-1 rounded bg-amber-500/10 text-amber-400 text-xs font-bold border border-amber-500/20">Belum Dibeli</span>
+                            : <span className="inline-block px-2 py-1 rounded bg-emerald-500/10 text-emerald-400 text-xs font-bold border border-emerald-500/20">Sudah Dibeli</span>
+                          }
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-center gap-2">
+                            {need.status === 'BELUM_DIBELI' && (
+                              <button onClick={() => handleMarkNeedBought(need)} className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors">Tandai Dibeli</button>
+                            )}
+                            <button onClick={() => handleDeleteNeed(need.id!)} className="text-slate-500 hover:text-red-400 p-1.5 bg-white/5 rounded hover:bg-rose-500/10 transition-colors" title="Hapus">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
       </div>
 
       {/* Modal Add Record */}
@@ -557,6 +703,52 @@ export default function FinancesPage() {
                 <button type="button" onClick={closeModal} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                   {isSubmitting ? "Menyimpan..." : "Simpan Catatan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Add Need (Wishlist) */}
+      {showNeedModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+            <h3 className="mb-4 text-xl font-bold text-white flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5 text-indigo-400" /> Tambah Kebutuhan Tim
+            </h3>
+            <form onSubmit={handleAddNeed}>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-400">Nama Barang / Keperluan</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={needFormData.itemName} 
+                    onChange={(e) => setNeedFormData({...needFormData, itemName: e.target.value})} 
+                    className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-white focus:ring-2 focus:ring-indigo-500/50" 
+                    placeholder="Contoh: Beli Matras Baru"
+                  />
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-400">Estimasi Harga (Rp)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={needFormData.estimatedPrice ? Number(needFormData.estimatedPrice).toLocaleString('id-ID') : ""} 
+                    onChange={(e) => {
+                      const rawValue = e.target.value.replace(/\D/g, "");
+                      setNeedFormData({...needFormData, estimatedPrice: rawValue});
+                    }} 
+                    className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-indigo-500/50" 
+                    placeholder="Contoh: 5000000" 
+                  />
+                </div>
+              </div>
+              <div className="mt-8 flex gap-3">
+                <button type="button" onClick={() => setShowNeedModal(false)} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.3)]">
+                  {isSubmitting ? "Menyimpan..." : "Simpan Kebutuhan"}
                 </button>
               </div>
             </form>

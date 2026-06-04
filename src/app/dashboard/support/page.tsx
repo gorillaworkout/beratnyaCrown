@@ -18,6 +18,7 @@ interface ShirtOrder {
   ukuran: string;
   referral: string;
   status: "pending" | "lunas";
+  deliveryStatus?: "belum_diterima" | "sudah_diterima";
   buktiTransferUrl?: string;
   createdAt?: any;
 }
@@ -27,6 +28,11 @@ export default function DanusSupportPage() {
   
   const [orders, setOrders] = useState<ShirtOrder[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Search & Filters
+  const [searchQuery, setSearchQuery] = useState("");
+  const [filterPayment, setFilterPayment] = useState<"all" | "lunas" | "pending">("all");
+  const [filterDelivery, setFilterDelivery] = useState<"all" | "sudah_diterima" | "belum_diterima">("all");
   
   // Edit Dialog
   const [open, setOpen] = useState(false);
@@ -57,7 +63,9 @@ export default function DanusSupportPage() {
     setIsUploading(true);
     try {
       let updatedData: any = {
-        status: editingOrder.status
+        status: editingOrder.status,
+        deliveryStatus: editingOrder.deliveryStatus || "belum_diterima",
+        ukuran: editingOrder.ukuran
       };
 
       if (adminPaymentFile) {
@@ -103,6 +111,31 @@ export default function DanusSupportPage() {
   const lunasCount = orders.filter(o => o.status === "lunas").length;
   const pendingCount = orders.filter(o => o.status === "pending").length;
 
+  const filteredOrders = orders
+    .filter((o) => {
+      const searchLower = searchQuery.toLowerCase();
+      const matchesSearch = o.nama.toLowerCase().includes(searchLower) || 
+                            (o.referral || "").toLowerCase().includes(searchLower);
+      const matchesPayment = filterPayment === "all" || o.status === filterPayment;
+      const oDelivery = o.deliveryStatus || "belum_diterima";
+      const matchesDelivery = filterDelivery === "all" || oDelivery === filterDelivery;
+      return matchesSearch && matchesPayment && matchesDelivery;
+    })
+    .sort((a, b) => a.nama.localeCompare(b.nama));
+
+  const sizeCounts = filteredOrders.reduce((acc, order) => {
+    const size = order.ukuran || "Unknown";
+    acc[size] = (acc[size] || 0) + 1;
+    return acc;
+  }, {} as Record<string, number>);
+
+  const orderOfSizes = ["0", "1", "2", "3", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL", "Unknown"];
+  const sortedSizes = Object.entries(sizeCounts).sort((a, b) => {
+    const indexA = orderOfSizes.indexOf(a[0]);
+    const indexB = orderOfSizes.indexOf(b[0]);
+    return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+  });
+
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -138,10 +171,58 @@ export default function DanusSupportPage() {
           </div>
         </div>
 
+        {/* Size Summary */}
+        <div className="bg-white/5 border border-white/10 rounded-xl p-4 shadow-lg">
+          <p className="text-xs text-slate-400 uppercase font-bold tracking-widest mb-3">Rekap Ukuran Kaos</p>
+          <div className="flex flex-wrap gap-2">
+            {sortedSizes.length === 0 ? (
+              <span className="text-sm text-slate-500 italic">Belum ada pesanan</span>
+            ) : (
+              sortedSizes.map(([size, count]) => (
+                <div key={size} className="bg-black/50 border border-white/10 rounded-lg px-3 py-1.5 flex items-center gap-2 shadow-sm">
+                  <span className="text-sm font-bold text-white">{size}</span>
+                  <span className="text-xs bg-red-500/20 text-red-400 border border-red-500/20 px-1.5 py-0.5 rounded-md font-bold">{count} pcs</span>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Search & Filter */}
+        <div className="flex flex-col md:flex-row gap-3">
+          <input 
+            type="text" 
+            placeholder="Cari nama atau referral..." 
+            className="flex-1 bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-red-500/50"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          <select 
+            className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none"
+            value={filterPayment}
+            onChange={(e) => setFilterPayment(e.target.value as any)}
+          >
+            <option value="all" className="bg-slate-900 text-white">Semua Status Bayar</option>
+            <option value="lunas" className="bg-slate-900 text-white">Lunas</option>
+            <option value="pending" className="bg-slate-900 text-white">Pending</option>
+          </select>
+          <select 
+            className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none"
+            value={filterDelivery}
+            onChange={(e) => setFilterDelivery(e.target.value as any)}
+          >
+            <option value="all" className="bg-slate-900 text-white">Semua Penerimaan</option>
+            <option value="sudah_diterima" className="bg-slate-900 text-white">Sudah Diterima</option>
+            <option value="belum_diterima" className="bg-slate-900 text-white">Belum Diterima</option>
+          </select>
+        </div>
+
         {/* Order List (Table style for Desktop, Card style for Mobile) */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-1 shadow-xl overflow-hidden">
-          {orders.length === 0 ? (
-            <div className="p-10 text-center text-slate-500">Belum ada pesanan baju.</div>
+          {filteredOrders.length === 0 ? (
+            <div className="p-10 text-center text-slate-500">
+              {orders.length === 0 ? "Belum ada pesanan baju." : "Tidak ada pesanan yang sesuai dengan filter."}
+            </div>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -152,12 +233,13 @@ export default function DanusSupportPage() {
                     <th className="p-4 font-bold">Angkatan</th>
                     <th className="p-4 font-bold">Ukuran</th>
                     <th className="p-4 font-bold">Referral</th>
-                    <th className="p-4 font-bold">Status</th>
+                    <th className="p-4 font-bold">Status Bayar</th>
+                    <th className="p-4 font-bold">Penerimaan</th>
                     <th className="p-4 font-bold text-right">Aksi</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {orders.map((order) => (
+                  {filteredOrders.map((order) => (
                     <tr key={order.id} className="hover:bg-white/5 transition-colors">
                       <td className="p-4 font-medium text-white">{order.nama}</td>
                       <td className="p-4 text-slate-300 font-mono text-sm">{order.noHp}</td>
@@ -190,6 +272,17 @@ export default function DanusSupportPage() {
                             />
                           )}
                         </div>
+                      </td>
+                      <td className="p-4">
+                        {order.deliveryStatus === "sudah_diterima" ? (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-blue-500/20 text-blue-400 border border-blue-500/30 text-xs font-bold uppercase">
+                            <CheckCircle2 className="w-3.5 h-3.5" /> Diterima
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-slate-800 text-slate-400 border border-slate-700 text-xs font-bold uppercase">
+                            <Clock className="w-3.5 h-3.5" /> Belum
+                          </span>
+                        )}
                       </td>
                       <td className="p-4 text-right">
                         <Button 
@@ -253,6 +346,41 @@ export default function DanusSupportPage() {
                 </div>
               </div>
             )}
+
+            <div>
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Status Penerimaan Kaos</label>
+              <Select 
+                value={editingOrder?.deliveryStatus || "belum_diterima"} 
+                onValueChange={(v: any) => setEditingOrder(prev => prev ? {...prev, deliveryStatus: v} : null)}
+              >
+                <SelectTrigger className={`bg-black/50 border-white/10 ${
+                  editingOrder?.deliveryStatus === "sudah_diterima" ? "text-blue-400" : "text-slate-400"
+                }`}>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-white/10 text-white">
+                  <SelectItem value="belum_diterima">Belum Diterima</SelectItem>
+                  <SelectItem value="sudah_diterima">Sudah Diterima</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <label className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1 block">Ukuran Kaos</label>
+              <Select 
+                value={editingOrder?.ukuran || ""} 
+                onValueChange={(v: string) => setEditingOrder(prev => prev ? {...prev, ukuran: v} : null)}
+              >
+                <SelectTrigger className="bg-black/50 border-white/10 text-white">
+                  <SelectValue placeholder="Pilih Ukuran" />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-white/10 text-white max-h-48 overflow-y-auto">
+                  {["0", "1", "2", "3", "XS", "S", "M", "L", "XL", "XXL", "XXXL", "4XL"].map(size => (
+                    <SelectItem key={size} value={size}>{size}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
 
             {editingOrder?.buktiTransferUrl && (
               <div className="mt-4 p-4 border border-white/10 rounded-xl bg-black/30">
