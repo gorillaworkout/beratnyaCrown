@@ -22,17 +22,22 @@ export default function FinancesPage() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<FinanceRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<"transactions" | "debt" | "coach_fees" | "needs">("transactions");
+  const [activeTab, setActiveTab] = useState<"income" | "expense" | "debt" | "coach_fees" | "needs">("income");
   
   // Coach Fees state
   const [coachMonth, setCoachMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [athletes, setAthletes] = useState<KasAthlete[]>([]);
   const [coachFees, setCoachFees] = useState<CoachFeeRecord[]>([]);
   
-  // Needs state
   const [needs, setNeeds] = useState<FinanceNeed[]>([]);
   const [showNeedModal, setShowNeedModal] = useState(false);
+  const [editingNeed, setEditingNeed] = useState<FinanceNeed | null>(null);
   const [needFormData, setNeedFormData] = useState({ itemName: "", estimatedPrice: "" });
+  
+  // Mark Bought Modal state
+  const [showMarkBoughtModal, setShowMarkBoughtModal] = useState(false);
+  const [markBoughtNeed, setMarkBoughtNeed] = useState<FinanceNeed | null>(null);
+  const [markBoughtData, setMarkBoughtData] = useState({ actualPrice: "", isLunas: true });
   
   // Modal state
   const [showModal, setShowModal] = useState(false);
@@ -85,6 +90,20 @@ export default function FinancesPage() {
     fetchCoachFees();
   }, [coachMonth, isAdmin]);
 
+  const monthOptions = useMemo(() => {
+    const options = [];
+    const currentYear = new Date().getFullYear();
+    for (let year = currentYear - 1; year <= currentYear + 1; year++) {
+      for (let month = 1; month <= 12; month++) {
+        const value = `${year}-${month.toString().padStart(2, '0')}`;
+        const date = new Date(year, month - 1, 1);
+        const label = format(date, 'MMMM yyyy', { locale: idLocale });
+        options.push({ value, label });
+      }
+    }
+    return options;
+  }, []);
+
   const summary = useMemo(() => {
     let totalIncome = 0;
     let totalExpense = 0;
@@ -92,7 +111,7 @@ export default function FinancesPage() {
 
     records.forEach(r => {
       if (r.type === 'INCOME') totalIncome += r.amount;
-      if (r.type === 'EXPENSE') totalExpense += r.amount;
+      if (r.type === 'EXPENSE' || (r.type === 'DEBT' && r.status === 'LUNAS')) totalExpense += r.amount;
       if (r.type === 'DEBT') {
         if (r.status === 'PENDING') totalDebt += r.amount;
       }
@@ -235,21 +254,40 @@ export default function FinancesPage() {
     }
   }
 
-  async function handleAddNeed(e: React.FormEvent) {
+  function openNeedModal(need?: FinanceNeed) {
+    if (need) {
+      setEditingNeed(need);
+      setNeedFormData({ itemName: need.itemName, estimatedPrice: need.estimatedPrice.toString() });
+    } else {
+      setEditingNeed(null);
+      setNeedFormData({ itemName: "", estimatedPrice: "" });
+    }
+    setShowNeedModal(true);
+  }
+
+  async function handleSaveNeed(e: React.FormEvent) {
     e.preventDefault();
     if (!needFormData.itemName || !needFormData.estimatedPrice) return;
     setIsSubmitting(true);
     try {
-      await addFinanceNeed({
-        itemName: needFormData.itemName,
-        estimatedPrice: Number(needFormData.estimatedPrice),
-        status: 'BELUM_DIBELI'
-      });
+      if (editingNeed?.id) {
+        await updateFinanceNeed(editingNeed.id, {
+          itemName: needFormData.itemName,
+          estimatedPrice: Number(needFormData.estimatedPrice)
+        });
+      } else {
+        await addFinanceNeed({
+          itemName: needFormData.itemName,
+          estimatedPrice: Number(needFormData.estimatedPrice),
+          status: 'BELUM_DIBELI'
+        });
+      }
       setShowNeedModal(false);
       setNeedFormData({ itemName: "", estimatedPrice: "" });
+      setEditingNeed(null);
       await loadData();
     } catch(error) {
-      console.error("Failed to add need:", error);
+      console.error("Failed to save need:", error);
     } finally {
       setIsSubmitting(false);
     }
@@ -265,35 +303,45 @@ export default function FinancesPage() {
     }
   }
 
-  async function handleMarkNeedBought(need: FinanceNeed) {
-    const actualPriceStr = prompt(`Berapa harga asli saat membeli ${need.itemName}?\n(Estimasi: Rp ${need.estimatedPrice.toLocaleString('id-ID')})`, need.estimatedPrice.toString());
-    if (actualPriceStr === null) return;
-    
-    const actualPrice = Number(actualPriceStr.replace(/\D/g, ""));
+  function openMarkBoughtModal(need: FinanceNeed) {
+    setMarkBoughtNeed(need);
+    setMarkBoughtData({ actualPrice: need.estimatedPrice.toString(), isLunas: true });
+    setShowMarkBoughtModal(true);
+  }
+
+  async function handleConfirmMarkBought(e: React.FormEvent) {
+    e.preventDefault();
+    if (!markBoughtNeed) return;
+
+    const actualPrice = Number(markBoughtData.actualPrice.replace(/\D/g, ""));
     if (isNaN(actualPrice)) return alert("Harga tidak valid");
-
-    const isLunas = confirm("Apakah pembelian ini sudah DIBAYAR LUNAS (Kas)?\n\n[OK] = Ya, Lunas (Masuk Pengeluaran)\n[Cancel] = Tidak, Ngutang (Masuk Hutang Belum Dibayar)");
-
+    
+    setIsSubmitting(true);
+    
     try {
       // 1. Add to finances
       const newRecord: Omit<FinanceRecord, "id" | "createdAt"> = {
-        type: isLunas ? 'EXPENSE' : 'DEBT',
+        type: markBoughtData.isLunas ? 'EXPENSE' : 'DEBT',
         amount: actualPrice,
-        description: `Beli: ${need.itemName}`,
+        description: `Beli: ${markBoughtNeed.itemName}`,
         date: new Date().toISOString().split("T")[0],
       };
-      if (!isLunas) newRecord.status = 'PENDING';
+      if (!markBoughtData.isLunas) newRecord.status = 'PENDING';
       
       await addFinanceRecord(newRecord);
 
       // 2. Update need status
-      await updateFinanceNeed(need.id!, { status: 'SUDAH_DIBELI' });
+      await updateFinanceNeed(markBoughtNeed.id!, { status: 'SUDAH_DIBELI' });
       
+      setShowMarkBoughtModal(false);
+      setMarkBoughtNeed(null);
       await loadData();
       alert("Berhasil dicatat ke Keuangan!");
     } catch(error) {
       console.error("Error updating need status:", error);
       alert("Gagal mengupdate status.");
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -311,8 +359,9 @@ export default function FinancesPage() {
     );
   }
 
-  const transactions = records.filter(r => r.type === "INCOME" || r.type === "EXPENSE");
-  const debts = records.filter(r => r.type === "DEBT");
+  const incomes = records.filter(r => r.type === "INCOME");
+  const expenses = records.filter(r => r.type === "EXPENSE" || (r.type === "DEBT" && r.status === "LUNAS"));
+  const debts = records.filter(r => r.type === "DEBT" && r.status === "PENDING");
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-3 text-slate-100 sm:p-4">
@@ -332,7 +381,7 @@ export default function FinancesPage() {
             </div>
             <div className="flex gap-2">
               <button
-                onClick={() => setShowNeedModal(true)}
+                onClick={() => openNeedModal()}
                 className="flex items-center gap-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 px-4 py-2 text-sm font-semibold text-white transition-all"
               >
                 <ShoppingCart className="h-4 w-4" />
@@ -378,16 +427,22 @@ export default function FinancesPage() {
         </section>
 
         {/* Tabs */}
-        <div className="flex gap-1 border-b border-white/10 pb-1 mt-4">
+        <div className="flex gap-1 border-b border-white/10 pb-1 mt-4 overflow-x-auto whitespace-nowrap">
           <button 
-            onClick={() => setActiveTab("transactions")} 
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "transactions" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
+            onClick={() => setActiveTab("income")} 
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "income" ? 'border-emerald-500 text-emerald-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
           >
-            Pemasukan & Pengeluaran
+            Pemasukan
+          </button>
+          <button 
+            onClick={() => setActiveTab("expense")} 
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "expense" ? 'border-rose-500 text-rose-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
+          >
+            Pengeluaran
           </button>
           <button 
             onClick={() => setActiveTab("debt")} 
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "debt" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
+            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "debt" ? 'border-amber-500 text-amber-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
           >
             Daftar Hutang
           </button>
@@ -405,8 +460,8 @@ export default function FinancesPage() {
           </button>
         </div>
 
-        {/* Tab Content: Transactions */}
-        {activeTab === "transactions" && (
+        {/* Tab Content: Income */}
+        {activeTab === "income" && (
           <div className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
@@ -420,24 +475,76 @@ export default function FinancesPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/10">
-                  {transactions.length === 0 ? (
-                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Belum ada transaksi.</td></tr>
+                  {incomes.length === 0 ? (
+                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Belum ada pemasukan.</td></tr>
                   ) : (
-                    transactions.map((r) => (
+                    incomes.map((r) => (
                       <tr key={r.id} className="hover:bg-white/[0.02]">
                         <td className="px-6 py-4">{format(new Date(r.date), 'dd MMM yyyy', { locale: idLocale })}</td>
                         <td className="px-6 py-4">
-                          {r.type === 'INCOME' 
-                            ? <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><TrendingUp className="w-3 h-3" /> Pemasukan</span>
-                            : <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs"><TrendingDown className="w-3 h-3" /> Pengeluaran</span>
-                          }
+                          <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><TrendingUp className="w-3 h-3" /> Pemasukan</span>
                         </td>
                         <td className="px-6 py-4 text-white">{r.description}</td>
-                        <td className={`px-6 py-4 text-right font-bold ${r.type === 'INCOME' ? 'text-emerald-400' : 'text-rose-400'}`}>
-                          {r.type === 'INCOME' ? '+' : '-'} Rp {r.amount.toLocaleString('id-ID')}
+                        <td className="px-6 py-4 text-right font-bold text-emerald-400">
+                          + Rp {r.amount.toLocaleString('id-ID')}
                         </td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
+                            <button onClick={() => openModal(r)} className="text-slate-500 hover:text-indigo-400 p-2 bg-white/5 rounded hover:bg-indigo-500/10 transition-colors" title="Edit">
+                              <Edit className="w-4 h-4 mx-auto" />
+                            </button>
+                            <button onClick={() => handleDelete(r.id!)} className="text-slate-500 hover:text-red-400 p-2 bg-white/5 rounded hover:bg-rose-500/10 transition-colors" title="Hapus">
+                              <Trash2 className="w-4 h-4 mx-auto" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* Tab Content: Expense */}
+        {activeTab === "expense" && (
+          <div className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm text-slate-300">
+                <thead className="bg-white/5 text-xs uppercase text-slate-400">
+                  <tr>
+                    <th className="px-6 py-4 font-medium">Tanggal</th>
+                    <th className="px-6 py-4 font-medium">Tipe</th>
+                    <th className="px-6 py-4 font-medium">Keterangan</th>
+                    <th className="px-6 py-4 font-medium text-right">Nominal</th>
+                    <th className="px-6 py-4 font-medium text-center">Aksi</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/10">
+                  {expenses.length === 0 ? (
+                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Belum ada pengeluaran.</td></tr>
+                  ) : (
+                    expenses.map((r) => (
+                      <tr key={r.id} className="hover:bg-white/[0.02]">
+                        <td className="px-6 py-4">{format(new Date(r.date), 'dd MMM yyyy', { locale: idLocale })}</td>
+                        <td className="px-6 py-4">
+                          <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs">
+                            <TrendingDown className="w-3 h-3" /> 
+                            {r.type === 'DEBT' ? 'Pelunasan Hutang' : 'Pengeluaran'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-white">{r.description}</td>
+                        <td className="px-6 py-4 text-right font-bold text-rose-400">
+                          - Rp {r.amount.toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            {r.type === 'DEBT' && (
+                              <button onClick={() => handleUndoDebt(r.id!)} className="text-amber-500 hover:text-amber-400 p-2 bg-amber-500/10 rounded hover:bg-amber-500/20 transition-colors" title="Batal Lunas (Kembali ke Hutang)">
+                                <RotateCcw className="w-4 h-4 mx-auto" />
+                              </button>
+                            )}
                             <button onClick={() => openModal(r)} className="text-slate-500 hover:text-indigo-400 p-2 bg-white/5 rounded hover:bg-indigo-500/10 transition-colors" title="Edit">
                               <Edit className="w-4 h-4 mx-auto" />
                             </button>
@@ -481,22 +588,15 @@ export default function FinancesPage() {
                           Rp {r.amount.toLocaleString('id-ID')}
                         </td>
                         <td className="px-6 py-4 text-center">
-                          {r.status === 'PENDING' 
-                            ? <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md text-xs font-bold"><AlertCircle className="w-3 h-3" /> Belum Dibayar</span>
-                            : <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-1 rounded-md text-xs font-bold"><CheckCircle2 className="w-3 h-3" /> Lunas</span>
-                          }
+                          <span className="inline-flex items-center gap-1 text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-1 rounded-md text-xs font-bold">
+                            <AlertCircle className="w-3 h-3" /> Belum Dibayar
+                          </span>
                         </td>
                         <td className="px-4 py-4 text-center">
                           <div className="flex items-center justify-center gap-2">
-                            {r.status === 'PENDING' ? (
-                              <button onClick={() => handleSettleDebt(r.id!)} title="Tandai Lunas" className="text-emerald-500 hover:text-emerald-400 p-2 bg-emerald-500/10 rounded hover:bg-emerald-500/20 transition-colors">
-                                <CheckCircle2 className="w-4 h-4" />
-                              </button>
-                            ) : (
-                              <button onClick={() => handleUndoDebt(r.id!)} title="Batal Lunas (Kembali ke Hutang)" className="text-amber-500 hover:text-amber-400 p-2 bg-amber-500/10 rounded hover:bg-amber-500/20 transition-colors">
-                                <RotateCcw className="w-4 h-4" />
-                              </button>
-                            )}
+                            <button onClick={() => handleSettleDebt(r.id!)} title="Tandai Lunas" className="text-emerald-500 hover:text-emerald-400 p-2 bg-emerald-500/10 rounded hover:bg-emerald-500/20 transition-colors">
+                              <CheckCircle2 className="w-4 h-4" />
+                            </button>
                             <button onClick={() => openModal(r)} title="Edit Catatan" className="text-slate-500 hover:text-indigo-400 p-2 bg-white/5 rounded hover:bg-indigo-500/10 transition-colors">
                               <Edit className="w-4 h-4" />
                             </button>
@@ -522,12 +622,21 @@ export default function FinancesPage() {
                 <h2 className="text-lg font-bold text-white">Pembayaran Uang Pelatih</h2>
                 <p className="text-sm text-slate-400">Pilih bulan dan kelola status pembayaran tiap atlet.</p>
               </div>
-              <input 
-                type="month" 
+              <select 
                 value={coachMonth}
                 onChange={(e) => setCoachMonth(e.target.value)}
-                className="rounded-xl border border-white/10 bg-black px-4 py-2 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none"
-              />
+                className="rounded-xl border border-white/10 bg-zinc-900 px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none cursor-pointer appearance-none font-medium min-w-[200px]"
+                style={{
+                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
+                  backgroundRepeat: 'no-repeat',
+                  backgroundPosition: 'right 1rem center',
+                  backgroundSize: '1.2em'
+                }}
+              >
+                {monthOptions.map(opt => (
+                  <option key={opt.value} value={opt.value} className="bg-zinc-900 text-white">{opt.label}</option>
+                ))}
+              </select>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
@@ -591,7 +700,7 @@ export default function FinancesPage() {
                 <p className="text-sm text-slate-400">Daftar barang/keperluan yang akan dibeli. Jika dibeli, bisa langsung masuk ke Pengeluaran/Hutang.</p>
               </div>
               <button 
-                onClick={() => setShowNeedModal(true)}
+                onClick={() => openNeedModal()}
                 className="rounded-xl border border-white/10 bg-black px-4 py-2 text-white hover:bg-white/5 transition-colors text-sm font-medium flex items-center gap-2"
               >
                 <Plus className="w-4 h-4" /> Tambah
@@ -626,8 +735,11 @@ export default function FinancesPage() {
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-center gap-2">
                             {need.status === 'BELUM_DIBELI' && (
-                              <button onClick={() => handleMarkNeedBought(need)} className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors">Tandai Dibeli</button>
+                              <button onClick={() => openMarkBoughtModal(need)} className="text-xs px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold transition-colors">Tandai Dibeli</button>
                             )}
+                            <button onClick={() => openNeedModal(need)} className="text-slate-500 hover:text-indigo-400 p-1.5 bg-white/5 rounded hover:bg-indigo-500/10 transition-colors" title="Edit">
+                              <Edit className="w-4 h-4" />
+                            </button>
                             <button onClick={() => handleDeleteNeed(need.id!)} className="text-slate-500 hover:text-red-400 p-1.5 bg-white/5 rounded hover:bg-rose-500/10 transition-colors" title="Hapus">
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -715,9 +827,9 @@ export default function FinancesPage() {
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
             <h3 className="mb-4 text-xl font-bold text-white flex items-center gap-2">
-              <ShoppingCart className="h-5 w-5 text-indigo-400" /> Tambah Kebutuhan Tim
+              <ShoppingCart className="h-5 w-5 text-indigo-400" /> {editingNeed ? "Edit Kebutuhan Tim" : "Tambah Kebutuhan Tim"}
             </h3>
-            <form onSubmit={handleAddNeed}>
+            <form onSubmit={handleSaveNeed}>
               <div className="space-y-4">
                 <div>
                   <label className="mb-2 block text-sm font-medium text-slate-400">Nama Barang / Keperluan</label>
@@ -749,6 +861,62 @@ export default function FinancesPage() {
                 <button type="button" onClick={() => setShowNeedModal(false)} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
                 <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-indigo-600 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-500 disabled:opacity-50 shadow-[0_0_15px_rgba(79,70,229,0.3)]">
                   {isSubmitting ? "Menyimpan..." : "Simpan Kebutuhan"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal Mark Need Bought */}
+      {showMarkBoughtModal && markBoughtNeed && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-white/10 bg-zinc-950 p-6 shadow-2xl">
+            <h3 className="mb-1 text-xl font-bold text-white flex items-center gap-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-400" /> Tandai Dibeli
+            </h3>
+            <p className="text-sm text-slate-400 mb-4">Masukan harga asli saat membeli <strong>{markBoughtNeed.itemName}</strong>.</p>
+            <form onSubmit={handleConfirmMarkBought}>
+              <div className="space-y-4">
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-400">Harga Asli (Rp)</label>
+                  <input 
+                    type="text" 
+                    required 
+                    value={markBoughtData.actualPrice ? Number(markBoughtData.actualPrice).toLocaleString('id-ID') : ""} 
+                    onChange={(e) => {
+                      const rawValue = e.target.value.replace(/\D/g, "");
+                      setMarkBoughtData({...markBoughtData, actualPrice: rawValue});
+                    }} 
+                    className="w-full rounded-xl border border-white/10 bg-zinc-900 px-4 py-3 text-white placeholder-slate-600 focus:ring-2 focus:ring-emerald-500/50" 
+                    placeholder="Contoh: 5000000" 
+                  />
+                  <p className="text-xs text-amber-400/80 mt-1">Estimasi awal: Rp {markBoughtNeed.estimatedPrice.toLocaleString('id-ID')}</p>
+                </div>
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-slate-400">Status Pembayaran</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setMarkBoughtData({...markBoughtData, isLunas: true})}
+                      className={`py-2 px-3 rounded-xl border text-sm font-bold transition-colors ${markBoughtData.isLunas ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-400' : 'bg-transparent border-white/10 text-slate-400 hover:bg-white/5'}`}
+                    >
+                      Lunas (Kas)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMarkBoughtData({...markBoughtData, isLunas: false})}
+                      className={`py-2 px-3 rounded-xl border text-sm font-bold transition-colors ${!markBoughtData.isLunas ? 'bg-amber-500/20 border-amber-500/50 text-amber-400' : 'bg-transparent border-white/10 text-slate-400 hover:bg-white/5'}`}
+                    >
+                      Ngutang / Talangan
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-8 flex gap-3">
+                <button type="button" onClick={() => setShowMarkBoughtModal(false)} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
+                <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-500 disabled:opacity-50 shadow-[0_0_15px_rgba(16,185,129,0.3)]">
+                  {isSubmitting ? "Menyimpan..." : "Konfirmasi Beli"}
                 </button>
               </div>
             </form>

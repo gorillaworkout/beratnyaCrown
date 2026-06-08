@@ -37,11 +37,20 @@ type Milestone = {
   status: "done" | "current" | "upcoming" | "delayed";
 };
 
+type FinanceNeed = {
+  id?: string;
+  itemName: string;
+  estimatedPrice: number;
+  status: 'BELUM_DIBELI' | 'SUDAH_DIBELI';
+};
+
 export default function InfoDashboardPage() {
   const { user, isAdmin } = useAuth();
 
   const [milestones, setMilestones] = useState<Milestone[]>([]);
   const [isMilestonesLoading, setIsMilestonesLoading] = useState(true);
+
+  const [needs, setNeeds] = useState<FinanceNeed[]>([]);
 
   // Form State for Admin
   const [newDate, setNewDate] = useState("");
@@ -65,7 +74,19 @@ export default function InfoDashboardPage() {
       setIsMilestonesLoading(false);
     });
 
-    return () => unsub();
+    const qNeeds = query(collection(db, "crown_finance_needs"), orderBy("createdAt", "desc"));
+    const unsubNeeds = onSnapshot(qNeeds, (snapshot) => {
+      const ns: FinanceNeed[] = [];
+      snapshot.forEach((doc) => {
+        ns.push({ id: doc.id, ...doc.data() } as FinanceNeed);
+      });
+      setNeeds(ns);
+    });
+
+    return () => {
+      unsub();
+      unsubNeeds();
+    };
   }, []);
 
   const handleAddMilestone = async () => {
@@ -133,6 +154,9 @@ export default function InfoDashboardPage() {
       default: return "⏳";
     }
   };
+
+  const pendingNeeds = needs.filter(n => n.status === 'BELUM_DIBELI');
+  const pendingNeedsTotal = pendingNeeds.reduce((sum, n) => sum + n.estimatedPrice, 0);
 
   return (
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100 sm:p-6 lg:p-8">
@@ -309,6 +333,43 @@ export default function InfoDashboardPage() {
             <Card className={glassCardClass}>
               <CardHeader className="pb-3">
                 <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">Kebutuhan Tim</CardTitle>
+                  <Badge className="bg-amber-500/20 text-amber-400 border border-amber-500/30">Wishlist</Badge>
+                </div>
+                <CardDescription className="text-slate-400">
+                  Estimasi pengeluaran barang/keperluan yang akan datang
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="bg-black/20 rounded-lg p-3 border border-white/5 flex justify-between items-center">
+                    <span className="text-sm text-slate-300 font-semibold">Total Estimasi:</span>
+                    <span className="text-lg font-bold text-amber-400">Rp {pendingNeedsTotal.toLocaleString('id-ID')}</span>
+                  </div>
+                  {pendingNeeds.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">Daftar Barang:</p>
+                      {pendingNeeds.slice(0, 4).map(need => (
+                        <div key={need.id} className="flex justify-between text-sm border-b border-white/5 pb-1">
+                          <span className="text-slate-300">{need.itemName}</span>
+                          <span className="text-white">Rp {need.estimatedPrice.toLocaleString('id-ID')}</span>
+                        </div>
+                      ))}
+                      {pendingNeeds.length > 4 && (
+                        <p className="text-xs text-slate-500 italic text-center pt-2">+{pendingNeeds.length - 4} barang lainnya...</p>
+                      )}
+                    </div>
+                  )}
+                  {pendingNeeds.length === 0 && (
+                    <p className="text-sm text-slate-500 italic text-center py-2">Tidak ada kebutuhan mendesak.</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className={glassCardClass}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
                   <CardTitle className="text-lg">Metode Pembayaran</CardTitle>
                   <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Official</Badge>
                 </div>
@@ -338,8 +399,6 @@ export default function InfoDashboardPage() {
                 </div>
               </CardContent>
             </Card>
-
-            
           </div>
 
           {/* Section: Events & Team Info */}
