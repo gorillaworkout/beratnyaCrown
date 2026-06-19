@@ -8,7 +8,8 @@ import { ref, deleteObject, uploadBytes, getDownloadURL } from "firebase/storage
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Shirt, CheckCircle2, Clock, Trash2, Edit, ImageIcon } from "lucide-react";
+import { Shirt, CheckCircle2, Clock, Trash2, Edit, ImageIcon, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 
 interface ShirtOrder {
   id?: string;
@@ -136,6 +137,26 @@ export default function DanusSupportPage() {
     return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
   });
 
+  const handleExportExcel = () => {
+    const exportData = filteredOrders.map((order, index) => ({
+      "No": index + 1,
+      "Nama": order.nama,
+      "No HP": order.noHp,
+      "Angkatan": order.angkatan || "-",
+      "Ukuran": order.ukuran,
+      "Referral": order.referral || "-",
+      "Status Bayar": order.status === "lunas" ? "Lunas" : "Pending",
+      "Status Penerimaan": order.deliveryStatus === "sudah_diterima" ? "Sudah Diterima" : "Belum Diterima",
+      "Tanggal Pesan": order.createdAt?.seconds ? new Date(order.createdAt.seconds * 1000).toLocaleString("id-ID") : "-",
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Pesanan Danus");
+    
+    XLSX.writeFile(workbook, `Data_Pesanan_Danus_${new Date().toISOString().split('T')[0]}.xlsx`);
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
       <div className="max-w-6xl mx-auto space-y-6">
@@ -215,6 +236,13 @@ export default function DanusSupportPage() {
             <option value="sudah_diterima" className="bg-slate-900 text-white">Sudah Diterima</option>
             <option value="belum_diterima" className="bg-slate-900 text-white">Belum Diterima</option>
           </select>
+          <Button 
+            onClick={handleExportExcel}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] transition-all"
+          >
+            <Download className="w-4 h-4 mr-2" />
+            Export Excel
+          </Button>
         </div>
 
         {/* Order List (Table style for Desktop, Card style for Mobile) */}
