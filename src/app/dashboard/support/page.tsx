@@ -34,6 +34,7 @@ export default function DanusSupportPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [filterPayment, setFilterPayment] = useState<"all" | "lunas" | "pending">("all");
   const [filterDelivery, setFilterDelivery] = useState<"all" | "sudah_diterima" | "belum_diterima">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "name">("newest");
   
   // Edit Dialog
   const [open, setOpen] = useState(false);
@@ -122,7 +123,19 @@ export default function DanusSupportPage() {
       const matchesDelivery = filterDelivery === "all" || oDelivery === filterDelivery;
       return matchesSearch && matchesPayment && matchesDelivery;
     })
-    .sort((a, b) => a.nama.localeCompare(b.nama));
+    .sort((a, b) => {
+      if (sortBy === "name") {
+        return a.nama.localeCompare(b.nama);
+      } else if (sortBy === "oldest") {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeA - timeB;
+      } else {
+        const timeA = a.createdAt?.seconds || 0;
+        const timeB = b.createdAt?.seconds || 0;
+        return timeB - timeA;
+      }
+    });
 
   const sizeCounts = filteredOrders.reduce((acc, order) => {
     const size = order.ukuran || "Unknown";
@@ -220,6 +233,15 @@ export default function DanusSupportPage() {
           />
           <select 
             className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none"
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+          >
+            <option value="newest" className="bg-slate-900 text-white">Terbaru</option>
+            <option value="oldest" className="bg-slate-900 text-white">Terlama</option>
+            <option value="name" className="bg-slate-900 text-white">Nama (A-Z)</option>
+          </select>
+          <select 
+            className="bg-white/5 border border-white/10 rounded-xl px-4 py-2 text-sm text-slate-300 focus:outline-none"
             value={filterPayment}
             onChange={(e) => setFilterPayment(e.target.value as any)}
           >
@@ -261,6 +283,7 @@ export default function DanusSupportPage() {
                     <th className="p-4 font-bold">Angkatan</th>
                     <th className="p-4 font-bold">Ukuran</th>
                     <th className="p-4 font-bold">Referral</th>
+                    <th className="p-4 font-bold">Tanggal</th>
                     <th className="p-4 font-bold">Status Bayar</th>
                     <th className="p-4 font-bold">Penerimaan</th>
                     <th className="p-4 font-bold text-right">Aksi</th>
@@ -278,6 +301,17 @@ export default function DanusSupportPage() {
                         </span>
                       </td>
                       <td className="p-4 text-slate-400 italic text-sm">{order.referral || '-'}</td>
+                      <td className="p-4 text-slate-300 text-sm whitespace-nowrap">
+                        {order.createdAt?.seconds 
+                          ? new Date(order.createdAt.seconds * 1000).toLocaleString("id-ID", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                              hour: "2-digit",
+                              minute: "2-digit"
+                            })
+                          : "-"}
+                      </td>
                       <td className="p-4">
                         <div className="flex items-center gap-3">
                           {order.status === "lunas" ? (
