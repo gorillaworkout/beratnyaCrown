@@ -654,14 +654,30 @@ export default function JadwalPage() {
     if (!editingDate) return;
 
     if (editingId) {
+      // Jadwal custom (tambahan / hasil edit) — dokumennya nyata, hapus saja.
       await deleteDoc(doc(db, "crown-schedules", editingId));
+      showToast("Jadwal berhasil dihapus!");
+    } else {
+      // Jadwal latihan reguler dibangkitkan dari aturan hari, tidak punya
+      // dokumen untuk dihapus. Sebelumnya kondisi ini diam-diam tidak
+      // melakukan apa pun tapi tetap menampilkan toast "berhasil dihapus".
+      // Meniadakan latihan = menyimpan override berstatus libur.
+      const date = new Date(editingDate + "T00:00:00");
+      const dayOfWeek = date.getDay();
+      await addDoc(collection(db, "crown-schedules"), {
+        date: editingDate,
+        dayName: DAY_NAMES_ID[dayOfWeek],
+        isRegular: REGULAR_DAYS.has(dayOfWeek),
+        status: "libur",
+        note: editForm.note || "Latihan ditiadakan",
+      });
+      showToast("Latihan ditiadakan untuk tanggal ini.");
     }
 
     triggerCalendarSync();
     setEditDialogOpen(false);
     setEditingDate(null);
     setEditingId(null);
-    showToast("Jadwal berhasil dihapus!");
   };
 
   const addCustomSchedule = async () => {
@@ -2244,7 +2260,7 @@ export default function JadwalPage() {
                 variant="outline"
                 className="border-red-500/30 text-red-400 hover:bg-red-500/10"
               >
-                Hapus
+                {editingId ? "Hapus" : "Tiadakan"}
               </Button>
               <Button
                 onClick={saveSchedule}
