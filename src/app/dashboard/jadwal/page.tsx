@@ -654,9 +654,14 @@ export default function JadwalPage() {
     if (!editingDate) return;
 
     if (editingId) {
-      // Jadwal custom (tambahan / hasil edit) — dokumennya nyata, hapus saja.
+      // Jadwal custom (tambahan / hasil edit / penanda libur) — dokumennya
+      // nyata, hapus saja. Menghapus penanda libur = latihan reguler aktif lagi.
       await deleteDoc(doc(db, "crown-schedules", editingId));
-      showToast("Jadwal berhasil dihapus!");
+      showToast(
+        editForm.status === "libur"
+          ? "Latihan diaktifkan lagi."
+          : "Jadwal berhasil dihapus!"
+      );
     } else {
       // Jadwal latihan reguler dibangkitkan dari aturan hari, tidak punya
       // dokumen untuk dihapus. Sebelumnya kondisi ini diam-diam tidak
@@ -2260,7 +2265,11 @@ export default function JadwalPage() {
                 variant="outline"
                 className="border-red-500/30 text-red-400 hover:bg-red-500/10"
               >
-                {editingId ? "Hapus" : "Tiadakan"}
+                {!editingId
+                  ? "Tiadakan"
+                  : editForm.status === "libur"
+                  ? "Aktifkan Lagi"
+                  : "Hapus"}
               </Button>
               <Button
                 onClick={saveSchedule}
