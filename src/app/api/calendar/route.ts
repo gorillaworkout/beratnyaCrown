@@ -92,7 +92,9 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
   const db = await getAdminDb();
   
   // Custom dates from Firestore override regular logic
-  const customEventsMap = new Map<string, any>();
+  // Satu tanggal bisa punya beberapa jadwal (Bandung & Jakarta), jadi map-nya
+  // menyimpan array — bukan satu doc yang saling menimpa.
+  const customEventsMap = new Map<string, any[]>();
   if (db) {
     try {
       const snap = await db.collection("crown-schedules")
@@ -100,7 +102,9 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         .get();
       snap.forEach((doc: { data: () => any; }) => {
         const data = doc.data();
-        customEventsMap.set(data.date, data);
+        const list = customEventsMap.get(data.date) ?? [];
+        list.push(data);
+        customEventsMap.set(data.date, list);
       });
     } catch (err) {
       console.warn("Could not fetch custom schedules from Firestore (ICS sync)", err);
@@ -120,13 +124,15 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
       if (d < TRAINING_START) continue;
 
       const dateStr = `${year}-${padDate(month + 1)}-${padDate(day)}`;
-      const isCustom = customEventsMap.has(dateStr);
-      const customData = customEventsMap.get(dateStr);
+      const customList = customEventsMap.get(dateStr) ?? [];
 
-      if (isCustom) {
-        if (customData.status === "libur") {
-          schedule.push({ date: dateStr, status: "libur", holidayName: customData.note });
-        } else {
+      if (customList.length > 0) {
+        for (const customData of customList) {
+          if (customData.status === "libur") {
+            schedule.push({ date: dateStr, status: "libur", holidayName: customData.note });
+            continue;
+          }
+
           // Determine color based on data or fallback to deterministic
           let colorIdx = -1;
           if (customData.shirtColor) {
@@ -236,7 +242,8 @@ export async function GET() {
       if (entry.status === "libur") continue;
 
       const dateCompact = entry.date.replace(/-/g, "");
-      const uid = `crown-training-${entry.date}@crownallstar.id`;
+      const uidSuffix = entry.status === "pembayaran" ? "pembayaran" : (entry.city ?? "default");
+      const uid = `crown-training-${entry.date}-${uidSuffix.toLowerCase()}@crownallstar.id`;
       
 
       let title = entry.status === "tambahan" ? "Latihan Ekstra Crown" : "Latihan Crown Allstar";

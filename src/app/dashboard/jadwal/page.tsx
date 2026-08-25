@@ -194,6 +194,15 @@ function formatTime(timeStr: string): string {
   return `${hours}:${minutes}`;
 }
 
+// Satu tanggal bisa punya beberapa jadwal (Bandung & Jakarta). Untuk pertanyaan
+// "hari ini latihan atau tidak" — dipakai hitung sesi, rotasi piket, dan daftar
+// latihan mendatang — hari dihitung latihan bila ADA SATU kota yang latihan.
+function pickDaySchedule(all: ScheduleEntry[], dateStr: string): ScheduleEntry | undefined {
+  const sameDay = all.filter((s) => s.date === dateStr);
+  if (sameDay.length === 0) return undefined;
+  return sameDay.find((s) => s.status === "latihan" || s.status === "tambahan") ?? sameDay[0];
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function JadwalPage() {
@@ -211,6 +220,10 @@ export default function JadwalPage() {
   // Edit dialog state
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editingDate, setEditingDate] = useState<string | null>(null);
+  // Doc id jadwal yang sedang diedit. Wajib dipakai untuk update/delete:
+  // satu tanggal bisa punya beberapa jadwal (Bandung & Jakarta), jadi mencari
+  // ulang by date akan menimpa/menghapus jadwal kota yang salah.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState({
     status: "latihan" as ScheduleStatus,
     timeStart: "",
@@ -412,8 +425,10 @@ export default function JadwalPage() {
       const dayOfWeek = date.getDay();
       const dayName = DAY_NAMES_ID[dayOfWeek];
 
-      // Check if there's custom schedule in Firestore
-      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      // Bisa ada lebih dari satu jadwal per tanggal — mis. Bandung & Jakarta
+      // latihan di hari yang sama dengan jam/jersey berbeda.
+      const customSchedules = scheduleData.filter((s) => s.date === dateStr);
+      const customSchedule = customSchedules[0];
       const holidayName = isHoliday(dateStr);
 
       // Cek apakah ada event/lomba di hari ini
@@ -424,7 +439,7 @@ export default function JadwalPage() {
       
       // Hari Latihan = jika ada custom jadwal Latihan, atau (hari reguler, TIDAK ADA event, TIDAK ADA jadwal libur)
       const isTrainingDay = 
-        (customSchedule?.status === "latihan" || customSchedule?.status === "tambahan") || 
+        customSchedules.some((s) => s.status === "latihan" || s.status === "tambahan") || 
         (!customSchedule && isRegular && !isEventDay);
       
       if (isTrainingDay) {
@@ -437,20 +452,22 @@ export default function JadwalPage() {
         // Fallback time to default if custom schedule doesn't have it defined properly
         const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
         const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
-        
-        entries.push({
-          ...customSchedule,
-          date: dateStr,
-          dayName,
-          isRegular: REGULAR_DAYS.has(dayOfWeek),
-          timeStart: customSchedule.timeStart || defaultTimeStart,
-          timeEnd: customSchedule.timeEnd || defaultTimeEnd,
-          shirtColor: customSchedule.shirtColor || currentShirtColor,
-          city: customSchedule.city || DEFAULT_CITY,
-          holidayName,
-          eventName: isEventDay ? isEventDay.name : undefined,
-          eventEmoji: isEventDay ? isEventDay.emoji : undefined,
-        });
+
+        for (const cs of customSchedules) {
+          entries.push({
+            ...cs,
+            date: dateStr,
+            dayName,
+            isRegular: REGULAR_DAYS.has(dayOfWeek),
+            timeStart: cs.timeStart || defaultTimeStart,
+            timeEnd: cs.timeEnd || defaultTimeEnd,
+            shirtColor: cs.shirtColor || currentShirtColor,
+            city: cs.city || DEFAULT_CITY,
+            holidayName,
+            eventName: isEventDay ? isEventDay.name : undefined,
+            eventEmoji: isEventDay ? isEventDay.emoji : undefined,
+          });
+        }
       } else if (isEventDay) {
         entries.push({
           date: dateStr,
@@ -493,7 +510,9 @@ export default function JadwalPage() {
       }
     }
 
-    return entries.sort((a, b) => a.date.localeCompare(b.date));
+    return entries.sort(
+      (a, b) => a.date.localeCompare(b.date) || (a.city ?? "").localeCompare(b.city ?? "")
+    );
   }, [currentYear, currentMonth, scheduleData, events]);
 
   // ─── Calendar Grid Memo ──────────────────────────────────────────────────
@@ -577,6 +596,7 @@ export default function JadwalPage() {
 
   const openEditDialog = (entry: ScheduleEntry) => {
     setEditingDate(entry.date);
+    setEditingId(entry.id ?? null);
     
     // Apply correct default time based on day if missing
     const dateObj = new Date(entry.date + "T00:00:00");
@@ -615,11 +635,8 @@ export default function JadwalPage() {
       ...(selectedShirt ? { shirtColor: selectedShirt } : {}),
     };
 
-    // Check if entry already exists
-    const existing = scheduleData.find((s) => s.date === editingDate);
-
-    if (existing?.id) {
-      await updateDoc(doc(db, "crown-schedules", existing.id), scheduleEntry);
+    if (editingId) {
+      await updateDoc(doc(db, "crown-schedules", editingId), scheduleEntry);
     } else {
       await addDoc(collection(db, "crown-schedules"), scheduleEntry);
     }
@@ -627,20 +644,21 @@ export default function JadwalPage() {
     triggerCalendarSync();
     setEditDialogOpen(false);
     setEditingDate(null);
+    setEditingId(null);
     showToast("Jadwal berhasil disimpan!");
   };
 
   const deleteSchedule = async () => {
     if (!editingDate) return;
 
-    const existing = scheduleData.find((s) => s.date === editingDate);
-    if (existing?.id) {
-      await deleteDoc(doc(db, "crown-schedules", existing.id));
+    if (editingId) {
+      await deleteDoc(doc(db, "crown-schedules", editingId));
     }
 
     triggerCalendarSync();
     setEditDialogOpen(false);
     setEditingDate(null);
+    setEditingId(null);
     showToast("Jadwal berhasil dihapus!");
   };
 
@@ -727,7 +745,7 @@ export default function JadwalPage() {
       const dayOfWeek = current.getDay();
       
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
-      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      const customSchedule = pickDaySchedule(scheduleData, dateStr);
       const isEvent = events.some((e) => e.date === dateStr);
       const holidayName = isHoliday(dateStr);
       
@@ -1025,7 +1043,7 @@ export default function JadwalPage() {
       
       const dayOfWeek = current.getDay();
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
-      const customSchedule = scheduleData.find((s) => s.date === dateStr);
+      const customSchedule = pickDaySchedule(scheduleData, dateStr);
       const isEvent = events.some((e) => e.date === dateStr);
       
       let isTrainingDay = false;
@@ -1158,7 +1176,7 @@ export default function JadwalPage() {
       const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, "0")}-${String(current.getDate()).padStart(2, "0")}`;
       const dayOfWeek = current.getDay();
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
-      const customSchedule = scheduleData.find(s => s.date === dateStr);
+      const customSchedule = pickDaySchedule(scheduleData, dateStr);
       const isEvent = events.some(e => e.date === dateStr);
       let isTrainingDay = false;
       if (customSchedule) {
@@ -1218,7 +1236,7 @@ export default function JadwalPage() {
   const totalSessions = validSessions.length;
   const regularCount = validSessions.filter((s) => s.isRegular).length;
   const extraCount = validSessions.filter((s) => !s.isRegular && s.status === "tambahan").length;
-  const todayEntry = schedule.find((s) => s.date === todayStr);
+  const todayEntry = pickDaySchedule(schedule, todayStr);
 
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100">
@@ -1506,7 +1524,14 @@ export default function JadwalPage() {
                 const dateStr = `${currentYear}-${String(
                   currentMonth + 1
                 ).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
-                const entry = schedule.find((s) => s.date === dateStr);
+                const dayEntries = schedule.filter((s) => s.date === dateStr);
+                const entry = dayEntries[0];
+                // Dua kota di hari yang sama: sel kalender terlalu kecil untuk
+                // dua kartu, jadi tampilkan titik per kota. Detail lengkap ada
+                // di daftar jadwal di bawah kalender.
+                const cityDots = dayEntries
+                  .filter((s) => s.city && s.status !== "libur" && s.status !== "event")
+                  .map((s) => s.city as City);
                 const isToday = dateStr === todayStr;
                 const isPast = dateStr < todayStr;
 
@@ -1561,6 +1586,19 @@ export default function JadwalPage() {
                       <span className={`text-[8px] text-white/80`}>
                         {entry.timeStart}
                       </span>
+                    )}
+                    {cityDots.length > 1 && (
+                      <div className="flex gap-0.5 mt-0.5">
+                        {cityDots.map((c) => (
+                          <span
+                            key={c}
+                            title={`Latihan ${c}`}
+                            className={`w-1.5 h-1.5 rounded-full ${
+                              c === "Jakarta" ? "bg-amber-300" : "bg-cyan-300"
+                            }`}
+                          />
+                        ))}
+                      </div>
                     )}
                     {entry?.holidayName && (
                       <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-zinc-400 shadow-md shadow-zinc-400/50" title={entry.holidayName} />
@@ -1686,7 +1724,7 @@ export default function JadwalPage() {
 
                 return (
                   <div
-                    key={entry.date}
+                    key={entry.id ?? `${entry.date}-${entry.city ?? "default"}`}
                     onClick={() => isAdmin && openEditDialog(entry)}
                     className={`flex items-center gap-3 rounded-xl p-3 transition-all ${
                       isEntryToday
@@ -1843,7 +1881,7 @@ export default function JadwalPage() {
                 const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
                 const holidayName = isHoliday(dateStr);
                 
-                const customSchedule = scheduleData.find((s) => s.date === dateStr);
+                const customSchedule = pickDaySchedule(scheduleData, dateStr);
                 const isEvent = events.find((e) => e.date === dateStr);
                 
                 let isTrainingDay = false;
@@ -2219,6 +2257,32 @@ export default function JadwalPage() {
               >
                 <UserX className="mr-2 h-4 w-4" />
                 Atur Izin Atlit
+              </Button>
+            )}
+
+            {isAdmin && editingDate && editForm.status !== "libur" && editForm.status !== "event" && (
+              <Button
+                onClick={() => {
+                  // Buka form tambah dengan tanggal yang sama dan kota lawan,
+                  // supaya latihan Bandung + Jakarta di hari yang sama dibuat
+                  // sebagai dua entry terpisah (jam & jersey bisa beda).
+                  const otherCity: City = editForm.city === "Jakarta" ? "Bandung" : "Jakarta";
+                  const dow = new Date(editingDate + "T00:00:00").getDay();
+                  setEditDialogOpen(false);
+                  setAddForm({
+                    date: editingDate,
+                    status: "latihan",
+                    timeStart: dow === 0 ? "10:00" : "19:00",
+                    timeEnd: dow === 0 ? "13:00" : "22:00",
+                    note: "",
+                    city: otherCity,
+                  });
+                  setAddDialogOpen(true);
+                }}
+                variant="outline"
+                className="w-full border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/10 mt-1"
+              >
+                + Tambah Latihan {editForm.city === "Jakarta" ? "Bandung" : "Jakarta"} di Tanggal Ini
               </Button>
             )}
           </div>
