@@ -125,6 +125,13 @@ const CITY_META: Record<City, { emoji: string; label: string; badge: string }> =
   Jakarta: { emoji: "🏙️", label: "Jakarta", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
   Gabungan: { emoji: "🤝", label: "Gabungan · di Bandung", badge: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30" },
 };
+// Kode pendek untuk sel kalender yang sempit.
+const CITY_CODE: Record<City, string> = { Bandung: "BDG", Jakarta: "JKT", Gabungan: "GAB" };
+const CITY_CHIP: Record<City, string> = {
+  Bandung: "bg-cyan-400/25 text-cyan-100",
+  Jakarta: "bg-amber-400/25 text-amber-100",
+  Gabungan: "bg-fuchsia-400/25 text-fuchsia-100",
+};
 
 type ScheduleEntry = {
   id?: string;
@@ -1576,7 +1583,20 @@ export default function JadwalPage() {
                 return (
                   <div
                     key={dateStr}
-                    onClick={() => isAdmin && entry && openEditDialog(entry)}
+                    onClick={() => {
+                      if (!isAdmin || !entry) return;
+                      // Sel kalender terlalu sempit untuk dua kartu. Kalau hari
+                      // itu punya dua jadwal, gulirkan ke daftar di bawah supaya
+                      // admin memilih kota yang benar — bukan diam-diam membuka
+                      // jadwal pertama seolah cuma ada satu.
+                      if (dayEntries.length > 1) {
+                        document
+                          .getElementById(`jadwal-${dateStr}`)
+                          ?.scrollIntoView({ behavior: "smooth", block: "center" });
+                        return;
+                      }
+                      openEditDialog(entry);
+                    }}
                     className={`
                       aspect-square rounded-xl flex flex-col items-center justify-center relative text-xs transition-all
                       ${
@@ -1605,25 +1625,24 @@ export default function JadwalPage() {
                     >
                       {cell}
                     </span>
-                    {entry?.timeStart && (
+                    {/* Jam hanya ditampilkan kalau sehari cuma ada satu latihan;
+                        kalau dua kota, jamnya beda dan menampilkan salah satu
+                        saja justru menyesatkan — ganti dengan kode kota. */}
+                    {entry?.timeStart && cityDots.length < 2 && (
                       <span className={`text-[8px] text-white/80`}>
                         {entry.timeStart}
                       </span>
                     )}
-                    {(cityDots.length > 1 || cityDots[0] === "Gabungan") && (
-                      <div className="flex gap-0.5 mt-0.5">
+                    {cityDots.length > 0 && (
+                      <div className="flex flex-wrap justify-center gap-0.5 mt-0.5 px-0.5">
                         {cityDots.map((c) => (
                           <span
                             key={c}
                             title={`Latihan ${CITY_META[c].label}`}
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              c === "Jakarta"
-                                ? "bg-amber-300"
-                                : c === "Gabungan"
-                                ? "bg-fuchsia-300"
-                                : "bg-cyan-300"
-                            }`}
-                          />
+                            className={`text-[7px] sm:text-[8px] font-bold leading-none rounded px-1 py-0.5 ${CITY_CHIP[c]}`}
+                          >
+                            {CITY_CODE[c]}
+                          </span>
                         ))}
                       </div>
                     )}
@@ -1652,6 +1671,17 @@ export default function JadwalPage() {
               <div className="flex items-center gap-1.5">
                 <div className="w-3 h-3 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600" />
                 <span>Event / Lomba</span>
+              </div>
+              <div className="flex items-center gap-1.5 w-full mt-1 flex-wrap">
+                <span className="text-slate-500 mr-1">Lokasi:</span>
+                {CITIES.map((c) => (
+                  <span key={c} className="flex items-center gap-1">
+                    <span className={`text-[9px] font-bold rounded px-1 py-0.5 ${CITY_CHIP[c]}`}>
+                      {CITY_CODE[c]}
+                    </span>
+                    <span className="text-slate-500">{CITY_META[c].label}</span>
+                  </span>
+                ))}
               </div>
               <div className="flex items-center gap-1.5 w-full mt-1">
                 <span className="text-slate-500 mr-1">Warna Latihan Rutin:</span>
@@ -1710,7 +1740,7 @@ export default function JadwalPage() {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {schedule.map((entry) => {
+              {schedule.map((entry, entryIdx) => {
                 const isEntryToday = entry.date === todayStr;
                 const d = new Date(entry.date + "T00:00:00");
 
@@ -1752,6 +1782,9 @@ export default function JadwalPage() {
                 return (
                   <div
                     key={entry.id ?? `${entry.date}-${entry.city ?? "default"}`}
+                    {...(schedule.findIndex((s) => s.date === entry.date) === entryIdx
+                      ? { id: `jadwal-${entry.date}` }
+                      : {})}
                     onClick={() => isAdmin && openEditDialog(entry)}
                     className={`flex items-center gap-3 rounded-xl p-3 transition-all ${
                       isEntryToday
@@ -1772,6 +1805,14 @@ export default function JadwalPage() {
                     <div className="flex-1 min-w-0">
                       <p className="font-semibold text-white text-sm">
                         {entry.status === "event" && entry.eventName ? entry.eventName : entry.dayName}
+                        {/* Dua kota di tanggal sama menghasilkan dua kartu yang
+                            judulnya identik kalau hanya nama hari — sebut kotanya
+                            supaya jelas kartu ini milik siapa. */}
+                        {entry.city && entry.status !== "libur" && entry.status !== "event" && (
+                          <span className={`ml-2 text-[10px] font-bold rounded px-1.5 py-0.5 ${CITY_CHIP[entry.city]}`}>
+                            {CITY_CODE[entry.city]}
+                          </span>
+                        )}
                         {entry.holidayName && (
                           <span className="ml-2 text-[10px] text-zinc-400 font-normal">({entry.holidayName})</span>
                         )}
