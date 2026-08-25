@@ -18,10 +18,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ShieldAlert, CheckCircle2, XCircle, Users, UserPlus, Trash2, Edit2, Check, X, Plus, Filter } from "lucide-react";
+import { ShieldAlert, CheckCircle2, XCircle, Users, UserPlus, Trash2, Edit2, Check, X, Plus, Filter, Clock, MapPin } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { db } from "@/lib/firebase";
-import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc } from "firebase/firestore";
+import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, query, orderBy, limit } from "firebase/firestore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
@@ -97,6 +97,25 @@ const MULTI = {
 };
 const divMeta = (d: string) => DIV_META[d] ?? DIV_UNSET;
 
+type LoginLog = {
+  id: string;
+  email: string;
+  name: string;
+  city: string;
+  coords: { lat: number; lng: number; accuracy: number | null } | null;
+  loginAt: Date | null;
+};
+
+const formatLoginTime = (d: Date | null) =>
+  d
+    ? d.toLocaleString("id-ID", {
+        day: "2-digit",
+        month: "short",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "—";
+
 function DivisionPills({ divisions, size = "sm" }: { divisions: string[]; size?: "sm" | "xs" }) {
   if (!divisions || divisions.length === 0) return (
     <span className={`inline-flex items-center rounded-full bg-slate-500/20 text-slate-400 border border-slate-500/20 font-medium ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
@@ -131,6 +150,40 @@ export default function AthletesDashboardPage() {
   const [editingAthleteRole, setEditingAthleteRole] = useState<AthleteRole>("athlete");
   const [filterDivision, setFilterDivision] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
+  const [gpsShared, setGpsShared] = useState(false);
+  const [gpsError, setGpsError] = useState("");
+
+  useEffect(() => {
+    setGpsShared(!!localStorage.getItem("crown-share-gps-coords"));
+  }, []);
+
+  useEffect(() => {
+    // Hanya admin yang berlangganan. Menyembunyikan tabel di UI saja tidak
+    // cukup — tanpa guard ini setiap anggota tetap mengunduh log semua orang
+    // dan bisa membacanya lewat DevTools.
+    if (!isAdmin) {
+      setLoginLogs([]);
+      return;
+    }
+    const q = query(collection(db, "crown-logins"), orderBy("loginAt", "desc"), limit(100));
+    const unsub = onSnapshot(q, (snap) => {
+      setLoginLogs(
+        snap.docs.map((d) => {
+          const data = d.data() as any;
+          return {
+            id: d.id,
+            email: data.email || "",
+            name: data.name || "",
+            city: data.city || "",
+            coords: data.coords ?? null,
+            loginAt: data.loginAt?.toDate?.() ?? null,
+          };
+        })
+      );
+    });
+    return () => unsub();
+  }, [isAdmin]);
 
   useEffect(() => {
     const unsub = onSnapshot(collection(db, "crown-athletes"), (snap) => {
@@ -321,6 +374,10 @@ export default function AthletesDashboardPage() {
             <TabsTrigger value="users" className="flex-1 data-[state=active]:bg-rose-500/20 data-[state=active]:text-rose-300 text-slate-400 text-xs sm:text-sm py-2">
               <Users className="h-3.5 w-3.5 mr-1.5" />
               Pengguna App
+            </TabsTrigger>
+            <TabsTrigger value="logins" className="flex-1 data-[state=active]:bg-emerald-500/20 data-[state=active]:text-emerald-300 text-slate-400 text-xs sm:text-sm py-2">
+              <Clock className="h-3.5 w-3.5 mr-1.5" />
+              Aktivitas
             </TabsTrigger>
           </TabsList>
 
@@ -781,6 +838,120 @@ export default function AthletesDashboardPage() {
                 </div>
               </CardContent>
             </Card>
+          </TabsContent>
+
+          {/* ===== LOGIN ACTIVITY TAB ===== */}
+          <TabsContent value="logins" className="mt-0">
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/10 bg-white/5 p-4 space-y-2">
+                <div className="flex items-start gap-2">
+                  <MapPin className="h-4 w-4 text-emerald-300 mt-0.5 shrink-0" />
+                  <div className="space-y-1">
+                    <p className="text-sm text-white font-medium">Lokasi presisi (opsional)</p>
+                    <p className="text-xs text-slate-400">
+                      Aktivitas login otomatis mencatat kota berdasarkan jaringan.
+                      Kalau kamu ingin lokasimu tercatat lebih detail, kamu bisa
+                      mengizinkan GPS. Sepenuhnya opsional dan bisa dimatikan kapan saja.
+                    </p>
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-1">
+                  {gpsShared ? (
+                    <button
+                      onClick={() => {
+                        localStorage.removeItem("crown-share-gps-coords");
+                        setGpsShared(false);
+                        setGpsError("");
+                      }}
+                      className="px-3 py-2 rounded-lg text-xs font-medium text-rose-300 border border-rose-500/30 hover:bg-rose-500/10 transition-all"
+                    >
+                      Matikan berbagi GPS
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        setGpsError("");
+                        if (!navigator.geolocation) {
+                          setGpsError("Perangkat ini tidak mendukung GPS.");
+                          return;
+                        }
+                        navigator.geolocation.getCurrentPosition(
+                          (pos) => {
+                            localStorage.setItem(
+                              "crown-share-gps-coords",
+                              JSON.stringify({
+                                lat: pos.coords.latitude,
+                                lng: pos.coords.longitude,
+                                accuracy: pos.coords.accuracy,
+                              })
+                            );
+                            setGpsShared(true);
+                          },
+                          () => setGpsError("Izin lokasi ditolak atau tidak tersedia.")
+                        );
+                      }}
+                      className="px-3 py-2 rounded-lg text-xs font-medium text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/10 transition-all"
+                    >
+                      Izinkan GPS
+                    </button>
+                  )}
+                </div>
+                {gpsError ? <p className="text-xs text-rose-400">{gpsError}</p> : null}
+              </div>
+
+              {isAdmin ? (
+                <Card className="bg-white/5 border-white/10">
+                  <CardHeader>
+                    <CardTitle className="text-white text-base flex items-center gap-2">
+                      <Clock className="h-4 w-4 text-emerald-300" />
+                      Aktivitas Login Terakhir
+                    </CardTitle>
+                    <CardDescription className="text-slate-400 text-xs">
+                      100 kunjungan terakhir. Satu catatan per sesi.
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    {loginLogs.length === 0 ? (
+                      <p className="text-sm text-slate-500 py-6 text-center">Belum ada aktivitas tercatat.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {loginLogs.map((log) => (
+                          <div
+                            key={log.id}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2"
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm text-white truncate">{log.name || log.email || "—"}</p>
+                              <p className="text-[11px] text-slate-400 truncate">{log.email}</p>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <p className="text-xs text-slate-300">{formatLoginTime(log.loginAt)}</p>
+                              <p className="text-[11px] text-slate-500">
+                                {log.city || "Lokasi tidak diketahui"}
+                                {log.coords ? (
+                                  <a
+                                    href={`https://www.google.com/maps?q=${log.coords.lat},${log.coords.lng}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="ml-1.5 text-emerald-400 hover:underline"
+                                  >
+                                    peta
+                                  </a>
+                                ) : null}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ) : (
+                <p className="text-sm text-slate-500 py-6 text-center">
+                  Daftar aktivitas hanya bisa dilihat admin.
+                </p>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>

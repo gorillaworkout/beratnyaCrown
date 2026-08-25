@@ -72,9 +72,21 @@ type ScheduleStatus = "latihan" | "libur" | "tambahan" | "pembayaran";
 
 // Sejak September 2026 latihan terbagi Bandung/Jakarta. Default Bandung agar
 // jadwal lama tanpa field `city` tidak berubah artinya.
-type City = "Bandung" | "Jakarta";
+// "Gabungan" = kedua tim latihan bersama, tempatnya di Bandung.
+type City = "Bandung" | "Jakarta" | "Gabungan";
 const DEFAULT_CITY: City = "Bandung";
-const CITY_EMOJI: Record<City, string> = { Bandung: "🏔️", Jakarta: "🏙️" };
+const CITY_EMOJI: Record<City, string> = { Bandung: "🏔️", Jakarta: "🏙️", Gabungan: "🤝" };
+const CITY_LABEL: Record<City, string> = {
+  Bandung: "Bandung",
+  Jakarta: "Jakarta",
+  Gabungan: "Latihan Gabungan",
+};
+// Tempat fisik latihan — gabungan selalu digelar di Bandung.
+const CITY_VENUE: Record<City, string> = {
+  Bandung: "Bandung",
+  Jakarta: "Jakarta",
+  Gabungan: "Bandung",
+};
 type ScheduleEntry = {
   date: string;
   status: ScheduleStatus;
@@ -156,7 +168,10 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
             timeEnd: customData.timeEnd || (d.getDay() === 0 ? "13:00" : "22:00"),
             note: customData.note,
             shirtColor: colorIdx !== -1 ? SHIRT_COLORS[colorIdx] : undefined,
-            city: customData.city === "Jakarta" ? "Jakarta" : DEFAULT_CITY,
+            city:
+              customData.city === "Jakarta" || customData.city === "Gabungan"
+                ? customData.city
+                : DEFAULT_CITY,
           });
         }
         continue;
@@ -260,7 +275,7 @@ export async function GET() {
       }
 
       if (entry.status !== "pembayaran" && entry.city) {
-        title = `${title} — ${CITY_EMOJI[entry.city]} ${entry.city}`;
+        title = `${title} — ${CITY_EMOJI[entry.city]} ${CITY_LABEL[entry.city]}`;
       }
 
 
@@ -273,7 +288,11 @@ export async function GET() {
         descParts.push(`👕 Jersey: ${entry.shirtColor.name}`);
       }
       if (entry.status !== "pembayaran" && entry.city) {
-        descParts.push(`📍 Lokasi: ${entry.city}`);
+        descParts.push(
+          entry.city === "Gabungan"
+            ? "📍 Lokasi: Bandung (latihan gabungan Bandung + Jakarta)"
+            : `📍 Lokasi: ${entry.city}`
+        );
       }
       if (entry.note) descParts.push(`📝 Catatan: ${entry.note}`);
       
@@ -295,7 +314,7 @@ export async function GET() {
       lines.push(`UID:${uid}`);
       lines.push(`SUMMARY:${escapeICS(title)}`);
       if (entry.status !== "pembayaran" && entry.city) {
-        lines.push(`LOCATION:${escapeICS(entry.city)}`);
+        lines.push(`LOCATION:${escapeICS(CITY_VENUE[entry.city])}`);
       }
       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
       

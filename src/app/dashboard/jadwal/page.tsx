@@ -116,12 +116,14 @@ type ScheduleStatus = "latihan" | "libur" | "tambahan" | "event";
 
 // Mulai September 2026 latihan terbagi dua kota. Bandung tetap default supaya
 // jadwal lama yang belum punya field `city` tidak berubah artinya.
-const CITIES = ["Bandung", "Jakarta"] as const;
+// "Gabungan" = kedua tim latihan bersama, selalu bertempat di Bandung.
+const CITIES = ["Bandung", "Jakarta", "Gabungan"] as const;
 type City = typeof CITIES[number];
 const DEFAULT_CITY: City = "Bandung";
-const CITY_META: Record<City, { emoji: string; badge: string }> = {
-  Bandung: { emoji: "🏔️", badge: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
-  Jakarta: { emoji: "🏙️", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+const CITY_META: Record<City, { emoji: string; label: string; badge: string }> = {
+  Bandung: { emoji: "🏔️", label: "Bandung", badge: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
+  Jakarta: { emoji: "🏙️", label: "Jakarta", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+  Gabungan: { emoji: "🤝", label: "Gabungan · di Bandung", badge: "bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30" },
 };
 
 type ScheduleEntry = {
@@ -1587,14 +1589,18 @@ export default function JadwalPage() {
                         {entry.timeStart}
                       </span>
                     )}
-                    {cityDots.length > 1 && (
+                    {(cityDots.length > 1 || cityDots[0] === "Gabungan") && (
                       <div className="flex gap-0.5 mt-0.5">
                         {cityDots.map((c) => (
                           <span
                             key={c}
-                            title={`Latihan ${c}`}
+                            title={`Latihan ${CITY_META[c].label}`}
                             className={`w-1.5 h-1.5 rounded-full ${
-                              c === "Jakarta" ? "bg-amber-300" : "bg-cyan-300"
+                              c === "Jakarta"
+                                ? "bg-amber-300"
+                                : c === "Gabungan"
+                                ? "bg-fuchsia-300"
+                                : "bg-cyan-300"
                             }`}
                           />
                         ))}
@@ -1809,7 +1815,7 @@ export default function JadwalPage() {
                           )}
                           {entry.city && entry.status !== "libur" && (
                             <Badge variant="outline" className={`mt-1 block text-[10px] border ${CITY_META[entry.city].badge}`}>
-                              {CITY_META[entry.city].emoji} {entry.city}
+                              {CITY_META[entry.city].emoji} {CITY_META[entry.city].label}
                             </Badge>
                           )}
                         </div>
@@ -2260,7 +2266,7 @@ export default function JadwalPage() {
               </Button>
             )}
 
-            {isAdmin && editingDate && editForm.status !== "libur" && editForm.status !== "event" && (
+            {isAdmin && editingDate && editForm.status !== "libur" && editForm.status !== "event" && editForm.city !== "Gabungan" && (
               <Button
                 onClick={() => {
                   // Buka form tambah dengan tanggal yang sama dan kota lawan,

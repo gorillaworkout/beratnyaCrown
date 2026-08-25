@@ -65,6 +65,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           console.error("Error upserting athlete:", error);
           setIsAdmin(firebaseUser.email === OWNER_EMAIL);
         }
+
+        // Catat kunjungan. Satu catatan per sesi tab supaya refresh halaman
+        // tidak membanjiri koleksi. Gagal mencatat tidak boleh memblokir login.
+        try {
+          const key = `crown-login-logged-${firebaseUser.uid}`;
+          if (!sessionStorage.getItem(key)) {
+            sessionStorage.setItem(key, "1");
+            const coordsRaw = localStorage.getItem("crown-share-gps-coords");
+            void fetch("/api/login-log", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                uid: firebaseUser.uid,
+                email: firebaseUser.email,
+                name: firebaseUser.displayName,
+                coords: coordsRaw ? JSON.parse(coordsRaw) : null,
+              }),
+            }).catch(() => {});
+          }
+        } catch {
+          // sessionStorage bisa diblokir di mode privat — abaikan.
+        }
       } else {
         setIsAdmin(false);
       }
