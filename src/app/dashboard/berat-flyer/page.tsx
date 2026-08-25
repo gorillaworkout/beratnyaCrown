@@ -31,6 +31,14 @@ import {
   TableHeader,
   TableRow
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from "@/components/ui/dialog";
 import { db } from "@/lib/firebase";
 
 type PenaltyPlan = {
@@ -353,6 +361,11 @@ export default function DashboardPage() {
   const [allAthleteLogs, setAllAthleteLogs] = useState<Record<string, WeightLog[]>>({});
   const [allLogsLoading, setAllLogsLoading] = useState(false);
 
+  const [resetDialogOpen, setResetDialogOpen] = useState(false);
+  const [resetConfirmText, setResetConfirmText] = useState("");
+  const [resetError, setResetError] = useState("");
+  const [isResetting, setIsResetting] = useState(false);
+
 
   useEffect(() => {
     const athletesQuery = query(collection(db, "athletes"), orderBy("name"));
@@ -606,6 +619,40 @@ export default function DashboardPage() {
 
   
 
+  const handleResetSession = async () => {
+    setResetError("");
+    if (!isAdmin) {
+      setResetError("Hanya admin yang bisa reset sesi.");
+      return;
+    }
+    if (resetConfirmText.trim().toUpperCase() !== "RESET") {
+      setResetError('Ketik RESET untuk konfirmasi.');
+      return;
+    }
+
+    try {
+      setIsResetting(true);
+      const response = await fetch("/api/athletes/reset", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "RESET" })
+      });
+      const result = await response.json();
+      if (!response.ok || !result?.ok) {
+        setResetError(result?.message ?? "Gagal reset sesi.");
+        return;
+      }
+      setResetDialogOpen(false);
+      setResetConfirmText("");
+      setDetailAthleteId("");
+      setRefreshTrigger((prev) => prev + 1);
+    } catch {
+      setResetError("Terjadi kesalahan saat reset sesi.");
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   const handleAddAthlete = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAddError("");
@@ -830,8 +877,56 @@ export default function DashboardPage() {
               </p>
             </div>
           </div>
-          
+
+          {isAdmin ? (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setResetError(""); setResetConfirmText(""); setResetDialogOpen(true); }}
+              className="border-red-500/40 bg-red-500/10 text-red-200 hover:bg-red-500/20 hover:text-red-100"
+            >
+              Reset Sesi Latihan
+            </Button>
+          ) : null}
         </header>
+
+        <Dialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
+          <DialogContent className="border-white/10 bg-slate-950 text-white">
+            <DialogHeader>
+              <DialogTitle className="text-red-300">Reset Sesi Latihan</DialogTitle>
+              <DialogDescription className="text-slate-300">
+                Seluruh riwayat log berat semua athlete akan dihapus permanen dan
+                tidak bisa dikembalikan. Nama athlete, berat terakhir, dan goal
+                tetap tersimpan sebagai titik awal sesi baru.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-2">
+              <Label htmlFor="reset-confirm">Ketik <span className="font-semibold text-red-300">RESET</span> untuk konfirmasi</Label>
+              <Input
+                id="reset-confirm"
+                value={resetConfirmText}
+                onChange={(event) => setResetConfirmText(event.target.value)}
+                placeholder="RESET"
+                autoComplete="off"
+                className="bg-black/40 border-white/10"
+              />
+              {resetError ? <p className="text-sm text-destructive">{resetError}</p> : null}
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="ghost" onClick={() => setResetDialogOpen(false)} disabled={isResetting}>
+                Batal
+              </Button>
+              <Button
+                type="button"
+                onClick={handleResetSession}
+                disabled={isResetting || resetConfirmText.trim().toUpperCase() !== "RESET"}
+                className="bg-red-600 text-white hover:bg-red-500"
+              >
+                {isResetting ? "Menghapus..." : "Hapus & Mulai Sesi Baru"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
 
         {loadError ? (
           <p className="text-sm text-destructive">{loadError}</p>

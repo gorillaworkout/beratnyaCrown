@@ -69,6 +69,12 @@ function escapeICS(text: string): string {
 }
 
 type ScheduleStatus = "latihan" | "libur" | "tambahan" | "pembayaran";
+
+// Sejak September 2026 latihan terbagi Bandung/Jakarta. Default Bandung agar
+// jadwal lama tanpa field `city` tidak berubah artinya.
+type City = "Bandung" | "Jakarta";
+const DEFAULT_CITY: City = "Bandung";
+const CITY_EMOJI: Record<City, string> = { Bandung: "🏔️", Jakarta: "🏙️" };
 type ScheduleEntry = {
   date: string;
   status: ScheduleStatus;
@@ -76,6 +82,7 @@ type ScheduleEntry = {
   timeEnd?: string;
   note?: string;
   shirtColor?: typeof SHIRT_COLORS[number];
+  city?: City;
   holidayName?: string;
 };
 
@@ -143,6 +150,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
             timeEnd: customData.timeEnd || (d.getDay() === 0 ? "13:00" : "22:00"),
             note: customData.note,
             shirtColor: colorIdx !== -1 ? SHIRT_COLORS[colorIdx] : undefined,
+            city: customData.city === "Jakarta" ? "Jakarta" : DEFAULT_CITY,
           });
         }
         continue;
@@ -160,6 +168,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
              timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
              holidayName: holidayCheck,
              shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr)]
+             , city: DEFAULT_CITY
            });
         }
         continue;
@@ -175,6 +184,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           timeStart: d.getDay() === 0 ? "10:00" : "19:00",
           timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
           shirtColor: SHIRT_COLORS[colorIdx],
+          city: DEFAULT_CITY,
         });
       }
     }
@@ -242,6 +252,10 @@ export async function GET() {
         title = `${entry.shirtColor.emoji} ${title}`;
       }
 
+      if (entry.status !== "pembayaran" && entry.city) {
+        title = `${title} — ${CITY_EMOJI[entry.city]} ${entry.city}`;
+      }
+
 
       let descParts = [];
       if (entry.holidayName) {
@@ -250,6 +264,9 @@ export async function GET() {
       
       if (entry.shirtColor) {
         descParts.push(`👕 Jersey: ${entry.shirtColor.name}`);
+      }
+      if (entry.status !== "pembayaran" && entry.city) {
+        descParts.push(`📍 Lokasi: ${entry.city}`);
       }
       if (entry.note) descParts.push(`📝 Catatan: ${entry.note}`);
       
@@ -270,6 +287,9 @@ export async function GET() {
       lines.push(`DTSTAMP:${timestamp}`);
       lines.push(`UID:${uid}`);
       lines.push(`SUMMARY:${escapeICS(title)}`);
+      if (entry.status !== "pembayaran" && entry.city) {
+        lines.push(`LOCATION:${escapeICS(entry.city)}`);
+      }
       if (description) lines.push(`DESCRIPTION:${escapeICS(description)}`);
       
 

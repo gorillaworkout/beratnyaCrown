@@ -114,6 +114,16 @@ const SHIRT_COLORS = [
 
 type ScheduleStatus = "latihan" | "libur" | "tambahan" | "event";
 
+// Mulai September 2026 latihan terbagi dua kota. Bandung tetap default supaya
+// jadwal lama yang belum punya field `city` tidak berubah artinya.
+const CITIES = ["Bandung", "Jakarta"] as const;
+type City = typeof CITIES[number];
+const DEFAULT_CITY: City = "Bandung";
+const CITY_META: Record<City, { emoji: string; badge: string }> = {
+  Bandung: { emoji: "🏔️", badge: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
+  Jakarta: { emoji: "🏙️", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
+};
+
 type ScheduleEntry = {
   id?: string;
   date: string;
@@ -124,6 +134,7 @@ type ScheduleEntry = {
   timeEnd?: string;
   note?: string;
   shirtColor?: typeof SHIRT_COLORS[number];
+  city?: City;
   holidayName?: string | null;
   eventName?: string;
   eventEmoji?: string;
@@ -206,6 +217,7 @@ export default function JadwalPage() {
     timeEnd: "",
     note: "",
     shirtColorName: "",
+    city: DEFAULT_CITY as City,
   });
 
   // Add dialog state
@@ -216,6 +228,7 @@ export default function JadwalPage() {
     timeStart: "19:00",
     timeEnd: "22:00",
     note: "",
+    city: DEFAULT_CITY as City,
   });
 
   // Event form state
@@ -433,6 +446,7 @@ export default function JadwalPage() {
           timeStart: customSchedule.timeStart || defaultTimeStart,
           timeEnd: customSchedule.timeEnd || defaultTimeEnd,
           shirtColor: customSchedule.shirtColor || currentShirtColor,
+          city: customSchedule.city || DEFAULT_CITY,
           holidayName,
           eventName: isEventDay ? isEventDay.name : undefined,
           eventEmoji: isEventDay ? isEventDay.emoji : undefined,
@@ -462,6 +476,7 @@ export default function JadwalPage() {
             timeStart: defaultTimeStart,
             timeEnd: defaultTimeEnd,
             shirtColor: currentShirtColor,
+            city: DEFAULT_CITY,
             holidayName
           });
         } else if (holidayName) {
@@ -575,6 +590,7 @@ export default function JadwalPage() {
       timeEnd: entry.timeEnd || defaultTimeEnd,
       note: entry.note || "",
       shirtColorName: entry.shirtColor?.name || "",
+      city: entry.city || DEFAULT_CITY,
     });
     setEditDialogOpen(true);
   };
@@ -595,6 +611,7 @@ export default function JadwalPage() {
       timeStart: editForm.timeStart,
       timeEnd: editForm.timeEnd,
       note: editForm.note,
+      city: editForm.city,
       ...(selectedShirt ? { shirtColor: selectedShirt } : {}),
     };
 
@@ -641,6 +658,7 @@ export default function JadwalPage() {
       timeStart: addForm.timeStart,
       timeEnd: addForm.timeEnd,
       note: addForm.note,
+      city: addForm.city,
     };
 
     await addDoc(collection(db, "crown-schedules"), scheduleEntry);
@@ -653,6 +671,7 @@ export default function JadwalPage() {
       timeStart: "19:00",
       timeEnd: "22:00",
       note: "",
+      city: DEFAULT_CITY,
     });
     showToast("Jadwal tambahan berhasil ditambahkan!");
   };
@@ -1750,6 +1769,11 @@ export default function JadwalPage() {
                               👕 {entry.shirtColor.name}
                             </Badge>
                           )}
+                          {entry.city && entry.status !== "libur" && (
+                            <Badge variant="outline" className={`mt-1 block text-[10px] border ${CITY_META[entry.city].badge}`}>
+                              {CITY_META[entry.city].emoji} {entry.city}
+                            </Badge>
+                          )}
                         </div>
                       ) : (
                         <p className="text-2xl">
@@ -2123,6 +2147,28 @@ export default function JadwalPage() {
                   </SelectContent>
                 </Select>
               </div>
+
+              <div className="mt-4">
+                <label className="text-sm text-slate-400 block mb-1.5">
+                  Lokasi Latihan
+                </label>
+                <div className="flex gap-2">
+                  {CITIES.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setEditForm({ ...editForm, city: c })}
+                      className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                        editForm.city === c
+                          ? CITY_META[c].badge
+                          : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/10"
+                      }`}
+                    >
+                      {CITY_META[c].emoji} {c}
+                    </button>
+                  ))}
+                </div>
+              </div>
               </>
             )}
 
@@ -2259,6 +2305,30 @@ export default function JadwalPage() {
                     }
                     className="bg-white/5 border-white/10 text-white [color-scheme:dark]"
                   />
+                </div>
+              </div>
+            )}
+
+            {addForm.status !== "libur" && addForm.status !== "event" && (
+              <div>
+                <label className="text-sm text-slate-400 block mb-1.5">
+                  Lokasi Latihan
+                </label>
+                <div className="flex gap-2">
+                  {CITIES.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setAddForm({ ...addForm, city: c })}
+                      className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
+                        addForm.city === c
+                          ? CITY_META[c].badge
+                          : "bg-white/5 text-slate-400 border-white/10 hover:bg-white/10"
+                      }`}
+                    >
+                      {CITY_META[c].emoji} {c}
+                    </button>
+                  ))}
                 </div>
               </div>
             )}

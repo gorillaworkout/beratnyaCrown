@@ -50,7 +50,52 @@ type Athlete = {
   role?: AthleteRole;
 };
 
-const DIVISIONS = ["All Girl", "Coed"] as const;
+const DIVISIONS = ["All Girl", "Coed", "C4"] as const;
+
+// Per-division styling. Tailwind needs literal class strings, so no interpolation here.
+const DIV_META: Record<string, { abbr: string; pill: string; sel: string; card: string; avatar: string; stat: string; num: string }> = {
+  "All Girl": {
+    abbr: "AG",
+    pill: "bg-pink-500/15 text-pink-300 border border-pink-500/25",
+    sel: "bg-pink-500/20 text-pink-300 border-pink-500/40 shadow-lg shadow-pink-500/5",
+    card: "border-pink-500/15 bg-pink-500/[0.03] hover:bg-pink-500/[0.07] hover:border-pink-500/30",
+    avatar: "bg-gradient-to-br from-pink-500/30 to-pink-600/20 text-pink-300 ring-1 ring-pink-500/20",
+    stat: "border-pink-500/40 bg-pink-500/10 shadow-lg shadow-pink-500/5",
+    num: "text-pink-300",
+  },
+  Coed: {
+    abbr: "Coed",
+    pill: "bg-sky-500/15 text-sky-300 border border-sky-500/25",
+    sel: "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-lg shadow-sky-500/5",
+    card: "border-sky-500/15 bg-sky-500/[0.03] hover:bg-sky-500/[0.07] hover:border-sky-500/30",
+    avatar: "bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-300 ring-1 ring-sky-500/20",
+    stat: "border-sky-500/40 bg-sky-500/10 shadow-lg shadow-sky-500/5",
+    num: "text-sky-300",
+  },
+  C4: {
+    abbr: "C4",
+    pill: "bg-emerald-500/15 text-emerald-300 border border-emerald-500/25",
+    sel: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40 shadow-lg shadow-emerald-500/5",
+    card: "border-emerald-500/15 bg-emerald-500/[0.03] hover:bg-emerald-500/[0.07] hover:border-emerald-500/30",
+    avatar: "bg-gradient-to-br from-emerald-500/30 to-emerald-600/20 text-emerald-300 ring-1 ring-emerald-500/20",
+    stat: "border-emerald-500/40 bg-emerald-500/10 shadow-lg shadow-emerald-500/5",
+    num: "text-emerald-300",
+  },
+};
+const DIV_UNSET = {
+  abbr: "—",
+  pill: "bg-slate-500/20 text-slate-400 border border-slate-500/20",
+  sel: "",
+  card: "border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15",
+  avatar: "bg-gradient-to-br from-slate-500/30 to-slate-600/20 text-slate-400 ring-1 ring-slate-500/20",
+  stat: "",
+  num: "text-white",
+};
+const MULTI = {
+  card: "border-purple-500/15 bg-purple-500/[0.03] hover:bg-purple-500/[0.07] hover:border-purple-500/30",
+  avatar: "bg-gradient-to-br from-pink-500/30 to-sky-500/30 text-purple-300 ring-1 ring-purple-500/20",
+};
+const divMeta = (d: string) => DIV_META[d] ?? DIV_UNSET;
 
 function DivisionPills({ divisions, size = "sm" }: { divisions: string[]; size?: "sm" | "xs" }) {
   if (!divisions || divisions.length === 0) return (
@@ -61,12 +106,8 @@ function DivisionPills({ divisions, size = "sm" }: { divisions: string[]; size?:
   return (
     <div className="flex items-center gap-1 flex-wrap">
       {divisions.map(div => (
-        <span key={div} className={`inline-flex items-center rounded-full font-medium ${
-          div === "All Girl" 
-            ? "bg-pink-500/15 text-pink-300 border border-pink-500/25" 
-            : "bg-sky-500/15 text-sky-300 border border-sky-500/25"
-        } ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
-          {div === "All Girl" ? "AG" : "Coed"}
+        <span key={div} className={`inline-flex items-center rounded-full font-medium ${divMeta(div).pill} ${size === "xs" ? "text-[10px] px-1.5 py-0.5" : "text-xs px-2 py-0.5"}`}>
+          {divMeta(div).abbr}
         </span>
       ))}
     </div>
@@ -114,12 +155,12 @@ export default function AthletesDashboardPage() {
     return sorted.filter(a => a.divisions.includes(filterDivision));
   }, [crownAthletes, filterDivision]);
 
-  const divisionCounts = useMemo(() => ({
-    all: crownAthletes.length,
-    "All Girl": crownAthletes.filter(a => a.divisions.includes("All Girl")).length,
-    "Coed": crownAthletes.filter(a => a.divisions.includes("Coed")).length,
-    unset: crownAthletes.filter(a => a.divisions.length === 0).length,
-  }), [crownAthletes]);
+  const divisionCounts = useMemo(() => {
+    const counts: Record<string, number> = { all: crownAthletes.length };
+    for (const div of DIVISIONS) counts[div] = crownAthletes.filter(a => a.divisions.includes(div)).length;
+    counts.unset = crownAthletes.filter(a => a.divisions.length === 0).length;
+    return counts;
+  }, [crownAthletes]);
 
   const handleAddAthlete = async () => {
     if (!newAthleteName.trim()) return;
@@ -288,40 +329,32 @@ export default function AthletesDashboardPage() {
             <div className="space-y-4">
 
               {/* Stats Cards */}
-              <div className="grid grid-cols-3 gap-2 sm:gap-3">
-                <button 
+              <div className="grid grid-cols-4 gap-2 sm:gap-3">
+                <button
                   onClick={() => setFilterDivision("all")}
                   className={`rounded-xl border p-3 sm:p-4 text-center transition-all ${
-                    filterDivision === "all" 
-                      ? "border-cyan-500/40 bg-cyan-500/10 shadow-lg shadow-cyan-500/5" 
+                    filterDivision === "all"
+                      ? "border-cyan-500/40 bg-cyan-500/10 shadow-lg shadow-cyan-500/5"
                       : "border-white/10 bg-white/5 hover:bg-white/10"
                   }`}
                 >
                   <p className="text-2xl sm:text-3xl font-bold text-white">{divisionCounts.all}</p>
                   <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">Total</p>
                 </button>
-                <button 
-                  onClick={() => setFilterDivision("All Girl")}
-                  className={`rounded-xl border p-3 sm:p-4 text-center transition-all ${
-                    filterDivision === "All Girl" 
-                      ? "border-pink-500/40 bg-pink-500/10 shadow-lg shadow-pink-500/5" 
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
-                  }`}
-                >
-                  <p className="text-2xl sm:text-3xl font-bold text-pink-300">{divisionCounts["All Girl"]}</p>
-                  <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">All Girl</p>
-                </button>
-                <button 
-                  onClick={() => setFilterDivision("Coed")}
-                  className={`rounded-xl border p-3 sm:p-4 text-center transition-all ${
-                    filterDivision === "Coed" 
-                      ? "border-sky-500/40 bg-sky-500/10 shadow-lg shadow-sky-500/5" 
-                      : "border-white/10 bg-white/5 hover:bg-white/10"
-                  }`}
-                >
-                  <p className="text-2xl sm:text-3xl font-bold text-sky-300">{divisionCounts["Coed"]}</p>
-                  <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">Coed</p>
-                </button>
+                {DIVISIONS.map(div => (
+                  <button
+                    key={div}
+                    onClick={() => setFilterDivision(div)}
+                    className={`rounded-xl border p-3 sm:p-4 text-center transition-all ${
+                      filterDivision === div
+                        ? divMeta(div).stat
+                        : "border-white/10 bg-white/5 hover:bg-white/10"
+                    }`}
+                  >
+                    <p className={`text-2xl sm:text-3xl font-bold ${divMeta(div).num}`}>{divisionCounts[div]}</p>
+                    <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{div}</p>
+                  </button>
+                ))}
               </div>
 
               {/* Add Button / Form */}
@@ -360,9 +393,7 @@ export default function AthletesDashboardPage() {
                           )}
                           className={`flex-1 py-2.5 rounded-lg text-sm font-medium border transition-all ${
                             isSelected
-                              ? div === "All Girl"
-                                ? "bg-pink-500/20 text-pink-300 border-pink-500/40 shadow-lg shadow-pink-500/5"
-                                : "bg-sky-500/20 text-sky-300 border-sky-500/40 shadow-lg shadow-sky-500/5"
+                              ? divMeta(div).sel
                               : "bg-black/20 text-slate-400 border-white/10 hover:bg-white/5"
                           }`}
                         >
@@ -440,13 +471,9 @@ export default function AthletesDashboardPage() {
                       className={`group relative rounded-xl border overflow-hidden transition-all ${
                         editingAthleteId === ath.id
                           ? "border-cyan-500/40 bg-cyan-500/5 col-span-2 sm:col-span-3 md:col-span-2"
-                          : ath.divisions.length === 2
-                            ? "border-purple-500/15 bg-purple-500/[0.03] hover:bg-purple-500/[0.07] hover:border-purple-500/30"
-                            : ath.divisions.includes("All Girl")
-                              ? "border-pink-500/15 bg-pink-500/[0.03] hover:bg-pink-500/[0.07] hover:border-pink-500/30"
-                              : ath.divisions.includes("Coed")
-                                ? "border-sky-500/15 bg-sky-500/[0.03] hover:bg-sky-500/[0.07] hover:border-sky-500/30"
-                                : "border-white/8 bg-white/[0.03] hover:bg-white/[0.06] hover:border-white/15"
+                          : ath.divisions.length > 1
+                            ? MULTI.card
+                            : divMeta(ath.divisions[0]).card
                       }`}
                     >
                       {editingAthleteId === ath.id ? (
@@ -473,9 +500,7 @@ export default function AthletesDashboardPage() {
                                   )}
                                   className={`flex-1 py-1.5 rounded-lg text-xs font-medium border transition-all ${
                                     isSelected
-                                      ? div === "All Girl"
-                                        ? "bg-pink-500/20 text-pink-300 border-pink-500/40"
-                                        : "bg-sky-500/20 text-sky-300 border-sky-500/40"
+                                      ? divMeta(div).sel
                                       : "bg-black/20 text-slate-500 border-white/10"
                                   }`}
                                 >
@@ -544,13 +569,9 @@ export default function AthletesDashboardPage() {
                         <div className="p-3 flex flex-col items-center text-center">
                           {/* Avatar */}
                           <div className={`h-11 w-11 rounded-full flex items-center justify-center text-base font-bold mb-2 ${
-                            ath.divisions.length === 2
-                              ? "bg-gradient-to-br from-pink-500/30 to-sky-500/30 text-purple-300 ring-1 ring-purple-500/20"
-                              : ath.divisions.includes("All Girl") 
-                                ? "bg-gradient-to-br from-pink-500/30 to-pink-600/20 text-pink-300 ring-1 ring-pink-500/20" 
-                                : ath.divisions.includes("Coed")
-                                  ? "bg-gradient-to-br from-sky-500/30 to-sky-600/20 text-sky-300 ring-1 ring-sky-500/20"
-                                  : "bg-gradient-to-br from-slate-500/30 to-slate-600/20 text-slate-400 ring-1 ring-slate-500/20"
+                            ath.divisions.length > 1
+                              ? MULTI.avatar
+                              : divMeta(ath.divisions[0]).avatar
                           }`}>
                             {ath.name.charAt(0).toUpperCase()}
                           </div>
