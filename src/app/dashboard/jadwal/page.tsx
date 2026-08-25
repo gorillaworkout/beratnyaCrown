@@ -1871,8 +1871,14 @@ export default function JadwalPage() {
                             s/d {entry.timeEnd}
                           </p>
                           {entry.shirtColor && entry.status !== "libur" && (
-                            <Badge variant="outline" className="mt-1 text-[10px] bg-white/5 border border-white/10" style={{ color: entry.shirtColor.hex }}>
-                              👕 {entry.shirtColor.name}
+                            <Badge variant="outline" className="mt-1 text-[10px] bg-white/5 border border-white/10 text-white gap-1">
+                              {/* Hex kaos jadi titik, bukan warna teks — jersey
+                                  hitam/ungu tenggelam di latar gelap. */}
+                              <span
+                                className="inline-block w-2 h-2 rounded-full ring-1 ring-white/30"
+                                style={{ backgroundColor: entry.shirtColor.hex }}
+                              />
+                              {entry.shirtColor.name}
                             </Badge>
                           )}
                           {entry.city && entry.status !== "libur" && (
