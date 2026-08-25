@@ -1,0 +1,95 @@
+rules_version = '2';
+
+// Firestore rules — project `gorillatix` dipakai beberapa aplikasi, jadi jangan
+// pernah menulis aturan wildcard yang mengizinkan seluruh database.
+//
+// Prinsip di sini:
+//  1. Tanpa login = tidak bisa apa-apa. Sebelumnya seluruh koleksi terbuka untuk
+//     publik: data 34 pendaftar (WhatsApp, tanggal lahir, kontak darurat) bisa
+//     diunduh siapa pun yang punya API key — dan API key selalu ada di bundle JS.
+//  2. Data operasional tim boleh dibaca-tulis anggota yang sudah login, karena
+//     dashboard menulis langsung dari browser (absensi, kas, jadwal, dll).
+//  3. Data sensitif (pendaftar, catatan login, berat badan) hanya lewat server
+//     memakai Admin SDK, yang memang melewati rules ini.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // Admin ditentukan dari dokumen atlet miliknya sendiri, bukan dari klaim
+    // yang bisa dikarang klien.
+    function isAdmin() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/crown-athletes/$(request.auth.uid))
+        && get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // ── Data operasional tim ────────────────────────────────────────────────
+    // Dibaca dan ditulis dari browser oleh anggota yang sudah login.
+
+    // Status admin dibaca dari koleksi ini, jadi field `role` tidak boleh
+    // dinaikkan sendiri jadi 'admin' — tanpa penjagaan ini anggota biasa bisa
+    // mengangkat dirinya admin lalu membaca data pendaftar dan catatan login.
+    // Promosi admin hanya lewat /api/admin/users/role (Admin SDK).
+    //
+    // Ditulis eksplisit dengan `in` + delete dipisah: `data.get('role', ...)`
+    // sempat menolak lewat *evaluation error*, bukan lewat logika — aturan yang
+    // lolos karena error bisa berubah perilaku tanpa peringatan.
+    function claimsAdminRole() {
+      return 'role' in request.resource.data && request.resource.data.role == 'admin';
+    }
+
+    match /crown-athletes/{doc} {
+      allow read: if signedIn();
+      allow create, update: if isAdmin() || (signedIn() && !claimsAdminRole());
+      allow delete: if isAdmin();
+    }
+
+    match /crown-schedules/{doc}     { allow read, write: if signedIn(); }
+    match /crown-events/{doc}        { allow read, write: if signedIn(); }
+    match /crown-absences/{doc}      { allow read, write: if signedIn(); }
+    match /crown-attendance/{doc}    { allow read, write: if signedIn(); }
+    match /crown-piket/{doc}         { allow read, write: if signedIn(); }
+    match /crown-p3k/{doc}           { allow read, write: if signedIn(); }
+    match /crown-kas-daily/{doc}     { allow read, write: if signedIn(); }
+    match /crown-kas-transactions/{doc} { allow read, write: if signedIn(); }
+    match /crown-milestones/{doc}    { allow read, write: if signedIn(); }
+    match /crown-locations/{doc}     { allow read, write: if signedIn(); }
+    match /crown_finance_needs/{doc} { allow read, write: if signedIn(); }
+    match /danus_shirts/{doc}        { allow read, write: if signedIn(); }
+
+    // ── Berat badan ─────────────────────────────────────────────────────────
+    // Dibaca anggota lewat dashboard; semua penulisan lewat API server
+    // (Admin SDK), termasuk reset sesi yang menghapus riwayat.
+    match /athletes/{athleteId} {
+      allow read: if signedIn();
+      allow write: if false;
+
+      match /weights/{weightId} {
+        allow read: if signedIn();
+        allow write: if false;
+      }
+    }
+
+    // ── Data sensitif ───────────────────────────────────────────────────────
+    // Pendaftar berisi data pribadi calon anggota, sebagian di bawah umur.
+    // Ditulis oleh form publik lewat Admin SDK, dibaca hanya admin.
+    match /crown-recruits/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Catatan login: siapa masuk kapan, dan koordinat bila diizinkan sendiri.
+    // Ditulis server, dibaca hanya admin.
+    match /crown-logins/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
+    // Penghitung nomor pendaftaran — hanya server.
+    match /crown-counters/{doc}    { allow read, write: if false; }
+    match /crown-ratelimits/{doc}  { allow read, write: if false; }
+  }
+}

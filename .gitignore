@@ -30,3 +30,7 @@ pnpm-lock.yaml
 
 # build artifact
 tsconfig.tsbuildinfo
+
+# firebase emulator
+firestore-debug.log
+firebase-debug.log

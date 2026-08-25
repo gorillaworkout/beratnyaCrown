@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { collection, deleteDoc, doc, getDocs, updateDoc } from "firebase/firestore";
 
-import { db } from "@/lib/firebase";
+import { adminDb } from "@/lib/firebase-admin";
 
 /**
  * Reset sesi latihan: hapus permanen seluruh riwayat log berat (subcollection
@@ -11,9 +10,11 @@ import { db } from "@/lib/firebase";
  *
  * Destruktif dan tidak bisa dibatalkan. Client wajib mengirim confirm: "RESET".
  *
- * ponytail: delete berurutan pakai client SDK — mengikuti pola route lain di
- * repo ini. Cukup untuk skala tim (puluhan athlete). Kalau nanti ribuan doc,
- * naikkan ke firebase-admin writeBatch (500 doc per batch).
+ * Memakai Admin SDK: route ini berjalan tanpa sesi login pengguna, jadi harus
+ * melewati Firestore rules yang menutup akses tulis dari klien.
+ *
+ * ponytail: delete berurutan, cukup untuk skala tim (puluhan athlete).
+ * Kalau nanti ribuan doc, naikkan ke writeBatch (500 doc per batch).
  */
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { confirm?: string };
@@ -24,16 +25,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const athletesSnap = await getDocs(collection(db, "athletes"));
+  const athletesSnap = await adminDb.collection("athletes").get();
   let deletedLogs = 0;
 
   for (const athleteDoc of athletesSnap.docs) {
-    const logsSnap = await getDocs(collection(db, "athletes", athleteDoc.id, "weights"));
+    const logsSnap = await athleteDoc.ref.collection("weights").get();
     for (const logDoc of logsSnap.docs) {
-      await deleteDoc(doc(db, "athletes", athleteDoc.id, "weights", logDoc.id));
+      await logDoc.ref.delete();
       deletedLogs += 1;
     }
-    await updateDoc(doc(db, "athletes", athleteDoc.id), { previousWeight: null });
+    await athleteDoc.ref.update({ previousWeight: null });
   }
 
   return NextResponse.json({

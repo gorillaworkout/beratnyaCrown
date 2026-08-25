@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
-import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 
-import { db } from "@/lib/firebase";
+// Admin SDK: catatan login ditulis server-side, dan koleksi crown-logins
+// tertutup untuk klien lewat Firestore rules.
+import { adminDb } from "@/lib/firebase-admin";
 
 /**
  * Catat login anggota. Dipanggil dari auth-context setiap kali sesi Firebase
@@ -46,7 +48,7 @@ export async function POST(request: Request) {
         }
       : null;
 
-  await addDoc(collection(db, "crown-logins"), {
+  await adminDb.collection("crown-logins").add({
     uid: body.uid,
     email: body.email ?? "",
     name: body.name ?? "",
@@ -54,7 +56,7 @@ export async function POST(request: Request) {
     // Diisi hanya kalau anggota menyetujui GPS lewat tombol di dashboard.
     coords,
     userAgent: (request.headers.get("user-agent") ?? "").slice(0, 200),
-    loginAt: serverTimestamp()
+    loginAt: FieldValue.serverTimestamp()
   });
 
   return NextResponse.json({ ok: true });

@@ -1,12 +1,13 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 
 import {
   ADMIN_SESSION_COOKIE,
   isValidAdminSessionToken
 } from "@/lib/admin-session";
-import { db } from "@/lib/firebase";
+// Admin SDK: route server tanpa sesi pengguna, harus melewati Firestore rules.
+import { adminDb } from "@/lib/firebase-admin";
 
 type SeedBody = {
   currentWeight?: number;
@@ -44,18 +45,20 @@ export async function POST(
     );
   }
 
+  const weightsRef = adminDb.collection("athletes").doc(athleteId).collection("weights");
+
   if (previousWeight !== null) {
-    await addDoc(collection(db, "athletes", athleteId, "weights"), {
+    await weightsRef.add({
       weight: previousWeight,
       trainingDate: null,
-      createdAt: serverTimestamp()
+      createdAt: FieldValue.serverTimestamp()
     });
   }
 
-  await addDoc(collection(db, "athletes", athleteId, "weights"), {
+  await weightsRef.add({
     weight: currentWeight,
     trainingDate,
-    createdAt: serverTimestamp()
+    createdAt: FieldValue.serverTimestamp()
   });
 
   return NextResponse.json({ ok: true });

@@ -1,12 +1,14 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { addDoc, collection, serverTimestamp } from "firebase/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 
 import {
   ADMIN_SESSION_COOKIE,
   isValidAdminSessionToken
 } from "@/lib/admin-session";
-import { db } from "@/lib/firebase";
+// Admin SDK: route ini menulis tanpa sesi login pengguna, jadi harus melewati
+// Firestore rules yang menutup akses tulis dari klien.
+import { adminDb } from "@/lib/firebase-admin";
 
 type CreateAthleteBody = {
   name?: string;
@@ -52,19 +54,19 @@ export async function POST(request: Request) {
     );
   }
 
-  const athleteRef = await addDoc(collection(db, "athletes"), {
+  const athleteRef = await adminDb.collection("athletes").add({
     name,
     currentWeight,
     previousWeight: null,
     goalWeight,
     trainingDate,
-    updatedAt: serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp()
   });
 
-  await addDoc(collection(db, "athletes", athleteRef.id, "weights"), {
+  await adminDb.collection("athletes").doc(athleteRef.id).collection("weights").add({
     weight: currentWeight,
     trainingDate,
-    createdAt: serverTimestamp()
+    createdAt: FieldValue.serverTimestamp()
   });
 
   return NextResponse.json({ ok: true, id: athleteRef.id });

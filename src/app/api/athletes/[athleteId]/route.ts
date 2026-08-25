@@ -1,19 +1,13 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import {
-  addDoc,
-  collection,
-  doc,
-  getDoc,
-  serverTimestamp,
-  updateDoc
-} from "firebase/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 
 import {
   ADMIN_SESSION_COOKIE,
   isValidAdminSessionToken
 } from "@/lib/admin-session";
-import { db } from "@/lib/firebase";
+// Admin SDK: route server tanpa sesi pengguna, harus melewati Firestore rules.
+import { adminDb } from "@/lib/firebase-admin";
 
 type UpdateAthleteBody = {
   currentWeight?: number;
@@ -58,25 +52,25 @@ export async function PATCH(
     );
   }
 
-  const athleteRef = doc(db, "athletes", athleteId);
-  const athleteSnap = await getDoc(athleteRef);
-  if (!athleteSnap.exists()) {
+  const athleteRef = adminDb.collection("athletes").doc(athleteId);
+  const athleteSnap = await athleteRef.get();
+  if (!athleteSnap.exists) {
     return NextResponse.json({ ok: false, message: "Athlete tidak ditemukan." }, { status: 404 });
   }
 
   const currentStoredWeight = Number(athleteSnap.data()?.currentWeight ?? 0);
-  await updateDoc(athleteRef, {
+  await athleteRef.update({
     previousWeight: Number.isFinite(currentStoredWeight) ? currentStoredWeight : null,
     currentWeight,
     goalWeight,
     trainingDate,
-    updatedAt: serverTimestamp()
+    updatedAt: FieldValue.serverTimestamp()
   });
 
-  await addDoc(collection(db, "athletes", athleteId, "weights"), {
+  await athleteRef.collection("weights").add({
     weight: currentWeight,
     trainingDate,
-    createdAt: serverTimestamp()
+    createdAt: FieldValue.serverTimestamp()
   });
 
   return NextResponse.json({ ok: true });
