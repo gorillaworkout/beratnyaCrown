@@ -1,0 +1,263 @@
+[
+  {
+    "id": "EPBTGPMVfvIjYtbb5Kbw",
+    "date": "2026-09-02",
+    "dayName": "Rabu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Biru",
+      "hex": "#3b82f6"
+    }
+  },
+  {
+    "id": "xWEMU5oCjhL6CLzFCgbT",
+    "date": "2026-09-02",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "tnv1PPNrZACdG9aWVAX2",
+    "date": "2026-09-05",
+    "dayName": "Sabtu",
+    "isRegular": true,
+    "status": "latihan",
+    "timeStart": "18:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Gabungan",
+    "shirtColor": {
+      "name": "Orange",
+      "hex": "#f97316"
+    }
+  },
+  {
+    "id": "KVXaOwsHotOfl6iJFqdN",
+    "date": "2026-09-06",
+    "dayName": "Minggu",
+    "isRegular": true,
+    "note": "Latihan ditiadakan",
+    "timeEnd": "13:00",
+    "timeStart": "10:00",
+    "city": "Gabungan",
+    "status": "tambahan"
+  },
+  {
+    "id": "7XlJQLplfhH7ztWdskaJ",
+    "date": "2026-09-09",
+    "dayName": "Rabu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Pink",
+      "hex": "#ec4899"
+    }
+  },
+  {
+    "id": "X8Qc65zuGlD59a6lzrV6",
+    "date": "2026-09-09",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "DnEK2bAdMFDhubMjKGXs",
+    "date": "2026-09-12",
+    "dayName": "Sabtu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Bandung"
+  },
+  {
+    "id": "FCCKhSSiidoHsDiynBLr",
+    "date": "2026-09-12",
+    "dayName": "Sabtu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "k56PCs0agAdi4yoPCgk3",
+    "date": "2026-09-13",
+    "dayName": "Minggu",
+    "isRegular": true,
+    "status": "libur",
+    "note": "Latihan ditiadakan"
+  },
+  {
+    "id": "F44Q9jCJfT0Bi9pPQEmk",
+    "date": "2026-09-16",
+    "dayName": "Rabu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Merah",
+      "hex": "#ef4444"
+    }
+  },
+  {
+    "id": "fNrl5zWDHk6fNcqhpC6z",
+    "date": "2026-09-16",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "bezaAQ3KqiWeGffNoiQy",
+    "date": "2026-09-19",
+    "dayName": "Sabtu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "lOPFXGvJtS9HIbJtCD1n",
+    "date": "2026-09-19",
+    "dayName": "Sabtu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Hitam",
+      "hex": "#374151"
+    }
+  },
+  {
+    "id": "ephW1EH3PeOQL4YpgIMf",
+    "date": "2026-09-20",
+    "dayName": "Minggu",
+    "isRegular": true,
+    "status": "libur",
+    "note": "Latihan ditiadakan"
+  },
+  {
+    "id": "S7aOjQNdYLEl9YFgzFe7",
+    "date": "2026-09-23",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "usJ7wrfwwCWvzT3U3rS0",
+    "date": "2026-09-23",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "BcUMMqtWjvsGlBD4PZuJ",
+    "date": "2026-09-26",
+    "dayName": "Sabtu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Ungu",
+      "hex": "#8b5cf6"
+    }
+  },
+  {
+    "id": "NspSfYkN6uDkaHQmcxgK",
+    "date": "2026-09-26",
+    "dayName": "Sabtu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "sxMMkQ5o8FNbAoVAtDeN",
+    "date": "2026-09-27",
+    "dayName": "Minggu",
+    "isRegular": true,
+    "status": "libur",
+    "note": "Latihan ditiadakan"
+  },
+  {
+    "id": "Kc4Hz5Vq2dlCCFx4mLek",
+    "date": "2026-09-30",
+    "dayName": "Rabu",
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "isRegular": true,
+    "city": "Bandung",
+    "shirtColor": {
+      "name": "Kuning",
+      "hex": "#eab308"
+    }
+  },
+  {
+    "id": "aLg0Ljt3BL8j9bLGoPeA",
+    "date": "2026-09-30",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  },
+  {
+    "id": "fcqU0iZRQ0R7YH5f93yL",
+    "date": "2026-09-30",
+    "dayName": "Rabu",
+    "isRegular": false,
+    "status": "latihan",
+    "timeStart": "19:00",
+    "timeEnd": "22:00",
+    "note": "",
+    "city": "Jakarta"
+  }
+]

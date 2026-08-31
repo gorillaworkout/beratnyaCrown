@@ -41,6 +41,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
+import { resolveAdditionalCity } from "@/lib/schedule-city";
 import {
   collection,
   getDocs,
@@ -695,6 +696,15 @@ export default function JadwalPage() {
   const addCustomSchedule = async () => {
     if (!addForm.date) return;
 
+    const existingCities = scheduleData
+      .filter((s) => s.date === addForm.date && s.status !== "libur" && s.status !== "event")
+      .map((s) => s.city || DEFAULT_CITY);
+    const city = resolveAdditionalCity(existingCities, addForm.city);
+    if (!city) {
+      showToast("Bandung dan Jakarta sudah punya jadwal di tanggal ini.", "error");
+      return;
+    }
+
     const date = new Date(addForm.date + "T00:00:00");
     const dayOfWeek = date.getDay();
 
@@ -706,7 +716,7 @@ export default function JadwalPage() {
       timeStart: addForm.timeStart,
       timeEnd: addForm.timeEnd,
       note: addForm.note,
-      city: addForm.city,
+      city,
     };
 
     await addDoc(collection(db, "crown-schedules"), scheduleEntry);

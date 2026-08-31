@@ -1,4 +1,10 @@
 {
   "installCommand": "npm install",
-  "buildCommand": "next build"
+  "buildCommand": "next build",
+  "crons": [
+    {
+      "path": "/api/cron/kas-sync",
+      "schedule": "30 1 * * *"
+    }
+  ]
 }
