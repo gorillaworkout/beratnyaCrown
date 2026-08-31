@@ -13,7 +13,7 @@ const db = getFirestore();
 
 // --- dry-run: replicate cron logic without writing ---
 const today = new Date().toISOString().split("T")[0];
-const KAS_START = "2026-08-26";
+const KAS_START = "2026-08-29";
 
 const schedSnap = await db.collection("crown-schedules").get();
 const trainingDates = [...new Set(

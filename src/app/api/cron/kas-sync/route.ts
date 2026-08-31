@@ -16,7 +16,8 @@ export const maxDuration = 300; // 5 min timeout for backfill
 
 // Kas counting resumed on this date (first training back). Anything before
 // this is historical/manual — never backfill phantom alpa debt for it.
-const KAS_START = "2026-08-26";
+// 2026-08-26 was opr/percobaan (no kas); kas starts 2026-08-29.
+const KAS_START = "2026-08-29";
 
 export async function GET() {
   try {
