@@ -121,6 +121,8 @@ type ScheduleStatus = "latihan" | "libur" | "tambahan" | "event";
 const CITIES = ["Bandung", "Jakarta", "Gabungan"] as const;
 type City = typeof CITIES[number];
 const DEFAULT_CITY: City = "Bandung";
+const getDefaultTimeStart = (dayOfWeek: number, city: City) =>
+  dayOfWeek === 0 ? "10:00" : city === "Bandung" ? "17:30" : "19:00";
 const CITY_META: Record<City, { emoji: string; label: string; badge: string }> = {
   Bandung: { emoji: "🏔️", label: "Bandung", badge: "bg-cyan-500/15 text-cyan-300 border-cyan-500/30" },
   Jakarta: { emoji: "🏙️", label: "Jakarta", badge: "bg-amber-500/15 text-amber-300 border-amber-500/30" },
@@ -459,8 +461,7 @@ export default function JadwalPage() {
       }
 
       if (customSchedule) {
-        // Fallback time to default if custom schedule doesn't have it defined properly
-        const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+        // Fallback time follows each city's regular start time.
         const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
 
         for (const cs of customSchedules) {
@@ -469,7 +470,7 @@ export default function JadwalPage() {
             date: dateStr,
             dayName,
             isRegular: REGULAR_DAYS.has(dayOfWeek),
-            timeStart: cs.timeStart || defaultTimeStart,
+            timeStart: cs.timeStart || getDefaultTimeStart(dayOfWeek, cs.city || DEFAULT_CITY),
             timeEnd: cs.timeEnd || defaultTimeEnd,
             shirtColor: cs.shirtColor || currentShirtColor,
             city: cs.city || DEFAULT_CITY,
@@ -490,9 +491,9 @@ export default function JadwalPage() {
         });
       } else {
         if (isRegular) {
-          // Rabu (3) & Sabtu (6) -> 19:00 - 22:00 (7-10 malam)
-          // Minggu (0) -> 10:00 - 13:00 (10-1 siang)
-          const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+          // Bandung Rabu (3) & Sabtu (6) mulai 17:30
+          // Minggu (0) tetap 10:00 - 13:00
+          const defaultTimeStart = getDefaultTimeStart(dayOfWeek, DEFAULT_CITY);
           const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
 
           entries.push({
@@ -611,7 +612,7 @@ export default function JadwalPage() {
     // Apply correct default time based on day if missing
     const dateObj = new Date(entry.date + "T00:00:00");
     const dayOfWeek = dateObj.getDay();
-    const defaultTimeStart = dayOfWeek === 0 ? "10:00" : "19:00";
+    const defaultTimeStart = getDefaultTimeStart(dayOfWeek, entry.city || DEFAULT_CITY);
     const defaultTimeEnd = dayOfWeek === 0 ? "13:00" : "22:00";
     
     setEditForm({

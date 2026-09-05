@@ -75,6 +75,8 @@ type ScheduleStatus = "latihan" | "libur" | "tambahan" | "pembayaran";
 // "Gabungan" = kedua tim latihan bersama, tempatnya di Bandung.
 type City = "Bandung" | "Jakarta" | "Gabungan";
 const DEFAULT_CITY: City = "Bandung";
+const getDefaultTimeStart = (dayOfWeek: number, city: City) =>
+  dayOfWeek === 0 ? "10:00" : city === "Bandung" ? "17:30" : "19:00";
 const CITY_EMOJI: Record<City, string> = { Bandung: "🏔️", Jakarta: "🏙️", Gabungan: "🤝" };
 const CITY_LABEL: Record<City, string> = {
   Bandung: "Bandung",
@@ -164,7 +166,12 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
           schedule.push({
             date: dateStr,
             status: customData.status || "tambahan",
-            timeStart: customData.timeStart || (d.getDay() === 0 ? "10:00" : "19:00"),
+            timeStart: customData.timeStart || getDefaultTimeStart(
+              d.getDay(),
+              customData.city === "Jakarta" || customData.city === "Gabungan"
+                ? customData.city
+                : DEFAULT_CITY
+            ),
             timeEnd: customData.timeEnd || (d.getDay() === 0 ? "13:00" : "22:00"),
             note: customData.note,
             shirtColor: colorIdx !== -1 ? SHIRT_COLORS[colorIdx] : undefined,
@@ -185,7 +192,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
            schedule.push({
              date: dateStr,
              status: "latihan", // Still marked as training, but with a warning note
-             timeStart: d.getDay() === 0 ? "10:00" : "19:00",
+             timeStart: getDefaultTimeStart(d.getDay(), DEFAULT_CITY),
              timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
              holidayName: holidayCheck,
              shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr)]
@@ -202,7 +209,7 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         schedule.push({
           date: dateStr,
           status: "latihan",
-          timeStart: d.getDay() === 0 ? "10:00" : "19:00",
+          timeStart: getDefaultTimeStart(d.getDay(), DEFAULT_CITY),
           timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
           shirtColor: SHIRT_COLORS[colorIdx],
           city: DEFAULT_CITY,
