@@ -16,6 +16,8 @@ import {
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ShieldAlert, Download, Search, UserPlus, MapPin, Phone } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { A18AttendancePanel, A18EvaluationPanel } from "@/components/a18-panels";
 
 type Recruit = {
   id: string;
@@ -182,6 +184,15 @@ export default function RecruitsPage() {
         </Button>
       </div>
 
+      {/* Tabs: daftar pendaftar, checklist kehadiran, penilaian coach */}
+      <Tabs defaultValue="daftar">
+        <TabsList>
+          <TabsTrigger value="daftar">Daftar ({filtered.length})</TabsTrigger>
+          <TabsTrigger value="kehadiran">Kehadiran A18</TabsTrigger>
+          <TabsTrigger value="penilaian">Penilaian Coach</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="daftar" className="space-y-6">
       {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <Card>
@@ -388,6 +399,16 @@ export default function RecruitsPage() {
           )}
         </CardContent>
       </Card>
+        </TabsContent>
+
+        <TabsContent value="kehadiran">
+          <A18AttendancePanel recruits={filtered} />
+        </TabsContent>
+
+        <TabsContent value="penilaian">
+          <A18EvaluationPanel recruits={filtered} />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

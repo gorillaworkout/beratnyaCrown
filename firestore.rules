@@ -89,6 +89,24 @@ service cloud.firestore {
       allow write: if false;
     }
 
+    // ── Angkatan 18 (sementara, open recruitment 26 Agu–26 Sep 2026) ─────────
+    // Checklist kehadiran + satu kolom penilaian coach. Ditulis langsung dari
+    // browser oleh admin (tanpa GPS/login pendaftar), jadi otorisasi harus di
+    // sini — bukan cuma `isAdmin` di React. Status kehadiran divalidasi
+    // eksplisit; penilaian bebas tanpa keputusan terkunci.
+    function validA18Status() {
+      return request.resource.data.sessions.values().hasOnly(['hadir', 'izin', 'alpa']);
+    }
+
+    match /crown-a18-attendance/{doc} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && validA18Status();
+    }
+
+    match /crown-a18-evaluations/{doc} {
+      allow read, write: if isAdmin();
+    }
+
     // Penghitung nomor pendaftaran — hanya server.
     match /crown-counters/{doc}    { allow read, write: if false; }
     match /crown-ratelimits/{doc}  { allow read, write: if false; }

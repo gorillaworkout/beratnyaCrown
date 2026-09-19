@@ -59,6 +59,19 @@ await check("bisa ubah namanya sendiri", assertSucceeds(setDoc(doc(member, "crow
 await check("bisa simpan atlet tanpa field role", assertSucceeds(setDoc(doc(member, "crown-athletes", "baru-1"), { name: "Atlet Baru", divisions: ["C4"] })));
 await check("TIDAK bisa hapus atlet", assertFails(deleteDoc(doc(member, "crown-athletes", "baru-1"))));
 
+console.log("\nAngkatan 18 (admin-only):");
+// Runs BEFORE the Admin section below promotes member-uid to admin,
+// otherwise the "member" checks below would run as an admin.
+await check("TAMU tidak bisa baca absensi A18", assertFails(getDocs(collection(guest, "crown-a18-attendance"))));
+await check("TAMU tidak bisa baca penilaian A18", assertFails(getDocs(collection(guest, "crown-a18-evaluations"))));
+await check("ANGGOTA tidak bisa baca absensi A18", assertFails(getDocs(collection(member, "crown-a18-attendance"))));
+await check("ANGGOTA tidak bisa tulis absensi A18", assertFails(setDoc(doc(member, "crown-a18-attendance", "r1"), { sessions: { "2026-08-26": "hadir" } })));
+await check("ANGGOTA tidak bisa baca penilaian A18", assertFails(getDocs(collection(member, "crown-a18-evaluations"))));
+await check("ADMIN bisa tulis absensi A18 valid", assertSucceeds(setDoc(doc(admin, "crown-a18-attendance", "r1"), { recruitId: "r1", fullName: "Calon", sessions: { "2026-08-26": "hadir", "2026-08-29": "izin" } })));
+await check("ADMIN ditolak bila status di luar hadir/izin/alpa", assertFails(setDoc(doc(admin, "crown-a18-attendance", "r2"), { recruitId: "r2", sessions: { "2026-08-26": "sakit" } })));
+await check("ADMIN bisa tulis penilaian A18 (satu kolom bebas)", assertSucceeds(setDoc(doc(admin, "crown-a18-evaluations", "r1"), { recruitId: "r1", notes: "Teknik bagus, attitude oke" })));
+await check("ANGGOTA tidak bisa tulis penilaian A18", assertFails(setDoc(doc(member, "crown-a18-evaluations", "r1"), { recruitId: "r1", notes: "x" })));
+
 console.log("\nAdmin:");
 await check("bisa baca data pendaftar", assertSucceeds(getDocs(collection(admin, "crown-recruits"))));
 await check("bisa baca catatan login", assertSucceeds(getDocs(collection(admin, "crown-logins"))));
@@ -66,5 +79,5 @@ await check("bisa mengangkat anggota jadi admin", assertSucceeds(setDoc(doc(admi
 await check("bisa hapus atlet", assertSucceeds(deleteDoc(doc(admin, "crown-athletes", "baru-1"))));
 
 await env.cleanup();
-assert.equal(passed, 19, `harusnya 19 pemeriksaan lolos, dapat ${passed}`);
+assert.equal(passed, 28, `harusnya 28 pemeriksaan lolos, dapat ${passed}`);
 console.log(`\nSemua ${passed} pemeriksaan lolos.`);
