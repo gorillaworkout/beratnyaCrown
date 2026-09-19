@@ -91,6 +91,7 @@ export default function RecruitsPage() {
   const [search, setSearch] = useState("");
   const [divFilter, setDivFilter] = useState<string>("all");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [cityFilter, setCityFilter] = useState<string>("all");
   const [expanded, setExpanded] = useState<string | null>(null);
 
   useEffect(() => {
@@ -116,6 +117,7 @@ export default function RecruitsPage() {
     return recruits.filter((r) => {
       if (divFilter !== "all" && r.division !== divFilter) return false;
       if (statusFilter !== "all" && r.status !== statusFilter) return false;
+      if (cityFilter !== "all" && r.domicileCity !== cityFilter) return false;
       if (!s) return true;
       return (
         r.fullName?.toLowerCase().includes(s) ||
@@ -124,7 +126,15 @@ export default function RecruitsPage() {
         r.whatsapp?.includes(s)
       );
     });
-  }, [recruits, search, divFilter, statusFilter]);
+  }, [recruits, search, divFilter, statusFilter, cityFilter]);
+
+  const cities = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of recruits) {
+      if (r.domicileCity?.trim()) set.add(r.domicileCity.trim());
+    }
+    return [...set].sort((a, b) => a.localeCompare(b, "id"));
+  }, [recruits]);
 
   const stats = useMemo(() => {
     const byDivision = { "all-girl": 0, c4: 0, premier: 0 } as Record<string, number>;
@@ -275,6 +285,16 @@ export default function RecruitsPage() {
           <option value="all">Semua status</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>{s}</option>
+          ))}
+        </select>
+        <select
+          value={cityFilter}
+          onChange={(e) => setCityFilter(e.target.value)}
+          className="h-10 rounded-md border border-input bg-background px-3 text-sm"
+        >
+          <option value="all">Semua kota</option>
+          {cities.map((c) => (
+            <option key={c} value={c}>{c}</option>
           ))}
         </select>
       </div>
