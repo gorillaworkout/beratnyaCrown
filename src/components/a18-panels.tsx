@@ -33,7 +33,22 @@ export type RecruitLite = {
   regNumber: string;
   fullName: string;
   division: string;
+  domicileCity?: string;
 };
+
+function CityFilter({ value, onChange, cities }: { value: string; onChange: (value: string) => void; cities: string[] }) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Filter kota"
+      className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+    >
+      <option value="all">Semua kota</option>
+      {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+    </select>
+  );
+}
 
 const CELL_STYLE: Record<AttendanceStatus | "empty", string> = {
   empty: "text-slate-600 hover:bg-white/5",
@@ -68,6 +83,13 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
   const [data, setData] = useState<AttendanceMap>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState("all");
+
+  const cities = useMemo(() => [...new Set(recruits.map((r) => r.domicileCity?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "id")), [recruits]);
+  const visibleRecruits = useMemo(
+    () => cityFilter === "all" ? recruits : recruits.filter((r) => r.domicileCity === cityFilter),
+    [recruits, cityFilter]
+  );
 
   useEffect(() => {
     const unsub = onSnapshot(
@@ -121,7 +143,7 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
     setSaving(`col|${date}`);
     try {
       await Promise.all(
-        recruits.map((r) =>
+        visibleRecruits.map((r) =>
           setDoc(
             doc(db, "crown-a18-attendance", r.id),
             {
@@ -150,7 +172,7 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
         let hadir = 0,
           izin = 0,
           alpa = 0;
-        for (const r of recruits) {
+        for (const r of visibleRecruits) {
           const st = data[r.id]?.[s];
           if (st === "hadir") hadir++;
           else if (st === "izin") izin++;
@@ -158,8 +180,10 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
         }
         return { date: s, hadir, izin, alpa };
       }),
-    [data, recruits]
+    [data, visibleRecruits]
   );
+
+  const filteredCount = visibleRecruits.length;
 
   if (loading) {
     return (
@@ -172,7 +196,8 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-        <span className="font-medium text-white">10 sesi · Rabu + Sabtu · 26 Agu–26 Sep 2026</span>
+        <span className="font-medium text-white">10 sesi · Rabu + Sabtu · 26 Agu–26 Sep 2026 · {filteredCount} pendaftar</span>
+        <CityFilter value={cityFilter} onChange={setCityFilter} cities={cities} />
         <span className="inline-flex items-center gap-1">
           <span className="inline-block h-3 w-3 rounded bg-emerald-500/40" /> H = Hadir
         </span>
@@ -314,6 +339,13 @@ export function A18EvaluationPanel({ recruits }: { recruits: RecruitLite[] }) {
   const [drafts, setDrafts] = useState<EvalMap>({});
   const [savingId, setSavingId] = useState<string | null>(null);
   const [savedId, setSavedId] = useState<string | null>(null);
+  const [cityFilter, setCityFilter] = useState("all");
+
+  const cities = useMemo(() => [...new Set(recruits.map((r) => r.domicileCity?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "id")), [recruits]);
+  const visibleRecruits = useMemo(
+    () => cityFilter === "all" ? recruits : recruits.filter((r) => r.domicileCity === cityFilter),
+    [recruits, cityFilter]
+  );
 
   useEffect(() => {
     const unsubEval = onSnapshot(
@@ -397,8 +429,12 @@ export function A18EvaluationPanel({ recruits }: { recruits: RecruitLite[] }) {
         Satu kolom bebas per pendaftar. Kehadiran tampil sebagai konteks.
         Tersimpan per orang lewat tombol Simpan.
       </p>
+      <div className="flex items-center gap-3">
+        <CityFilter value={cityFilter} onChange={setCityFilter} cities={cities} />
+        <span className="text-xs text-muted-foreground">{visibleRecruits.length} pendaftar</span>
+      </div>
       <div className="grid gap-3">
-        {recruits.map((r) => {
+        {visibleRecruits.map((r) => {
           const draft = drafts[r.id] ?? "";
           const pct = attendancePct(attend[r.id] ?? {}, today);
           const dirty = draft !== (evals[r.id] ?? "");

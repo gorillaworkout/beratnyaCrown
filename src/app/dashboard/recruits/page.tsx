@@ -422,11 +422,11 @@ export default function RecruitsPage() {
         </TabsContent>
 
         <TabsContent value="kehadiran">
-          <A18AttendancePanel recruits={filtered} />
+          <A18AttendancePanel recruits={filtered.map(({ id, regNumber, fullName, division, domicileCity }) => ({ id, regNumber, fullName, division, domicileCity }))} />
         </TabsContent>
 
         <TabsContent value="penilaian">
-          <A18EvaluationPanel recruits={filtered} />
+          <A18EvaluationPanel recruits={filtered.map(({ id, regNumber, fullName, division, domicileCity }) => ({ id, regNumber, fullName, division, domicileCity }))} />
         </TabsContent>
       </Tabs>
     </div>
