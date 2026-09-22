@@ -243,7 +243,7 @@ export function A18AttendancePanel({ recruits }: { recruits: RecruitLite[] }) {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {recruits.map((r) => {
+                {visibleRecruits.map((r) => {
                   const pct = attendancePct(data[r.id] ?? {}, today);
                   return (
                     <TableRow key={r.id}>
