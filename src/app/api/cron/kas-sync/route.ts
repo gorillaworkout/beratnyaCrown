@@ -76,7 +76,7 @@ export async function GET() {
           date,
           athleteId: athlete.id,
           name: athlete.name,
-          division: athlete.division || "",
+          division: Array.isArray(athlete.divisions) ? athlete.divisions.join(", ") : athlete.division || "",
           paidKas: true,
           isLate: false,
           noNews: true,

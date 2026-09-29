@@ -590,12 +590,8 @@ export default function JadwalPage() {
         console.error("Version tracking error", e);
       }
 
-      const adminKey = "dupoin123";
-      await fetch("/api/calendar/sync", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ key: adminKey }),
-      });
+      // Schedule data is already written to Firestore above; no client secret needed.
+      // The calendar API reads the updated schedule on its next request.
     } catch {
       // Silent fail — calendar sync is best-effort
     } finally {
