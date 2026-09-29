@@ -486,7 +486,7 @@ export default function AthletesDashboardPage() {
                       ))}
                     </div>
                   </div>
-                  <Input value={newAthleteCity} onChange={(e) => setNewAthleteCity(e.target.value)} placeholder="Kota (Bandung/Jakarta)" className="bg-black/40 border-white/10 text-white h-9 text-sm" />
+                  <select value={newAthleteCity} onChange={(e) => setNewAthleteCity(e.target.value)} className="h-9 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm text-white"><option value="">Pilih kota</option><option value="Bandung">Bandung</option><option value="Jakarta">Jakarta</option></select>
                   {/* Role */}
                   <div className="space-y-1.5">
                     <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Role</p>
@@ -591,7 +591,7 @@ export default function AthletesDashboardPage() {
                               </button>
                             ))}
                           </div>
-                          <Input value={editingAthleteCity} onChange={(e) => setEditingAthleteCity(e.target.value)} placeholder="Kota (Bandung/Jakarta)" className="bg-black/40 border-white/10 text-white h-8 text-xs" />
+                          <select value={editingAthleteCity} onChange={(e) => setEditingAthleteCity(e.target.value)} className="h-8 w-full rounded-md border border-white/10 bg-black/40 px-2 text-xs text-white"><option value="">Pilih kota</option><option value="Bandung">Bandung</option><option value="Jakarta">Jakarta</option></select>
                           {/* Role Edit */}
                           <div className="flex gap-1.5">
                             {([["athlete", "🏃 Atlet"], ["coach", "🎓 Coach"]] as const).map(([val, label]) => (
