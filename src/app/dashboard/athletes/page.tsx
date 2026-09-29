@@ -143,7 +143,7 @@ export default function AthletesDashboardPage() {
   const [newAthleteName, setNewAthleteName] = useState("");
   const [newAthleteDivisions, setNewAthleteDivisions] = useState<string[]>(["All Girl"]);
   const [newAthleteGender, setNewAthleteGender] = useState<Gender>("");
-  const [newAthleteCity, setNewAthleteCity] = useState("");
+  const [newAthleteCity, setNewAthleteCity] = useState("Bandung");
   const [newAthleteRole, setNewAthleteRole] = useState<AthleteRole>("athlete");
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
   const [editingAthleteName, setEditingAthleteName] = useState("");
@@ -152,6 +152,7 @@ export default function AthletesDashboardPage() {
   const [editingAthleteCity, setEditingAthleteCity] = useState("");
   const [editingAthleteRole, setEditingAthleteRole] = useState<AthleteRole>("athlete");
   const [filterDivision, setFilterDivision] = useState<string>("all");
+  const [filterCity, setFilterCity] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
   const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
   const [gpsShared, setGpsShared] = useState(false);
@@ -199,7 +200,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", city: data.city || "", role: data.role || "athlete" };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", city: data.city || "Bandung", role: data.role || "athlete" };
       }));
     });
     return () => unsub();
@@ -207,9 +208,8 @@ export default function AthletesDashboardPage() {
 
   const filteredAthletes = useMemo(() => {
     const sorted = [...crownAthletes].sort((a, b) => a.name.localeCompare(b.name));
-    if (filterDivision === "all") return sorted;
-    return sorted.filter(a => a.divisions.includes(filterDivision));
-  }, [crownAthletes, filterDivision]);
+    return sorted.filter((a) => (filterDivision === "all" || a.divisions.includes(filterDivision)) && (filterCity === "all" || a.city === filterCity));
+  }, [crownAthletes, filterDivision, filterCity]);
 
   const divisionCounts = useMemo(() => {
     const counts: Record<string, number> = { all: crownAthletes.length };
@@ -230,7 +230,7 @@ export default function AthletesDashboardPage() {
     setNewAthleteName("");
     setNewAthleteDivisions(["All Girl"]);
     setNewAthleteGender("");
-    setNewAthleteCity("");
+    setNewAthleteCity("Bandung");
     setNewAthleteRole("athlete");
     setShowAddForm(false);
   };
@@ -418,6 +418,13 @@ export default function AthletesDashboardPage() {
                     <p className="text-[10px] sm:text-xs text-slate-400 mt-0.5">{div}</p>
                   </button>
                 ))}
+              </div>
+
+              <div className="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 p-3">
+                <span className="text-xs font-medium text-slate-400">Filter kota atlet</span>
+                <select value={filterCity} onChange={(e) => setFilterCity(e.target.value)} aria-label="Filter kota atlet" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white">
+                  <option value="all">Semua kota</option><option value="Bandung">Bandung</option><option value="Jakarta">Jakarta</option>
+                </select>
               </div>
 
               {/* Add Button / Form */}
