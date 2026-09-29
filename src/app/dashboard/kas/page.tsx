@@ -32,6 +32,10 @@ export default function KasPage() {
   const [selectedDate, setSelectedDate] = useState(""); // Will be set on first load
   const { user } = useAuth();
   const [isKasAdmin, setIsKasAdmin] = useState(false);
+  const [cityFilter, setCityFilter] = useState("all");
+
+  const cities = useMemo(() => [...new Set(athletes.map((a) => a.city?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "id")), [athletes]);
+  const visibleAthletes = useMemo(() => cityFilter === "all" ? athletes : athletes.filter((a) => a.city === cityFilter), [athletes, cityFilter]);
 
   useEffect(() => {
     if (user?.email === "darmawanbayu1@gmail.com") {
@@ -465,6 +469,10 @@ export default function KasPage() {
                     {trainingDates.length === 0 && <span className="text-xs text-rose-400">Jadwal dari kalender kosong, silakan input manual.</span>}
                   </div>
                 )}
+                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} aria-label="Filter kota" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                  <option value="all">Semua kota</option>
+                  {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                </select>
               </div>
             </div>
 
@@ -492,7 +500,7 @@ export default function KasPage() {
                       <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
                     </tr>
                   ) : (
-                    athletes.map((athlete, idx) => {
+                    visibleAthletes.map((athlete, idx) => {
                       const record = getAthleteRecord(athlete.id!);
                       const isAnyExcused = !!record.isExcusedWork || !!record.isExcusedOther || !!record.isExcused;
                       const stripe = idx % 2 === 0 ? "bg-transparent" : "bg-white/[0.025]";
@@ -637,7 +645,7 @@ export default function KasPage() {
                 <div className="text-center text-slate-500 py-8">Hebat! Tidak ada atlet yang nunggak.</div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  {athletes.map(athlete => {
+                  {visibleAthletes.map(athlete => {
                     const athleteUnpaid = unpaidRecords.filter(r => r.athleteId === athlete.id);
                     if (athleteUnpaid.length === 0) return null;
                     const totalUnpaid = athleteUnpaid.reduce((sum, r) => sum + r.totalBilled, 0);

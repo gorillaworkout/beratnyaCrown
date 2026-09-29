@@ -47,6 +47,7 @@ type Athlete = {
   kasExempt?: boolean;
   coachFeeExempt?: boolean;
   gender?: Gender;
+  city?: string;
   role?: AthleteRole;
 };
 
@@ -142,11 +143,13 @@ export default function AthletesDashboardPage() {
   const [newAthleteName, setNewAthleteName] = useState("");
   const [newAthleteDivisions, setNewAthleteDivisions] = useState<string[]>(["All Girl"]);
   const [newAthleteGender, setNewAthleteGender] = useState<Gender>("");
+  const [newAthleteCity, setNewAthleteCity] = useState("");
   const [newAthleteRole, setNewAthleteRole] = useState<AthleteRole>("athlete");
   const [editingAthleteId, setEditingAthleteId] = useState<string | null>(null);
   const [editingAthleteName, setEditingAthleteName] = useState("");
   const [editingAthleteDivisions, setEditingAthleteDivisions] = useState<string[]>([]);
   const [editingAthleteGender, setEditingAthleteGender] = useState<Gender>("");
+  const [editingAthleteCity, setEditingAthleteCity] = useState("");
   const [editingAthleteRole, setEditingAthleteRole] = useState<AthleteRole>("athlete");
   const [filterDivision, setFilterDivision] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
@@ -196,7 +199,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", role: data.role || "athlete" };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", city: data.city || "", role: data.role || "athlete" };
       }));
     });
     return () => unsub();
@@ -221,11 +224,13 @@ export default function AthletesDashboardPage() {
       name: newAthleteName.trim(), 
       divisions: newAthleteDivisions,
       gender: newAthleteGender,
+      city: newAthleteCity.trim(),
       role: newAthleteRole,
     });
     setNewAthleteName("");
     setNewAthleteDivisions(["All Girl"]);
     setNewAthleteGender("");
+    setNewAthleteCity("");
     setNewAthleteRole("athlete");
     setShowAddForm(false);
   };
@@ -237,6 +242,7 @@ export default function AthletesDashboardPage() {
         name: editingAthleteName.trim(), 
         divisions: editingAthleteDivisions,
         gender: editingAthleteGender,
+        city: editingAthleteCity.trim(),
         role: editingAthleteRole,
       });
       setEditingAthleteId(null);
@@ -480,6 +486,7 @@ export default function AthletesDashboardPage() {
                       ))}
                     </div>
                   </div>
+                  <Input value={newAthleteCity} onChange={(e) => setNewAthleteCity(e.target.value)} placeholder="Kota (Bandung/Jakarta)" className="bg-black/40 border-white/10 text-white h-9 text-sm" />
                   {/* Role */}
                   <div className="space-y-1.5">
                     <p className="text-[11px] text-slate-500 font-medium uppercase tracking-wider">Role</p>
@@ -584,6 +591,7 @@ export default function AthletesDashboardPage() {
                               </button>
                             ))}
                           </div>
+                          <Input value={editingAthleteCity} onChange={(e) => setEditingAthleteCity(e.target.value)} placeholder="Kota (Bandung/Jakarta)" className="bg-black/40 border-white/10 text-white h-8 text-xs" />
                           {/* Role Edit */}
                           <div className="flex gap-1.5">
                             {([["athlete", "🏃 Atlet"], ["coach", "🎓 Coach"]] as const).map(([val, label]) => (
@@ -648,6 +656,7 @@ export default function AthletesDashboardPage() {
                                 {ath.gender === "L" ? "♂" : "♀"}
                               </span>
                             )}
+                            {ath.city && <span className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-1.5 py-0.5 text-[10px] text-slate-300">{ath.city}</span>}
                           </div>
 
                           {/* Role Badge */}
@@ -701,6 +710,7 @@ export default function AthletesDashboardPage() {
                                 setEditingAthleteName(ath.name); 
                                 setEditingAthleteDivisions(ath.divisions.length > 0 ? [...ath.divisions] : ["All Girl"]); 
                                 setEditingAthleteGender(ath.gender || "");
+                                setEditingAthleteCity(ath.city || "");
                                 setEditingAthleteRole(ath.role || "athlete");
                               }} 
                               className="h-7 w-7 rounded-md flex items-center justify-center text-slate-500 hover:text-cyan-300 hover:bg-cyan-500/10 active:scale-95 transition-all"

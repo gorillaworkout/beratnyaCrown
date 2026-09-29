@@ -21,6 +21,8 @@ export interface KasAthlete {
   id?: string;
   name: string;
   division: string;
+  gender?: "L" | "P" | "";
+  city?: string;
   /** Bebas kas — tidak muncul di tabel kas harian */
   kasExempt?: boolean;
   /** Bebas iuran pelatih */
