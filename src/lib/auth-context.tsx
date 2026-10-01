@@ -17,6 +17,8 @@ type AuthContextType = {
   user: User | null;
   loading: boolean;
   isAdmin: boolean;
+  role: string;
+  isViewer: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -25,6 +27,8 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
   isAdmin: false,
+  role: "athlete",
+  isViewer: false,
   signInWithGoogle: async () => {},
   signOut: async () => {},
 });
@@ -37,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [role, setRole] = useState("athlete");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -54,15 +59,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               createdAt: new Date().toISOString(),
               targetWeight: 0,
             });
+            setRole("athlete");
             setIsAdmin(false);
           } else {
-            const role = athleteSnap.data()?.role;
+            const userRole = athleteSnap.data()?.role || "athlete";
+            setRole(userRole);
             setIsAdmin(
-              firebaseUser.email === OWNER_EMAIL || role === "admin"
+              firebaseUser.email === OWNER_EMAIL || userRole === "admin"
             );
           }
         } catch (error) {
           console.error("Error upserting athlete:", error);
+          setRole(firebaseUser.email === OWNER_EMAIL ? "admin" : "athlete");
           setIsAdmin(firebaseUser.email === OWNER_EMAIL);
         }
 
@@ -88,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // sessionStorage bisa diblokir di mode privat — abaikan.
         }
       } else {
+        setRole("athlete");
         setIsAdmin(false);
       }
       setLoading(false);
@@ -129,7 +138,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, role, isViewer: role === "viewer", signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

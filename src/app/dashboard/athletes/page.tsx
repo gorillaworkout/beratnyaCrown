@@ -283,7 +283,7 @@ export default function AthletesDashboardPage() {
     }
   }, [isAdmin]);
 
-  const handleRoleChange = async (uid: string, action: "make_admin" | "remove_admin") => {
+  const handleRoleChange = async (uid: string, action: "make_admin" | "remove_admin" | "make_viewer" | "remove_viewer") => {
     setActionLoading(uid + action);
     try {
       const res = await fetch("/api/admin/users/role", {
@@ -827,6 +827,13 @@ export default function AthletesDashboardPage() {
                                 }`}
                               >
                                 {usr.role === "admin" ? "Cabut Admin" : "Jadikan Admin"}
+                              </button>
+                              <button
+                                onClick={() => handleRoleChange(usr.uid, usr.role === "viewer" ? "remove_viewer" : "make_viewer")}
+                                disabled={actionLoading !== null}
+                                className="px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-violet-300 border border-violet-500/20 hover:bg-violet-500/10 transition-all active:scale-95"
+                              >
+                                {usr.role === "viewer" ? "Cabut Viewer" : "Jadikan Viewer"}
                               </button>
                               <button
                                 onClick={() => handleUserAction(usr.uid, usr.disabled ? "unblock" : "block")}

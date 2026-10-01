@@ -55,6 +55,7 @@ service cloud.firestore {
     match /crown-p3k/{doc}           { allow read, write: if signedIn(); }
     match /crown-kas-daily/{doc}     { allow read, write: if signedIn(); }
     match /crown-kas-transactions/{doc} { allow read, write: if signedIn(); }
+    match /crown-gor-costs/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-milestones/{doc}    { allow read, write: if signedIn(); }
     match /crown-info-board/{doc}    { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-locations/{doc}     { allow read, write: if signedIn(); }

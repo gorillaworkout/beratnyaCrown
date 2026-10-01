@@ -12,17 +12,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Missing uid or action" }, { status: 400 });
     }
 
-    if (action !== "make_admin" && action !== "remove_admin") {
+    if (!["make_admin", "remove_admin", "make_viewer", "remove_viewer"].includes(action)) {
       return NextResponse.json({ error: "Invalid action" }, { status: 400 });
     }
 
-    const isAdmin = action === "make_admin";
-    
-    await adminDb.collection("crown-athletes").doc(uid).set({
-      role: isAdmin ? "admin" : "member"
-    }, { merge: true });
-
-    return NextResponse.json({ success: true, role: isAdmin ? "admin" : "member" });
+    const role = action === "make_admin" ? "admin" : action === "make_viewer" ? "viewer" : "member";
+    await adminDb.collection("crown-athletes").doc(uid).set({ role }, { merge: true });
+    return NextResponse.json({ success: true, role });
   } catch (error) {
     console.error("Error setting role:", error);
     return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });

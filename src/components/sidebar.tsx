@@ -39,6 +39,11 @@ const getNavItems = (isAdmin: boolean) => [
     icon: Calculator,
   },
   {
+    label: "Biaya Gor",
+    href: "/dashboard/gor",
+    icon: Wallet,
+  },
+  {
     label: "Pesanan Danus",
     href: "/dashboard/support",
     icon: Shirt,
