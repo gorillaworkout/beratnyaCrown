@@ -317,7 +317,7 @@ export default function AthleteSavingsPage() {
       </div>
 
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto border-white/10 bg-slate-950 text-white">
+        <DialogContent className="max-h-[90vh] overflow-y-auto border-white/10 bg-neutral-950 text-white">
           <DialogHeader><DialogTitle>{editing ? "Edit Transaksi" : "Tambah Transaksi"}</DialogTitle><DialogDescription className="text-slate-400">Penarikan boleh melebihi saldo dan akan tercatat sebagai hutang.</DialogDescription></DialogHeader>
           <form onSubmit={saveTransaction} className="space-y-4">
             <Field label="Atlet"><select value={form.athleteId} onChange={(event) => chooseAthlete(event.target.value)} required className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm"><option value="">Pilih atlet</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name}</option>)}</select></Field>
@@ -332,7 +332,7 @@ export default function AthleteSavingsPage() {
       </Dialog>
 
       <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelling) setCancelTarget(null); }}>
-        <DialogContent className="border-white/10 bg-slate-950 text-white sm:max-w-md">
+        <DialogContent className="border-white/10 bg-neutral-950 text-white sm:max-w-md">
           <DialogHeader>
             <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 sm:mx-0"><AlertTriangle className="h-6 w-6 text-rose-400" /></div>
             <DialogTitle>Batalkan transaksi?</DialogTitle>
@@ -341,7 +341,7 @@ export default function AthleteSavingsPage() {
           {cancelTarget && (
             <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
               <div className="flex items-center justify-between gap-3"><span className="text-slate-400">Atlet</span><span className="font-medium">{cancelTarget.athleteName}</span></div>
-              <div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-400">{cancelTarget.type === "DEPOSIT" ? "Setoran" : "Penarikan"}</span><span className={`font-semibold ${cancelTarget.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"}`}>{rupiah.format(cancelTarget.amount)}</span></div>
+              <div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-400">{cancelTarget.type === "DEPOSIT" ? "Setoran" : "Penarikan"}</span><span className="font-semibold text-white">{rupiah.format(cancelTarget.amount)}</span></div>
               <div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-400">Tanggal</span><span>{cancelTarget.date} · {cancelTarget.purpose}</span></div>
             </div>
           )}
