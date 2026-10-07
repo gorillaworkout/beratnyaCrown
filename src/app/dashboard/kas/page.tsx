@@ -16,6 +16,7 @@ import {
   addCustomTrainingEvent
 } from "@/lib/firebase/kas";
 import type { KasAthlete, KasRecord, KasTransaction, TransactionType } from "@/lib/types/kas";
+import { KAS_STATUS_OPTIONS, kasStatusOf, kasStatusPatch, type KasStatus } from "@/lib/kas-status";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
 import { useAuth } from "@/lib/auth-context";
@@ -70,6 +71,36 @@ export default function KasPage() {
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedAthleteForBulk, setSelectedAthleteForBulk] = useState<KasAthlete | null>(null);
   const [bulkPaymentRecords, setBulkPaymentRecords] = useState<{ record: KasRecord, toPay: number, selected: boolean }[]>([]);
+  const [statusSaving, setStatusSaving] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<{ ok: boolean; text: string } | null>(null);
+
+  // Koreksi status langsung dari Tunggakan (mis. ternyata izin). Nominal dihitung
+  // ulang; kalau jadi Rp 0 baris hilang dari tunggakan. Cron hanya membuat record
+  // untuk tanggal yang belum ada, jadi perubahan ini tidak ditimpa jadi Alpa lagi.
+  async function changeDebtStatus(record: KasRecord, status: KasStatus) {
+    if (!isKasAdmin || !record.id || statusSaving || isSubmitting) return;
+    const patch = kasStatusPatch(status);
+    setStatusSaving(record.id);
+    setStatusMessage(null);
+    try {
+      // isSettled sengaja tidak ditulis: merge mempertahankan nilai tersimpan,
+      // jadi pembayaran yang terjadi bersamaan tidak ikut dibatalkan.
+      await saveKasRecord({ id: record.id, date: record.date, athleteId: record.athleteId, name: record.name, ...patch });
+      const updated = { ...record, ...patch };
+      setBulkPaymentRecords((prev) => prev
+        .map((item) => item.record.id === record.id ? { record: updated, toPay: patch.totalBilled, selected: item.selected && patch.totalBilled > 0 } : item)
+        .filter((item) => item.toPay > 0));
+      setUnpaidRecords((prev) => prev.map((r) => r.id === record.id ? updated : r).filter((r) => r.totalBilled > 0 && !r.isSettled));
+      setAllRecords((prev) => prev.map((r) => r.id === record.id ? updated : r));
+      setStatusMessage({ ok: true, text: patch.totalBilled === 0 ? "Status diubah — tagihan jadi Rp 0 dan dihapus dari tunggakan." : `Status diubah — tagihan jadi Rp ${patch.totalBilled.toLocaleString("id-ID")}.` });
+      getKasSummary().then(setSummary).catch(console.error);
+    } catch (error) {
+      console.error(error);
+      setStatusMessage({ ok: false, text: "Gagal mengubah status. Periksa koneksi lalu coba lagi." });
+    } finally {
+      setStatusSaving(null);
+    }
+  }
 
   const [showTrxModal, setShowTrxModal] = useState(false);
   const [trxType, setTrxType] = useState<TransactionType>("IN_JOB");
@@ -660,6 +691,7 @@ export default function KasPage() {
                           onClick={() => {
                             if (!isKasAdmin) return;
                             setSelectedAthleteForBulk(athlete);
+                            setStatusMessage(null);
                             setBulkPaymentRecords(athleteUnpaid
                               .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
                               .map(r => ({ record: r, toPay: r.totalBilled, selected: false })));
@@ -733,7 +765,7 @@ export default function KasPage() {
 
                 {/* Select All / Deselect All */}
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-slate-300">Pilih latihan yang mau dibayar:</p>
+                  <p className="text-sm font-semibold text-slate-300">Pilih latihan yang mau dibayar, atau ubah status bila salah catat:</p>
                   <button
                     onClick={() => {
                       const newVal = !allSelected;
@@ -750,7 +782,7 @@ export default function KasPage() {
                   <ul className="divide-y divide-white/5">
                     {bulkPaymentRecords.map((r, i) => (
                       <li
-                        key={i}
+                        key={r.record.id ?? i}
                         onClick={() => {
                           setBulkPaymentRecords(prev => prev.map((item, idx) =>
                             idx === i ? { ...item, selected: !item.selected } : item
@@ -768,9 +800,17 @@ export default function KasPage() {
                           <p className="text-sm text-white font-medium">
                             {format(new Date(r.record.date), 'EEEE, dd MMM yyyy', { locale: idLocale })}
                           </p>
-                          <p className="text-xs text-slate-500 mt-0.5">
-                            {r.record.noNews ? '🔴 Bolos (Alpa)' : r.record.isExcusedOther ? '🟡 Izin Lainnya' : r.record.isLate ? '🟠 Hadir + Telat' : '🔵 Kas Latihan'}
-                          </p>
+                          <select
+                            aria-label={`Ubah status ${r.record.date}`}
+                            value={kasStatusOf(r.record)}
+                            disabled={!r.record.id || statusSaving !== null || isSubmitting}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) => changeDebtStatus(r.record, e.target.value as KasStatus)}
+                            className="mt-1 w-full max-w-[240px] rounded-md border border-white/10 bg-black/60 px-2 py-1 text-xs text-slate-200 disabled:opacity-50"
+                          >
+                            {KAS_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                          </select>
+                          {statusSaving === r.record.id && <p className="mt-1 text-[11px] text-cyan-400">Menyimpan...</p>}
                         </div>
                         <span className={`text-sm font-bold shrink-0 ${r.selected ? 'text-cyan-400' : 'text-slate-400'}`}>
                           Rp {r.toPay.toLocaleString('id-ID')}
@@ -779,6 +819,8 @@ export default function KasPage() {
                     ))}
                   </ul>
                 </div>
+                {bulkPaymentRecords.length === 0 && <p className="mt-3 text-center text-sm text-emerald-300">Tidak ada tunggakan tersisa untuk atlet ini.</p>}
+                {statusMessage && <p role="status" className={`mt-3 rounded-lg border px-3 py-2 text-xs ${statusMessage.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-200" : "border-rose-500/30 bg-rose-500/10 text-rose-200"}`}>{statusMessage.text}</p>}
 
                 {/* Summary footer */}
                 <div className="mt-4 rounded-xl bg-white/5 border border-white/10 p-4">
@@ -817,7 +859,7 @@ export default function KasPage() {
                       setIsSubmitting(false);
                     }
                   }}
-                  disabled={isSubmitting || selectedCount === 0}
+                  disabled={isSubmitting || statusSaving !== null || selectedCount === 0}
                   className="mt-4 w-full rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50 transition-colors"
                 >
                   {isSubmitting ? "Memproses..." : selectedCount === 0 ? "Pilih latihan yang mau dibayar" : `Lunasi ${selectedCount} Latihan — Rp ${selectedTotal.toLocaleString('id-ID')}`}
