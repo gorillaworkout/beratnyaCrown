@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { collection, onSnapshot } from "firebase/firestore";
-import { ArrowDownCircle, ArrowUpCircle, History, Pencil, PiggyBank, Search, Wallet } from "lucide-react";
-import { auth, db } from "@/lib/firebase";
+import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CheckCircle2, History, Pencil, PiggyBank, Search, Wallet, XCircle } from "lucide-react";
+import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
+import { newRequestId, sendMutation } from "@/lib/savings-client";
 import {
   calculateSavingsBalance,
   getSavingsAuditChanges,
@@ -58,6 +59,20 @@ export default function AthleteSavingsPage() {
   const [form, setForm] = useState<TransactionForm>(emptyForm());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  // Satu requestId per pengisian form: retry/klik ganda memakai ID yang sama,
+  // jadi server menyimpan transaksi tepat sekali.
+  const [requestId, setRequestId] = useState("");
+  const [cancelTarget, setCancelTarget] = useState<SavingsTransaction | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelError, setCancelError] = useState("");
+  const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3500);
+    return () => clearTimeout(timer);
+  }, [toast]);
 
   useEffect(() => {
     const stopAthletes = onSnapshot(collection(db, "crown-athletes"), (snapshot) => {
@@ -109,6 +124,7 @@ export default function AthleteSavingsPage() {
     setEditing(null);
     setForm(emptyForm(athlete));
     setError("");
+    setRequestId(newRequestId());
     setFormOpen(true);
   }
 
@@ -133,13 +149,17 @@ export default function AthleteSavingsPage() {
     setForm((current) => ({ ...current, athleteId: id, athleteName: athlete?.name ?? "" }));
   }
 
+  async function authHeaders() {
+    if (!user) throw new Error("Silakan login kembali.");
+    return { "Content-Type": "application/json", Authorization: `Bearer ${await user.getIdToken()}` };
+  }
+
   async function saveTransaction(event: React.FormEvent) {
     event.preventDefault();
-    if (!user) return;
+    if (saving) return;
     setSaving(true);
     setError("");
     try {
-      const token = await user.getIdToken();
       const payload = {
         athleteId: form.athleteId,
         athleteName: form.athleteName,
@@ -148,16 +168,19 @@ export default function AthleteSavingsPage() {
         purpose: form.purpose,
         date: form.date,
         note: form.note,
-        ...(editing ? { reason: form.reason } : {}),
+        ...(editing ? { reason: form.reason } : { requestId }),
       };
-      const response = await fetch(editing ? `/api/savings/${editing.id}` : "/api/savings", {
+      const result = await sendMutation(fetch, editing ? `/api/savings/${editing.id}` : "/api/savings", {
         method: editing ? "PATCH" : "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: await authHeaders(),
         body: JSON.stringify(payload),
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal menyimpan transaksi.");
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
       setFormOpen(false);
+      setToast({ tone: "success", message: editing ? "Transaksi berhasil diubah." : "Transaksi berhasil disimpan." });
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : "Gagal menyimpan transaksi.");
     } finally {
@@ -165,21 +188,38 @@ export default function AthleteSavingsPage() {
     }
   }
 
-  async function cancelTransaction(transaction: SavingsTransaction) {
-    if (!user || !transaction.id) return;
-    const reason = window.prompt("Alasan pembatalan transaksi (wajib):", "Transaksi tercatat dua kali");
-    if (!reason?.trim()) return;
+  function openCancel(transaction: SavingsTransaction) {
+    setCancelTarget(transaction);
+    setCancelReason("Transaksi tercatat dua kali");
+    setCancelError("");
+  }
+
+  async function confirmCancel() {
+    if (!cancelTarget?.id || cancelling) return;
+    if (!cancelReason.trim()) {
+      setCancelError("Alasan pembatalan wajib diisi.");
+      return;
+    }
+    setCancelling(true);
+    setCancelError("");
     try {
-      const token = await user.getIdToken();
-      const response = await fetch(`/api/savings/${transaction.id}/cancel`, {
+      // 409 = sudah dibatalkan (mis. percobaan pertama sukses tapi responsnya
+      // hilang di jaringan). Hasil akhirnya sama, jadi diperlakukan sukses.
+      const result = await sendMutation(fetch, `/api/savings/${cancelTarget.id}/cancel`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ reason }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Gagal membatalkan transaksi.");
-    } catch (cancelError) {
-      window.alert(cancelError instanceof Error ? cancelError.message : "Gagal membatalkan transaksi.");
+        headers: await authHeaders(),
+        body: JSON.stringify({ reason: cancelReason }),
+      }, { successStatuses: [409] });
+      if (!result.ok) {
+        setCancelError(result.error);
+        return;
+      }
+      setCancelTarget(null);
+      setToast({ tone: "success", message: "Transaksi berhasil dibatalkan." });
+    } catch (err) {
+      setCancelError(err instanceof Error ? err.message : "Gagal membatalkan transaksi.");
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -241,7 +281,7 @@ export default function AthleteSavingsPage() {
                             {transaction.type === "DEPOSIT" ? <ArrowUpCircle className="mt-0.5 h-5 w-5 text-emerald-400" /> : <ArrowDownCircle className="mt-0.5 h-5 w-5 text-rose-400" />}
                             <div><p className="font-medium text-white">{transaction.purpose} {!!transaction.cancelledAt && <span className="ml-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-300">Dibatalkan</span>}</p><p className="text-xs text-slate-400">{transaction.date}{transaction.note ? ` · ${transaction.note}` : ""}</p><p className="mt-1 text-[11px] text-slate-600">Dicatat oleh {transaction.createdByName || "Admin"}{transaction.cancelledAt ? ` · Dibatalkan: ${transaction.cancellationReason}` : ""}</p></div>
                           </div>
-                          <div className="text-right"><p className={`${transaction.cancelledAt ? "line-through text-slate-500" : transaction.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"} font-semibold`}>{transaction.type === "DEPOSIT" ? "+" : "−"}{rupiah.format(transaction.amount)}</p>{isAdmin && !transaction.cancelledAt && <div className="mt-2 flex justify-end gap-2"><button onClick={() => openEdit(transaction)} className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"><Pencil className="h-3 w-3" /> Edit</button><button onClick={() => cancelTransaction(transaction)} className="text-xs text-rose-400 hover:text-rose-300">Batalkan</button></div>}</div>
+                          <div className="text-right"><p className={`${transaction.cancelledAt ? "line-through text-slate-500" : transaction.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"} font-semibold`}>{transaction.type === "DEPOSIT" ? "+" : "−"}{rupiah.format(transaction.amount)}</p>{isAdmin && !transaction.cancelledAt && <div className="mt-2 flex justify-end gap-2"><button onClick={() => openEdit(transaction)} className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"><Pencil className="h-3 w-3" /> Edit</button><button onClick={() => openCancel(transaction)} className="text-xs text-rose-400 hover:text-rose-300">Batalkan</button></div>}</div>
                         </div>
                         {isAdmin && transactionAudits.length > 0 && (
                           <details className="mt-3 rounded-lg bg-black/20 p-3 text-xs text-slate-400">
@@ -286,10 +326,37 @@ export default function AthleteSavingsPage() {
             <Field label="Catatan"><Input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="Opsional" className="border-white/10 bg-black/40" /></Field>
             {editing && <Field label="Alasan perubahan"><Input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Contoh: salah input nominal" required className="border-amber-500/30 bg-black/40" /></Field>}
             {error && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
-            <DialogFooter><Button type="button" variant="outline" onClick={() => setFormOpen(false)} className="border-white/10 bg-transparent">Batal</Button><Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-500">{saving ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>
+            <DialogFooter className="gap-2"><Button type="button" variant="outline" disabled={saving} onClick={() => setFormOpen(false)} className="border-white/10 bg-transparent">Batal</Button><Button type="submit" disabled={saving} className="bg-emerald-600 hover:bg-emerald-500">{saving ? "Menyimpan..." : "Simpan"}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={!!cancelTarget} onOpenChange={(open) => { if (!open && !cancelling) setCancelTarget(null); }}>
+        <DialogContent className="border-white/10 bg-slate-950 text-white sm:max-w-md">
+          <DialogHeader>
+            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-rose-500/15 sm:mx-0"><AlertTriangle className="h-6 w-6 text-rose-400" /></div>
+            <DialogTitle>Batalkan transaksi?</DialogTitle>
+            <DialogDescription className="text-slate-400">Transaksi tetap tersimpan di riwayat, tetapi tidak dihitung ke saldo. Tindakan ini tidak dapat diubah kembali.</DialogDescription>
+          </DialogHeader>
+          {cancelTarget && (
+            <div className="rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+              <div className="flex items-center justify-between gap-3"><span className="text-slate-400">Atlet</span><span className="font-medium">{cancelTarget.athleteName}</span></div>
+              <div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-400">{cancelTarget.type === "DEPOSIT" ? "Setoran" : "Penarikan"}</span><span className={`font-semibold ${cancelTarget.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"}`}>{rupiah.format(cancelTarget.amount)}</span></div>
+              <div className="mt-2 flex items-center justify-between gap-3"><span className="text-slate-400">Tanggal</span><span>{cancelTarget.date} · {cancelTarget.purpose}</span></div>
+            </div>
+          )}
+          <Field label="Alasan pembatalan"><Input value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} disabled={cancelling} placeholder="Contoh: transaksi tercatat dua kali" className="border-white/10 bg-black/40" /></Field>
+          {cancelError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{cancelError}</p>}
+          <DialogFooter className="gap-2"><Button type="button" variant="outline" disabled={cancelling} onClick={() => setCancelTarget(null)} className="border-white/10 bg-transparent">Kembali</Button><Button type="button" disabled={cancelling} onClick={confirmCancel} className="bg-rose-600 hover:bg-rose-500">{cancelling ? "Membatalkan..." : "Ya, Batalkan"}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {toast && (
+        <div role="status" className={`fixed bottom-6 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-2xl backdrop-blur ${toast.tone === "success" ? "border-emerald-500/30 bg-emerald-950/90 text-emerald-200" : "border-rose-500/30 bg-rose-950/90 text-rose-200"}`}>
+          {toast.tone === "success" ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+          {toast.message}
+        </div>
+      )}
     </main>
   );
 }

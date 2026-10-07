@@ -1,18 +1,30 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { adminDb } from "@/lib/firebase-admin";
 import { validateSavingsInput } from "@/lib/athlete-savings";
+import { isValidRequestId } from "@/lib/savings-client";
 import { authErrorResponse, requireAdmin } from "@/lib/server-auth";
 
 export async function POST(request: Request) {
   try {
     const admin = await requireAdmin(request);
-    const result = validateSavingsInput(await request.json());
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return Response.json({ error: "Data tidak valid." }, { status: 400 });
+    }
+    // requestId dibuat sekali per pengisian form. Dipakai sebagai ID dokumen,
+    // jadi kiriman ulang (retry jaringan / klik ganda) tidak membuat transaksi
+    // kedua — penyebab setoran tercatat dobel sebelumnya.
+    if (!isValidRequestId(body.requestId)) {
+      return Response.json({ error: "Muat ulang halaman lalu coba lagi." }, { status: 400 });
+    }
+    const result = validateSavingsInput(body);
     if (!result.ok) return Response.json({ error: result.error }, { status: 400 });
 
-    const ref = adminDb.collection("crown-athlete-savings-transactions").doc();
+    const ref = adminDb.collection("crown-athlete-savings-transactions").doc(body.requestId);
     const athleteRef = adminDb.collection("crown-athletes").doc(result.value.athleteId);
-    await adminDb.runTransaction(async (transaction) => {
-      const athlete = await transaction.get(athleteRef);
+    const created = await adminDb.runTransaction(async (transaction) => {
+      const [existing, athlete] = await transaction.getAll(ref, athleteRef);
+      if (existing.exists) return false;
       if (!athlete.exists) throw new Error("ATHLETE_NOT_FOUND");
       const athleteName = athlete.data()?.name?.trim();
       if (!athleteName) throw new Error("ATHLETE_NAME_INVALID");
@@ -24,8 +36,9 @@ export async function POST(request: Request) {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
+      return true;
     });
-    return Response.json({ id: ref.id }, { status: 201 });
+    return Response.json({ id: ref.id, duplicate: !created }, { status: created ? 201 : 200 });
   } catch (error) {
     const authResponse = authErrorResponse(error);
     if (authResponse) return authResponse;
