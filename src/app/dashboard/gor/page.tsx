@@ -134,7 +134,7 @@ export default function GorPage() {
     <div className="overflow-x-auto rounded-xl border border-white/10"><table className="w-full text-left text-sm">
       <thead className="bg-white/5 text-slate-400"><tr>
         {isAdmin && <th className="w-10 p-3"><input type="checkbox" aria-label="Pilih semua yang belum bayar" checked={allUnpaidSelected} disabled={!unpaidVisible.length} onChange={() => setSelected(allUnpaidSelected ? new Set() : new Set(unpaidVisible.map((s) => s.id)))} className="h-4 w-4 accent-cyan-500" /></th>}
-        <th className="p-3">Hari</th><th className="p-3">Tanggal</th><th className="p-3">Kota</th><th className="p-3">Jam</th><th className="p-3">Tarif</th><th className="p-3">Status</th>
+        <th className="p-3">Hari</th><th className="p-3">Tanggal</th><th className="p-3">Kota</th><th className="p-3">Jam</th><th className="p-3">Total</th><th className="p-3">Status</th>
       </tr></thead>
       <tbody>{sessions.map((s) => {
         const c = costs[s.id] ?? { rate: gorRateOf(s), paid: false };
@@ -145,8 +145,8 @@ export default function GorPage() {
           <td className="p-3 text-slate-300">{s.date}</td>
           <td className="p-3">{cityOf(s)}</td>
           <td className="p-3 text-slate-300">{s.timeStart || "-"}–{s.timeEnd || "-"}</td>
-          <td className="p-3" onClick={(e) => e.stopPropagation()}>{isAdmin && cityOf(s) === "Jakarta" && !c.paid
-            ? <select value={rate} onChange={(e) => save(s, { rate: Number(e.target.value) })} className="rounded border border-white/10 bg-black px-2 py-1"><option value="35000">Rp 35.000/jam</option><option value="50000">Rp 50.000/jam</option></select>
+          <td className="p-3" onClick={(e) => e.stopPropagation()}>{isAdmin && !c.paid
+            ? <TotalInput key={`${s.id}-${rate}`} value={rate} label={`Total ${s.date}`} onSave={(next) => save(s, { rate: next })} />
             : rupiah(rate)}</td>
           <td className="p-3" onClick={(e) => e.stopPropagation()}>{isAdmin
             ? <button onClick={() => save(s, { paid: !c.paid })} className={`rounded-full px-3 py-1 text-xs ${c.paid ? "bg-emerald-500/20 text-emerald-300" : "bg-rose-500/20 text-rose-300"}`}>{c.paid ? "Sudah bayar" : "Belum bayar"}</button>
@@ -188,6 +188,36 @@ export default function GorPage() {
 
     {toast && <div role="status" className={`fixed bottom-24 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-2xl ${toast.ok ? "border-emerald-500/30 bg-emerald-950/95 text-emerald-200" : "border-rose-500/30 bg-rose-950/95 text-rose-200"}`}>{toast.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{toast.message}</div>}
   </main>;
+}
+
+const MAX_TOTAL = 10_000_000;
+
+// Total per sesi bisa diketik (durasi latihan beda-beda). Simpan saat Enter/keluar
+// kolom; Esc atau input tidak valid mengembalikan nilai lama.
+function TotalInput({ value, label, onSave }: { value: number; label: string; onSave: (next: number) => void }) {
+  const [draft, setDraft] = useState(String(value));
+  const commit = () => {
+    const next = Number(draft.replace(/\D/g, ""));
+    if (!draft.trim() || !Number.isSafeInteger(next) || next > MAX_TOTAL) return setDraft(String(value));
+    if (next !== value) onSave(next);
+  };
+  return (
+    <div className="flex items-center gap-1 rounded border border-white/15 bg-black px-2 focus-within:border-cyan-500">
+      <span className="text-xs text-slate-500">Rp</span>
+      <input
+        aria-label={label}
+        inputMode="numeric"
+        value={Number(draft || 0).toLocaleString("id-ID")}
+        onChange={(e) => setDraft(e.target.value.replace(/\D/g, ""))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") e.currentTarget.blur();
+          if (e.key === "Escape") { setDraft(String(value)); requestAnimationFrame(() => (e.target as HTMLInputElement).blur()); }
+        }}
+        className="w-24 bg-transparent py-1 text-sm outline-none"
+      />
+    </div>
+  );
 }
 
 function Stat({ label, value, tone = "text-white" }: { label: string; value: string; tone?: string }) {
