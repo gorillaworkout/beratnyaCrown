@@ -22,8 +22,13 @@ service cloud.firestore {
     // yang bisa dikarang klien.
     function isAdmin() {
       return signedIn()
-        && exists(/databases/$(database)/documents/crown-athletes/$(request.auth.uid))
-        && get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data.role == 'admin';
+        && (
+          ('email' in request.auth.token && request.auth.token.email == 'darmawanbayu1@gmail.com')
+          || (
+            exists(/databases/$(database)/documents/crown-athletes/$(request.auth.uid))
+            && get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data.role == 'admin'
+          )
+        );
     }
 
     // ── Data operasional tim ────────────────────────────────────────────────
@@ -58,6 +63,19 @@ service cloud.firestore {
     match /crown-gor-costs/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-milestones/{doc}    { allow read, write: if signedIn(); }
     match /crown-info-board/{doc}    { allow read: if signedIn(); allow write: if isAdmin(); }
+
+    // Tabungan atlet: seluruh anggota boleh melihat ledger. Semua mutasi hanya
+    // melalui API Admin SDK agar validasi, identitas editor, dan audit trail
+    // tidak dapat dilewati dari DevTools. Transaksi tidak pernah dihapus.
+    match /crown-athlete-savings-transactions/{doc} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+    match /crown-athlete-savings-audits/{doc} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+
     match /crown-locations/{doc}     { allow read, write: if signedIn(); }
     match /crown_finance_needs/{doc} { allow read, write: if signedIn(); }
     match /danus_shirts/{doc}        { allow read, write: if signedIn(); }

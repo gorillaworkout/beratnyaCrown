@@ -6,7 +6,7 @@
 //  - anggota biasa tidak bisa mengangkat dirinya jadi admin
 import assert from "node:assert";
 import { initializeTestEnvironment, assertFails, assertSucceeds } from "@firebase/rules-unit-testing";
-import { doc, getDoc, setDoc, collection, getDocs, deleteDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, getDocs, deleteDoc, updateDoc } from "firebase/firestore";
 import { readFileSync } from "node:fs";
 
 const PROJECT = "gorillatix";
@@ -27,11 +27,14 @@ await env.withSecurityRulesDisabled(async (ctx) => {
   await setDoc(doc(db, "crown-recruits", "r1"), { name: "Calon", whatsapp: "0812", birthDate: "2012-01-01" });
   await setDoc(doc(db, "crown-logins", "l1"), { email: "a@b.c", city: "Bandung, ID" });
   await setDoc(doc(db, "athletes", "a1"), { name: "Atlet", currentWeight: 50 });
+  await setDoc(doc(db, "crown-athlete-savings-transactions", "t1"), { athleteId: "member-uid", type: "DEPOSIT", amount: 100000 });
+  await setDoc(doc(db, "crown-athlete-savings-audits", "audit-1"), { transactionId: "t1" });
 });
 
 const guest = env.unauthenticatedContext().firestore();
 const member = env.authenticatedContext("member-uid").firestore();
 const admin = env.authenticatedContext("admin-uid").firestore();
+const owner = env.authenticatedContext("owner-uid", { email: "darmawanbayu1@gmail.com" }).firestore();
 
 let passed = 0;
 const check = async (label, promise) => {
@@ -58,6 +61,11 @@ await check("TIDAK bisa mengubah berat langsung", assertFails(setDoc(doc(member,
 await check("bisa ubah namanya sendiri", assertSucceeds(setDoc(doc(member, "crown-athletes", "member-uid"), { name: "Anggota Baru", role: "athlete" })));
 await check("bisa simpan atlet tanpa field role", assertSucceeds(setDoc(doc(member, "crown-athletes", "baru-1"), { name: "Atlet Baru", divisions: ["C4"] })));
 await check("TIDAK bisa hapus atlet", assertFails(deleteDoc(doc(member, "crown-athletes", "baru-1"))));
+await check("bisa baca tabungan semua atlet", assertSucceeds(getDocs(collection(member, "crown-athlete-savings-transactions"))));
+await check("TIDAK bisa menambah transaksi tabungan langsung", assertFails(setDoc(doc(member, "crown-athlete-savings-transactions", "t2"), { athleteId: "member-uid", type: "DEPOSIT", amount: 1 })));
+await check("TIDAK bisa mengubah transaksi tabungan langsung", assertFails(updateDoc(doc(member, "crown-athlete-savings-transactions", "t1"), { amount: 1 })));
+await check("TIDAK bisa menghapus transaksi tabungan", assertFails(deleteDoc(doc(member, "crown-athlete-savings-transactions", "t1"))));
+await check("TIDAK bisa baca audit perubahan", assertFails(getDocs(collection(member, "crown-athlete-savings-audits"))));
 
 console.log("\nAngkatan 18 (admin-only):");
 // Runs BEFORE the Admin section below promotes member-uid to admin,
@@ -77,7 +85,14 @@ await check("bisa baca data pendaftar", assertSucceeds(getDocs(collection(admin,
 await check("bisa baca catatan login", assertSucceeds(getDocs(collection(admin, "crown-logins"))));
 await check("bisa mengangkat anggota jadi admin", assertSucceeds(setDoc(doc(admin, "crown-athletes", "member-uid"), { name: "Anggota", role: "admin" })));
 await check("bisa hapus atlet", assertSucceeds(deleteDoc(doc(admin, "crown-athletes", "baru-1"))));
+await check("bisa baca audit perubahan tabungan", assertSucceeds(getDocs(collection(admin, "crown-athlete-savings-audits"))));
+await check("TIDAK bisa menulis transaksi langsung", assertFails(setDoc(doc(admin, "crown-athlete-savings-transactions", "t3"), { athleteId: "admin-uid", type: "DEPOSIT", amount: 1 })));
+await check("TIDAK bisa menghapus transaksi tabungan", assertFails(deleteDoc(doc(admin, "crown-athlete-savings-transactions", "t1"))));
+
+console.log("\nOwner:");
+await check("bisa baca audit perubahan tabungan", assertSucceeds(getDocs(collection(owner, "crown-athlete-savings-audits"))));
+await check("TIDAK bisa menulis transaksi langsung", assertFails(setDoc(doc(owner, "crown-athlete-savings-transactions", "t4"), { athleteId: "owner-uid", type: "DEPOSIT", amount: 1 })));
 
 await env.cleanup();
-assert.equal(passed, 28, `harusnya 28 pemeriksaan lolos, dapat ${passed}`);
+assert.equal(passed, 38, `harusnya 38 pemeriksaan lolos, dapat ${passed}`);
 console.log(`\nSemua ${passed} pemeriksaan lolos.`);
