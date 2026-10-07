@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InstallPrompt, InstallLink } from "@/components/install-prompt";
 import { EditableInfoSection } from "@/components/editable-info-section";
+import { PaymentMethods } from "@/components/payment-methods";
 
 const glassCardClass =
   "border-white/10 bg-white/5 backdrop-blur-md shadow-xl text-slate-100 transition-all hover:bg-white/[0.07]";
@@ -321,6 +322,8 @@ export default function InfoDashboardPage() {
           </Card>
         </div>
 
+        <PaymentMethods />
+
         {/* Main Grid */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Section: Pembayaran & Administrasi */}
@@ -332,63 +335,6 @@ export default function InfoDashboardPage() {
 
             <EditableInfoSection category="finance" />
 
-            <Card className={glassCardClass}>
-              <CardHeader className="pb-3">
-                <div className="flex items-center justify-between gap-3">
-                  <CardTitle className="text-lg">Metode Pembayaran</CardTitle>
-                  <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">Official</Badge>
-                </div>
-                <CardDescription className="text-slate-400">
-                  Pilih QRIS sesuai kota dan tujuan pembayaran.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-amber-200">
-                  Pastikan nama merchant dan tujuan QRIS sudah benar sebelum membayar.
-                </div>
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {[
-                    {
-                      title: "QRIS Kas Bandung",
-                      image: "/qris-kas-bandung.jpg",
-                      merchant: "Warung Crown",
-                      nmid: "ID1026495356572",
-                      purpose: "Iuran latihan Bandung",
-                      amount: "Rp 13.000 / latihan",
-                    },
-                    {
-                      title: "QRIS Kas Jakarta",
-                      image: "/qris-kas-jakarta.jpeg",
-                      merchant: "Warung Crown Allstar Jakarta",
-                      nmid: "ID1026608490854",
-                      purpose: "Iuran latihan Jakarta",
-                      amount: "Rp 13.000 / latihan",
-                    },
-                    {
-                      title: "QRIS Donasi & Dana Non-Kas",
-                      image: "/qris-donasi.jpeg",
-                      merchant: "Firly Deasy Ocktrilyta",
-                      nmid: "ID1026525860767",
-                      purpose: "Donatur atau penyimpanan dana selain kas",
-                      amount: "Nominal sesuai kebutuhan",
-                    },
-                  ].map((payment) => (
-                    <article key={payment.title} className="rounded-xl border border-white/10 bg-black/20 p-3 sm:last:col-span-2">
-                      <h3 className="mb-3 text-sm font-semibold text-white">{payment.title}</h3>
-                      <div className="flex justify-center rounded-lg bg-white p-2">
-                        <img src={payment.image} alt={payment.title} className="h-auto w-full max-w-[220px] rounded" />
-                      </div>
-                      <dl className="mt-3 space-y-2 text-xs">
-                        <div className="flex justify-between gap-3"><dt className="text-slate-400">Kegunaan</dt><dd className="text-right text-slate-200">{payment.purpose}</dd></div>
-                        <div className="flex justify-between gap-3"><dt className="text-slate-400">Nominal</dt><dd className="text-right font-semibold text-white">{payment.amount}</dd></div>
-                        <div className="flex justify-between gap-3"><dt className="text-slate-400">Merchant</dt><dd className="text-right text-slate-200">{payment.merchant}</dd></div>
-                        <div className="flex justify-between gap-3"><dt className="text-slate-400">NMID</dt><dd className="text-right font-mono text-[10px] text-slate-300">{payment.nmid}</dd></div>
-                      </dl>
-                    </article>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
           </div>
 
           {/* Section: Events & Team Info */}
