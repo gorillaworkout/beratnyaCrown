@@ -60,6 +60,8 @@ service cloud.firestore {
     match /crown-p3k/{doc}           { allow read, write: if signedIn(); }
     match /crown-kas-daily/{doc}     { allow read, write: if signedIn(); }
     match /crown-kas-transactions/{doc} { allow read, write: if signedIn(); }
+    // Uang pelatih: semua anggota boleh melihat, hanya admin yang mengubah.
+    match /crown_coach_fees/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-gor-costs/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-milestones/{doc}    { allow read, write: if signedIn(); }
     match /crown-info-board/{doc}    { allow read: if signedIn(); allow write: if isAdmin(); }

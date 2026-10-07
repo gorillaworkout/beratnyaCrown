@@ -10,9 +10,6 @@ import {
   FinanceRecord, 
   FinanceType 
 } from "@/lib/firebase/finances";
-import { getKasAthletes } from "@/lib/firebase/kas";
-import type { KasAthlete } from "@/lib/types/kas";
-import { getCoachFeesByMonth, saveCoachFeeRecord, CoachFeeRecord, CoachFeeStatus } from "@/lib/firebase/coach_fees";
 import { getFinanceNeeds, addFinanceNeed, deleteFinanceNeed, updateFinanceNeed, FinanceNeed } from "@/lib/firebase/needs";
 import { Wallet, TrendingUp, TrendingDown, AlertCircle, Plus, Trash2, CheckCircle2, Edit, RotateCcw, ShoppingCart } from "lucide-react";
 import { format } from "date-fns";
@@ -22,12 +19,7 @@ export default function FinancesPage() {
   const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [records, setRecords] = useState<FinanceRecord[]>([]);
-  const [activeTab, setActiveTab] = useState<"income" | "expense" | "debt" | "coach_fees" | "needs">("income");
-  
-  // Coach Fees state
-  const [coachMonth, setCoachMonth] = useState<string>(new Date().toISOString().slice(0, 7)); // YYYY-MM
-  const [athletes, setAthletes] = useState<KasAthlete[]>([]);
-  const [coachFees, setCoachFees] = useState<CoachFeeRecord[]>([]);
+  const [activeTab, setActiveTab] = useState<"income" | "expense" | "debt" | "needs">("income");
   
   const [needs, setNeeds] = useState<FinanceNeed[]>([]);
   const [showNeedModal, setShowNeedModal] = useState(false);
@@ -62,11 +54,6 @@ export default function FinancesPage() {
     try {
       const data = await getFinanceRecords();
       setRecords(data);
-      
-      const athletesData = await getKasAthletes();
-      // Filter out exempted kas athletes if needed, but here we probably show all 
-      // or we just show everyone and let coach exempt them.
-      setAthletes(athletesData);
 
       const needsData = await getFinanceNeeds();
       setNeeds(needsData);
@@ -76,33 +63,6 @@ export default function FinancesPage() {
       setLoading(false);
     }
   }
-
-  useEffect(() => {
-    if (!isAdmin) return;
-    async function fetchCoachFees() {
-      try {
-        const fees = await getCoachFeesByMonth(coachMonth);
-        setCoachFees(fees);
-      } catch (err) {
-        console.error("Failed to fetch coach fees", err);
-      }
-    }
-    fetchCoachFees();
-  }, [coachMonth, isAdmin]);
-
-  const monthOptions = useMemo(() => {
-    const options = [];
-    const currentYear = new Date().getFullYear();
-    for (let year = currentYear - 1; year <= currentYear + 1; year++) {
-      for (let month = 1; month <= 12; month++) {
-        const value = `${year}-${month.toString().padStart(2, '0')}`;
-        const date = new Date(year, month - 1, 1);
-        const label = format(date, 'MMMM yyyy', { locale: idLocale });
-        options.push({ value, label });
-      }
-    }
-    return options;
-  }, []);
 
   const summary = useMemo(() => {
     let totalIncome = 0;
@@ -216,41 +176,6 @@ export default function FinancesPage() {
       await loadData();
     } catch (error) {
       console.error("Failed to undo debt:", error);
-    }
-  }
-
-  async function handleCoachFeeStatus(athlete: KasAthlete, status: CoachFeeStatus) {
-    let amount = 0;
-    if (status === 'LUNAS') {
-      const input = prompt(`Masukkan nominal pembayaran untuk ${athlete.name} (Rp):`, "150000");
-      if (input === null) return; // User cancelled
-      amount = parseInt(input.replace(/\D/g, ''), 10) || 150000;
-    }
-
-    try {
-      const record: Omit<CoachFeeRecord, "id" | "updatedAt"> = {
-        athleteId: athlete.id!,
-        athleteName: athlete.name,
-        month: coachMonth,
-        status,
-        amount: status === 'LUNAS' ? amount : 0
-      };
-      await saveCoachFeeRecord(record);
-      
-      // Update local state
-      setCoachFees(prev => {
-        const existingIdx = prev.findIndex(r => r.athleteId === athlete.id);
-        if (existingIdx >= 0) {
-          const newFees = [...prev];
-          newFees[existingIdx] = { ...newFees[existingIdx], ...record };
-          return newFees;
-        } else {
-          return [...prev, record as CoachFeeRecord];
-        }
-      });
-    } catch (error) {
-      console.error("Failed to update coach fee:", error);
-      alert("Gagal menyimpan data.");
     }
   }
 
@@ -447,12 +372,6 @@ export default function FinancesPage() {
             Daftar Hutang
           </button>
           <button 
-            onClick={() => setActiveTab("coach_fees")} 
-            className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "coach_fees" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
-          >
-            Uang Pelatih
-          </button>
-          <button 
             onClick={() => setActiveTab("needs")} 
             className={`px-4 py-2 text-sm font-medium transition-colors border-b-2 ${activeTab === "needs" ? 'border-indigo-500 text-indigo-400' : 'border-transparent text-slate-400 hover:text-slate-300'}`}
           >
@@ -607,83 +526,6 @@ export default function FinancesPage() {
                         </td>
                       </tr>
                     ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Tab Content: Coach Fees */}
-        {activeTab === "coach_fees" && (
-          <div className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden flex flex-col">
-            <div className="p-4 sm:p-6 border-b border-white/10 flex flex-col sm:flex-row justify-between sm:items-center gap-4">
-              <div>
-                <h2 className="text-lg font-bold text-white">Pembayaran Uang Pelatih</h2>
-                <p className="text-sm text-slate-400">Pilih bulan dan kelola status pembayaran tiap atlet.</p>
-              </div>
-              <select 
-                value={coachMonth}
-                onChange={(e) => setCoachMonth(e.target.value)}
-                className="rounded-xl border border-white/10 bg-zinc-900 px-4 py-2.5 text-white focus:ring-2 focus:ring-indigo-500/50 outline-none cursor-pointer appearance-none font-medium min-w-[200px]"
-                style={{
-                  backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='white'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E")`,
-                  backgroundRepeat: 'no-repeat',
-                  backgroundPosition: 'right 1rem center',
-                  backgroundSize: '1.2em'
-                }}
-              >
-                {monthOptions.map(opt => (
-                  <option key={opt.value} value={opt.value} className="bg-zinc-900 text-white">{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-sm text-slate-300">
-                <thead className="bg-white/5 text-xs uppercase text-slate-400">
-                  <tr>
-                    <th className="px-6 py-4 font-medium">Nama Atlet</th>
-                    <th className="px-6 py-4 font-medium text-center">Status Pembayaran</th>
-                    <th className="px-6 py-4 font-medium text-right">Nominal</th>
-                    <th className="px-6 py-4 font-medium text-center">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {athletes.length === 0 ? (
-                    <tr><td colSpan={4} className="px-6 py-12 text-center text-slate-500">Memuat data atlet...</td></tr>
-                  ) : (
-                    athletes.map((athlete) => {
-                      const fee = coachFees.find(f => f.athleteId === athlete.id);
-                      const defaultStatus = athlete.coachFeeExempt ? 'GRATIS' : 'BELUM_BAYAR';
-                      const status = fee?.status || defaultStatus;
-                      
-                      return (
-                        <tr key={athlete.id} className="hover:bg-white/[0.02]">
-                          <td className="px-6 py-4 font-medium text-white">{athlete.name}</td>
-                          <td className="px-6 py-4 text-center">
-                            {status === 'BELUM_BAYAR' && <span className="inline-block px-2 py-1 rounded bg-slate-800 text-slate-400 text-xs font-bold border border-slate-700">Belum Bayar</span>}
-                            {status === 'LUNAS' && <span className="inline-block px-2 py-1 rounded bg-emerald-500/20 text-emerald-400 text-xs font-bold border border-emerald-500/30">Lunas</span>}
-                            {status === 'GRATIS' && <span className="inline-block px-2 py-1 rounded bg-cyan-500/20 text-cyan-400 text-xs font-bold border border-cyan-500/30">Gratis / Free</span>}
-                          </td>
-                          <td className="px-6 py-4 text-right font-bold text-slate-200">
-                            {status === 'LUNAS' && fee?.amount ? `Rp ${fee.amount.toLocaleString('id-ID')}` : '-'}
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex items-center justify-center gap-2">
-                              {status !== 'LUNAS' && (
-                                <button onClick={() => handleCoachFeeStatus(athlete, 'LUNAS')} className="text-xs px-3 py-1.5 rounded-md bg-emerald-500 hover:bg-emerald-400 text-white font-bold transition-colors">Bayar</button>
-                              )}
-                              {status !== 'GRATIS' && (
-                                <button onClick={() => handleCoachFeeStatus(athlete, 'GRATIS')} className="text-xs px-3 py-1.5 rounded-md bg-cyan-600 hover:bg-cyan-500 text-white font-bold transition-colors">Free</button>
-                              )}
-                              {status !== 'BELUM_BAYAR' && (
-                                <button onClick={() => handleCoachFeeStatus(athlete, 'BELUM_BAYAR')} className="text-xs px-3 py-1.5 rounded-md border border-slate-600 hover:bg-slate-800 text-slate-300 font-bold transition-colors">Batal</button>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })
                   )}
                 </tbody>
               </table>
