@@ -32,6 +32,12 @@ export default function GorPage() {
     const timer = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+  useEffect(() => {
+    if (!confirmOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape" && !busy) setConfirmOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmOpen, busy]);
 
   const monthSessions = useMemo(() => schedules
     .filter((s) => (s.status === "latihan" || s.status === "tambahan") && s.date?.startsWith(month))
@@ -186,7 +192,7 @@ export default function GorPage() {
       </div>
     )}
 
-    {toast && <div role="status" className={`fixed bottom-24 left-1/2 z-[60] flex -translate-x-1/2 items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-2xl ${toast.ok ? "border-emerald-500/30 bg-emerald-950/95 text-emerald-200" : "border-rose-500/30 bg-rose-950/95 text-rose-200"}`}>{toast.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{toast.message}</div>}
+    {toast && <div role="status" className={`fixed bottom-24 left-1/2 z-[60] flex -translate-x-1/2 items-center md:left-[calc(50%+8rem)] gap-2 rounded-xl border px-4 py-3 text-sm shadow-2xl ${toast.ok ? "border-emerald-500/30 bg-emerald-950/95 text-emerald-200" : "border-rose-500/30 bg-rose-950/95 text-rose-200"}`}>{toast.ok ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}{toast.message}</div>}
   </main>;
 }
 
