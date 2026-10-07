@@ -25,6 +25,7 @@ export async function PATCH(
     await adminDb.runTransaction(async (transaction) => {
       const [snapshot, athlete] = await transaction.getAll(transactionRef, athleteRef);
       if (!snapshot.exists) throw new Error("NOT_FOUND");
+      if (snapshot.data()?.cancelledAt) throw new Error("CANCELLED");
       if (!athlete.exists) throw new Error("ATHLETE_NOT_FOUND");
       const athleteName = athlete.data()?.name?.trim();
       if (!athleteName) throw new Error("ATHLETE_NAME_INVALID");
@@ -59,6 +60,9 @@ export async function PATCH(
     if (authResponse) return authResponse;
     if (error instanceof Error && error.message === "NOT_FOUND") {
       return Response.json({ error: "Transaksi tidak ditemukan." }, { status: 404 });
+    }
+    if (error instanceof Error && error.message === "CANCELLED") {
+      return Response.json({ error: "Transaksi yang dibatalkan tidak dapat diedit." }, { status: 409 });
     }
     if (error instanceof Error && error.message === "ATHLETE_NOT_FOUND") {
       return Response.json({ error: "Atlet tidak ditemukan." }, { status: 400 });

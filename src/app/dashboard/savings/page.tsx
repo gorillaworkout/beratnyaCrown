@@ -165,6 +165,24 @@ export default function AthleteSavingsPage() {
     }
   }
 
+  async function cancelTransaction(transaction: SavingsTransaction) {
+    if (!user || !transaction.id) return;
+    const reason = window.prompt("Alasan pembatalan transaksi (wajib):", "Transaksi tercatat dua kali");
+    if (!reason?.trim()) return;
+    try {
+      const token = await user.getIdToken();
+      const response = await fetch(`/api/savings/${transaction.id}/cancel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ reason }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Gagal membatalkan transaksi.");
+    } catch (cancelError) {
+      window.alert(cancelError instanceof Error ? cancelError.message : "Gagal membatalkan transaksi.");
+    }
+  }
+
   return (
     <main className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-gray-900 to-black p-4 text-slate-100 sm:p-6 lg:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
@@ -217,17 +235,17 @@ export default function AthleteSavingsPage() {
                   {selected.transactions.map((transaction) => {
                     const transactionAudits = audits.filter((audit) => audit.transactionId === transaction.id);
                     return (
-                      <article key={transaction.id} className="p-4">
+                      <article key={transaction.id} className={`p-4 ${transaction.cancelledAt ? "opacity-60" : ""}`}>
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex gap-3">
                             {transaction.type === "DEPOSIT" ? <ArrowUpCircle className="mt-0.5 h-5 w-5 text-emerald-400" /> : <ArrowDownCircle className="mt-0.5 h-5 w-5 text-rose-400" />}
-                            <div><p className="font-medium text-white">{transaction.purpose}</p><p className="text-xs text-slate-400">{transaction.date}{transaction.note ? ` · ${transaction.note}` : ""}</p><p className="mt-1 text-[11px] text-slate-600">Dicatat oleh {transaction.createdByName || "Admin"}</p></div>
+                            <div><p className="font-medium text-white">{transaction.purpose} {!!transaction.cancelledAt && <span className="ml-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-300">Dibatalkan</span>}</p><p className="text-xs text-slate-400">{transaction.date}{transaction.note ? ` · ${transaction.note}` : ""}</p><p className="mt-1 text-[11px] text-slate-600">Dicatat oleh {transaction.createdByName || "Admin"}{transaction.cancelledAt ? ` · Dibatalkan: ${transaction.cancellationReason}` : ""}</p></div>
                           </div>
-                          <div className="text-right"><p className={transaction.type === "DEPOSIT" ? "font-semibold text-emerald-400" : "font-semibold text-rose-400"}>{transaction.type === "DEPOSIT" ? "+" : "−"}{rupiah.format(transaction.amount)}</p>{isAdmin && <button onClick={() => openEdit(transaction)} className="mt-2 inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"><Pencil className="h-3 w-3" /> Edit</button>}</div>
+                          <div className="text-right"><p className={`${transaction.cancelledAt ? "line-through text-slate-500" : transaction.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"} font-semibold`}>{transaction.type === "DEPOSIT" ? "+" : "−"}{rupiah.format(transaction.amount)}</p>{isAdmin && !transaction.cancelledAt && <div className="mt-2 flex justify-end gap-2"><button onClick={() => openEdit(transaction)} className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"><Pencil className="h-3 w-3" /> Edit</button><button onClick={() => cancelTransaction(transaction)} className="text-xs text-rose-400 hover:text-rose-300">Batalkan</button></div>}</div>
                         </div>
                         {isAdmin && transactionAudits.length > 0 && (
                           <details className="mt-3 rounded-lg bg-black/20 p-3 text-xs text-slate-400">
-                            <summary className="cursor-pointer text-amber-300"><History className="mr-1 inline h-3 w-3" />{transactionAudits.length} riwayat edit</summary>
+                            <summary className="cursor-pointer text-amber-300"><History className="mr-1 inline h-3 w-3" />{transactionAudits.length} riwayat perubahan</summary>
                             <div className="mt-2 space-y-3">
                               {transactionAudits.map((audit) => (
                                 <div key={audit.id} className="border-l border-amber-500/30 pl-3">

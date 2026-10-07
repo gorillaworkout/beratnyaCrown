@@ -25,6 +25,15 @@ test("balance equals deposits minus withdrawals and may become debt", () => {
   assert.equal(calculateSavingsBalance(transactions), -50_000);
 });
 
+test("cancelled transactions do not affect balance", () => {
+  const transactions = [
+    { type: "DEPOSIT", amount: 100_000 },
+    { type: "DEPOSIT", amount: 100_000, cancelledAt: {} },
+  ] as SavingsTransaction[];
+
+  assert.equal(calculateSavingsBalance(transactions), 100_000);
+});
+
 test("validates a deposit transaction", () => {
   assert.deepEqual(validateSavingsInput({ ...base, type: "DEPOSIT" }), {
     ok: true,
@@ -65,5 +74,14 @@ test("audit changes include every edited business field", () => {
     { label: "Tujuan", before: "Kejurnas", after: "Asia" },
     { label: "Tanggal", before: "2026-10-07", after: "2026-10-08" },
     { label: "Catatan", before: "Awal", after: "Koreksi" },
+  ]);
+});
+
+test("audit changes show transaction cancellation", () => {
+  const before = { ...base, type: "DEPOSIT" } as SavingsTransaction;
+  const after = { ...before, cancelledAt: {} } as SavingsTransaction;
+
+  assert.deepEqual(getSavingsAuditChanges(before, after), [
+    { label: "Status", before: "Aktif", after: "Dibatalkan" },
   ]);
 });

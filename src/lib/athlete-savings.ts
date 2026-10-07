@@ -15,6 +15,10 @@ export type SavingsTransaction = {
   updatedByUid?: string;
   updatedByName?: string;
   updatedAt?: unknown;
+  cancelledByUid?: string;
+  cancelledByName?: string;
+  cancelledAt?: unknown;
+  cancellationReason?: string;
 };
 
 export type SavingsInput = Pick<
@@ -46,11 +50,13 @@ type ValidationResult =
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function calculateSavingsBalance(
-  transactions: Pick<SavingsTransaction, "type" | "amount">[],
+  transactions: Pick<SavingsTransaction, "type" | "amount" | "cancelledAt">[],
 ): number {
   return transactions.reduce(
     (sum, transaction) =>
-      sum + (transaction.type === "DEPOSIT" ? transaction.amount : -transaction.amount),
+      transaction.cancelledAt
+        ? sum
+        : sum + (transaction.type === "DEPOSIT" ? transaction.amount : -transaction.amount),
     0,
   );
 }
@@ -69,6 +75,7 @@ export function getSavingsAuditChanges(
     { label: "Tujuan", value: (transaction) => transaction.purpose },
     { label: "Tanggal", value: (transaction) => transaction.date },
     { label: "Catatan", value: (transaction) => transaction.note || "—" },
+    { label: "Status", value: (transaction) => transaction.cancelledAt ? "Dibatalkan" : "Aktif" },
   ];
 
   return fields.flatMap((field) => {
