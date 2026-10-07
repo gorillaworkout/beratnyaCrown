@@ -765,13 +765,13 @@ export default function KasPage() {
 
                 {/* Select All / Deselect All */}
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-sm font-semibold text-slate-300">Pilih latihan yang mau dibayar, atau ubah status bila salah catat:</p>
+                  <p className="text-sm font-semibold text-slate-300">Centang yang mau dibayar. Salah catat? Ubah statusnya — langsung tersimpan.</p>
                   <button
                     onClick={() => {
                       const newVal = !allSelected;
                       setBulkPaymentRecords(prev => prev.map(r => ({ ...r, selected: newVal })));
                     }}
-                    className="text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
+                    className="shrink-0 whitespace-nowrap pl-3 text-xs font-medium text-cyan-400 hover:text-cyan-300 transition-colors"
                   >
                     {allSelected ? "Batal Semua" : "Pilih Semua"}
                   </button>
@@ -794,7 +794,7 @@ export default function KasPage() {
                           type="checkbox"
                           checked={r.selected}
                           onChange={() => { }}
-                          className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black pointer-events-none"
+                          className="w-4 h-4 rounded border-white/20 bg-black/50 accent-cyan-500 focus:ring-cyan-500 focus:ring-offset-black pointer-events-none"
                         />
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-white font-medium">
@@ -806,13 +806,13 @@ export default function KasPage() {
                             disabled={!r.record.id || statusSaving !== null || isSubmitting}
                             onClick={(e) => e.stopPropagation()}
                             onChange={(e) => changeDebtStatus(r.record, e.target.value as KasStatus)}
-                            className="mt-1 w-full max-w-[240px] rounded-md border border-white/10 bg-black/60 px-2 py-1 text-xs text-slate-200 disabled:opacity-50"
+                            className="mt-1.5 h-8 w-full max-w-[220px] rounded-md border border-white/20 bg-black/60 px-2 text-[13px] text-slate-100 disabled:opacity-50"
                           >
-                            {KAS_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                            {KAS_STATUS_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label.split(" — ")[0]}</option>)}
                           </select>
                           {statusSaving === r.record.id && <p className="mt-1 text-[11px] text-cyan-400">Menyimpan...</p>}
                         </div>
-                        <span className={`text-sm font-bold shrink-0 ${r.selected ? 'text-cyan-400' : 'text-slate-400'}`}>
+                        <span className={`text-sm font-bold shrink-0 ${r.selected ? 'text-cyan-400' : 'text-slate-200'}`}>
                           Rp {r.toPay.toLocaleString('id-ID')}
                         </span>
                       </li>
