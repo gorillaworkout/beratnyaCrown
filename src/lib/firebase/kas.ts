@@ -1,6 +1,7 @@
 import { db } from "../firebase";
 import { collection, doc, getDocs, setDoc, query, orderBy, where, serverTimestamp, deleteDoc } from "firebase/firestore";
 import type { KasRecord, KasAthlete, KasTransaction } from "../types/kas";
+import { isTrainingDateForCity } from "../kas-payment";
 
 export async function getKasAthletes(): Promise<KasAthlete[]> {
   const q = query(collection(db, "crown-athletes"), orderBy("name"));
@@ -77,9 +78,7 @@ export async function getKasSummary() {
   dailySnap.forEach(doc => {
     const data = doc.data();
     totalBilled += data.totalBilled || 0;
-    if (data.isSettled) {
-      totalSettled += data.totalBilled || 0;
-    }
+    totalSettled += data.paidAmount ?? (data.isSettled ? data.totalBilled || 0 : 0);
   });
 
   const trxSnap = await getDocs(collection(db, "crown-kas-transactions"));
@@ -119,7 +118,7 @@ export async function addCustomTrainingEvent(dateStr: string) {
   });
 }
 
-export async function getTrainingDates(): Promise<string[]> {
+export async function getTrainingDates(athleteCity?: string): Promise<string[]> {
   const today = new Date();
   const year = today.getFullYear();
   const month = today.getMonth();
@@ -140,11 +139,11 @@ export async function getTrainingDates(): Promise<string[]> {
   // 2. Get Schedules from crown-schedules (jadwal page edits)
   const qSchedules = query(collection(db, "crown-schedules"));
   const snapshotSchedules = await getDocs(qSchedules);
-  const customSchedules = new Map<string, any>();
+  const customSchedules = new Map<string, any[]>();
   snapshotSchedules.forEach(doc => {
     const data = doc.data();
     if (data.date) {
-      customSchedules.set(data.date, data);
+      customSchedules.set(data.date, [...(customSchedules.get(data.date) ?? []), data]);
     }
   });
 
@@ -167,12 +166,17 @@ export async function getTrainingDates(): Promise<string[]> {
       
       // Crown-schedules takes priority (jadwal page)
       if (customSchedules.has(dateStr)) {
-        const sched = customSchedules.get(dateStr);
-        if (sched.status === "latihan" || sched.status === "tambahan") {
+        const schedules = customSchedules.get(dateStr) ?? [];
+        if (!athleteCity && schedules.some((sched) => sched.status === "latihan" || sched.status === "tambahan")) {
+          dates.add(dateStr);
+          continue;
+        }
+        if (athleteCity && isTrainingDateForCity(dateStr, athleteCity, schedules)) {
           dates.add(dateStr);
         }
-        // If status is "libur", skip this date
-        continue;
+        if (!athleteCity || schedules.some((sched) => sched.city === "Gabungan" || (sched.city ?? "Bandung") === athleteCity)) {
+          continue;
+        }
       }
 
       // Then check crown-events (legacy)
@@ -184,7 +188,7 @@ export async function getTrainingDates(): Promise<string[]> {
       }
       
       // Regular days
-      if (REGULAR_DAYS.has(d.getDay())) {
+      if (REGULAR_DAYS.has(d.getDay()) && (!athleteCity || athleteCity === "Bandung")) {
         dates.add(dateStr);
       }
     }

@@ -13,6 +13,8 @@ export interface KasRecord {
   /** Izin lainnya → Rp 23,000 (kas 13rb + denda 10rb) */
   isExcusedOther?: boolean;
   totalBilled: number;
+  /** Nominal yang sudah diterima. Dibutuhkan saat kas sudah dibayar lalu kena denda. */
+  paidAmount?: number;
   isSettled: boolean;
   updatedAt?: any;
 }

@@ -26,6 +26,7 @@ service cloud.firestore {
           ('email' in request.auth.token && request.auth.token.email == 'darmawanbayu1@gmail.com')
           || (
             exists(/databases/$(database)/documents/crown-athletes/$(request.auth.uid))
+            && 'role' in get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data
             && get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data.role == 'admin'
           )
         );
@@ -58,8 +59,9 @@ service cloud.firestore {
     match /crown-attendance/{doc}    { allow read, write: if signedIn(); }
     match /crown-piket/{doc}         { allow read, write: if signedIn(); }
     match /crown-p3k/{doc}           { allow read, write: if signedIn(); }
-    match /crown-kas-daily/{doc}     { allow read, write: if signedIn(); }
-    match /crown-kas-transactions/{doc} { allow read, write: if signedIn(); }
+    match /crown-kas-daily/{doc}     { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /crown-kas-transactions/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /crown-kas-bulk-requests/{doc} { allow read, write: if false; }
     // Uang pelatih: semua anggota boleh melihat, hanya admin yang mengubah.
     match /crown_coach_fees/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
     match /crown-gor-costs/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }

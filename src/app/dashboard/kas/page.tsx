@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Calculator, CheckCircle2, Plus, XCircle, Wallet, ArrowUpCircle, ArrowDownCircle, Trash2, TrendingUp, Download } from "lucide-react";
 import {
 
@@ -13,7 +13,7 @@ import {
   deleteKasTransaction,
   getAllKasRecords,
   getTrainingDates,
-  addCustomTrainingEvent
+  addCustomTrainingEvent,
 } from "@/lib/firebase/kas";
 import type { KasAthlete, KasRecord, KasTransaction, TransactionType } from "@/lib/types/kas";
 import { KAS_STATUS_OPTIONS, kasStatusOf, kasStatusPatch, type KasStatus } from "@/lib/kas-status";
@@ -22,6 +22,8 @@ import { id as idLocale } from "date-fns/locale";
 import { useAuth } from "@/lib/auth-context";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { kasOutstanding, kasPaidAmount, nextTrainingDates, reconcileKasPayment } from "@/lib/kas-payment";
+import { newRequestId, sendMutation } from "@/lib/savings-client";
 
 export default function KasPage() {
   const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "recap">("daily");
@@ -73,6 +75,12 @@ export default function KasPage() {
   const [bulkPaymentRecords, setBulkPaymentRecords] = useState<{ record: KasRecord, toPay: number, selected: boolean }[]>([]);
   const [statusSaving, setStatusSaving] = useState<string | null>(null);
   const [statusMessage, setStatusMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [showFutureBulkModal, setShowFutureBulkModal] = useState(false);
+  const [futureBulkAthleteId, setFutureBulkAthleteId] = useState("");
+  const [futureBulkDates, setFutureBulkDates] = useState<string[]>([]);
+  const [futureBulkSelected, setFutureBulkSelected] = useState<string[]>([]);
+  const [futureBulkRequestId, setFutureBulkRequestId] = useState("");
+  const futureBulkLoadVersion = useRef(0);
 
   // Koreksi status langsung dari Tunggakan (mis. ternyata izin). Nominal dihitung
   // ulang; kalau jadi Rp 0 baris hilang dari tunggakan. Cron hanya membuat record
@@ -83,14 +91,18 @@ export default function KasPage() {
     setStatusSaving(record.id);
     setStatusMessage(null);
     try {
-      // isSettled sengaja tidak ditulis: merge mempertahankan nilai tersimpan,
-      // jadi pembayaran yang terjadi bersamaan tidak ikut dibatalkan.
-      await saveKasRecord({ id: record.id, date: record.date, athleteId: record.athleteId, name: record.name, ...patch });
-      const updated = { ...record, ...patch };
+      // Pertahankan nominal yang sudah diterima; perubahan status hanya
+      // menghitung ulang sisa tagihan (mis. kas lunas lalu menjadi alpa).
+      const payment = reconcileKasPayment(
+        { ...record, ...patch },
+        record.paidAmount ?? (record.isSettled ? record.totalBilled : undefined),
+      );
+      await saveKasRecord({ id: record.id, date: record.date, athleteId: record.athleteId, name: record.name, ...patch, ...payment });
+      const updated = { ...record, ...patch, ...payment };
       setBulkPaymentRecords((prev) => prev
-        .map((item) => item.record.id === record.id ? { record: updated, toPay: patch.totalBilled, selected: item.selected && patch.totalBilled > 0 } : item)
+        .map((item) => item.record.id === record.id ? { record: updated, toPay: kasOutstanding(updated), selected: item.selected && kasOutstanding(updated) > 0 } : item)
         .filter((item) => item.toPay > 0));
-      setUnpaidRecords((prev) => prev.map((r) => r.id === record.id ? updated : r).filter((r) => r.totalBilled > 0 && !r.isSettled));
+      setUnpaidRecords((prev) => prev.map((r) => r.id === record.id ? updated : r).filter((r) => kasOutstanding(r) > 0));
       setAllRecords((prev) => prev.map((r) => r.id === record.id ? updated : r));
       setStatusMessage({ ok: true, text: patch.totalBilled === 0 ? "Status diubah — tagihan jadi Rp 0 dan dihapus dari tunggakan." : `Status diubah — tagihan jadi Rp ${patch.totalBilled.toLocaleString("id-ID")}.` });
       getKasSummary().then(setSummary).catch(console.error);
@@ -160,7 +172,7 @@ export default function KasPage() {
       const unpaid: KasRecord[] = [];
 
       allRecs.forEach((r: KasRecord) => {
-        if (r.totalBilled > 0 && !r.isSettled) {
+        if (kasOutstanding(r) > 0) {
           unpaid.push(r);
         }
       });
@@ -300,6 +312,10 @@ export default function KasPage() {
     }
 
     const totalBilled = calculateTotal(newPaidKas, newIsLate, newNoNews, newIsExcused, newIsExcusedWork, newIsExcusedOther);
+    const payment = reconcileKasPayment(
+      { ...existingRecord, totalBilled },
+      existingRecord.paidAmount ?? (existingRecord.isSettled ? existingRecord.totalBilled : undefined),
+    );
 
     const recordToSave: Partial<KasRecord> = {
       date: selectedDate,
@@ -313,7 +329,7 @@ export default function KasPage() {
       isExcusedWork: newIsExcusedWork,
       isExcusedOther: newIsExcusedOther,
       totalBilled,
-      isSettled: !!existingRecord.isSettled,
+      ...payment,
     };
     if (existingRecord.id) recordToSave.id = existingRecord.id;
 
@@ -352,6 +368,7 @@ export default function KasPage() {
         name: athlete.name,
 
         isSettled,
+        paidAmount: isSettled ? existingRecord.totalBilled : 0,
       });
       // Update summary in background WITHOUT full reload
       const s = await getKasSummary();
@@ -402,13 +419,17 @@ export default function KasPage() {
               </p>
             </div>
             {isKasAdmin && (
-              <button
-                onClick={() => setShowTrxModal(true)}
-                className="flex items-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
-              >
-                <Wallet className="h-3.5 w-3.5" />
-                Catat Transaksi
-              </button>
+              <div className="flex flex-wrap gap-2">
+                <button onClick={() => { setStatusMessage(null); setFutureBulkRequestId(newRequestId()); setShowFutureBulkModal(true); }} className="flex items-center gap-2 rounded-xl border border-cyan-500/30 bg-cyan-500/20 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-500/30">
+                  <CheckCircle2 className="h-3.5 w-3.5" /> Bayar Kas Bulk
+                </button>
+                <button
+                  onClick={() => setShowTrxModal(true)}
+                  className="flex items-center gap-2 rounded-xl bg-indigo-500/20 border border-indigo-500/30 px-3 py-2 text-xs font-semibold text-indigo-300 transition-all hover:bg-indigo-500/30"
+                >
+                  <Wallet className="h-3.5 w-3.5" /> Catat Transaksi
+                </button>
+              </div>
             )}
           </div>
 
@@ -449,7 +470,7 @@ export default function KasPage() {
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Piutang</p>
             <p className="mt-1 text-lg font-bold text-red-400">
-              Rp {(summary.totalBilled - summary.totalSettled).toLocaleString("id-ID")}
+              Rp {Math.max(0, summary.totalBilled - summary.totalSettled).toLocaleString("id-ID")}
             </p>
           </div>
         </section>
@@ -557,9 +578,9 @@ export default function KasPage() {
                             {(record.totalBilled || 0) > 0 ? `Rp ${((record.totalBilled || 0) / 1000).toFixed(0)}rb` : <span className="text-slate-600">-</span>}
                           </td>
                           <td className="px-3 py-3 text-center">
-                            {(record.totalBilled || 0) > 0 ? (
-                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, !record.isSettled)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${record.isSettled ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
-                                {record.isSettled ? <><CheckCircle2 className="h-3 w-3 hidden sm:block" />Lunas</> : <><XCircle className="h-3 w-3 hidden sm:block" />Belum</>}
+                            {(record.totalBilled || 0) > 0 || (record.paidAmount || 0) > 0 ? (
+                              <button onClick={() => isKasAdmin && handleSettledToggle(athlete, kasOutstanding(record) > 0)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${kasOutstanding(record) === 0 ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
+                                {kasOutstanding(record) === 0 ? <><CheckCircle2 className="h-3 w-3 hidden sm:block" />Lunas</> : <><XCircle className="h-3 w-3 hidden sm:block" />Sisa {(kasOutstanding(record) / 1000).toFixed(0)}rb</>}
                               </button>
                             ) : <span className="text-slate-700">-</span>}
                           </td>
@@ -679,7 +700,7 @@ export default function KasPage() {
                   {visibleAthletes.map(athlete => {
                     const athleteUnpaid = unpaidRecords.filter(r => r.athleteId === athlete.id);
                     if (athleteUnpaid.length === 0) return null;
-                    const totalUnpaid = athleteUnpaid.reduce((sum, r) => sum + r.totalBilled, 0);
+                    const totalUnpaid = athleteUnpaid.reduce((sum, r) => sum + kasOutstanding(r), 0);
                     return (
                       <div key={athlete.id} className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 flex flex-col justify-between">
                         <div>
@@ -694,7 +715,7 @@ export default function KasPage() {
                             setStatusMessage(null);
                             setBulkPaymentRecords(athleteUnpaid
                               .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-                              .map(r => ({ record: r, toPay: r.totalBilled, selected: false })));
+                              .map(r => ({ record: r, toPay: kasOutstanding(r), selected: false })));
                             setShowBulkModal(true);
                           }}
                           className={`w-full rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${isKasAdmin ? "bg-red-500/20 text-red-400 hover:bg-red-500/30" : "bg-white/5 text-slate-500 cursor-not-allowed"}`}
@@ -710,6 +731,111 @@ export default function KasPage() {
           </section>
         )}
 
+
+        {/* MODAL TRANSAKSI */}
+        {showFutureBulkModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+            <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-2xl border border-white/10 bg-[#111] p-5 shadow-2xl sm:p-6">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-bold text-white">Bayar Kas Bulk</h3>
+                  <p className="mt-1 text-sm text-slate-400">Pilih atlet dan tanggal latihan dari Calendar.</p>
+                </div>
+                <button onClick={() => setShowFutureBulkModal(false)} aria-label="Tutup"><XCircle className="h-6 w-6 text-slate-400 hover:text-white" /></button>
+              </div>
+
+              <label className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Atlet</label>
+              <select
+                value={futureBulkAthleteId}
+                onChange={async (e) => {
+                  const athleteId = e.target.value;
+                  const loadVersion = ++futureBulkLoadVersion.current;
+                  setFutureBulkAthleteId(athleteId);
+                  setFutureBulkDates([]);
+                  setFutureBulkSelected([]);
+                  setStatusMessage(null);
+                  const athlete = athletes.find((a) => a.id === athleteId);
+                  if (!athlete) return;
+                  try {
+                    const paidDates = new Set(allRecords.filter((r) => r.athleteId === athleteId && kasPaidAmount(r) >= 13000).map((r) => r.date));
+                    const dates = nextTrainingDates(await getTrainingDates(athlete.city), new Date().toLocaleDateString("sv-SE"), 24).filter((date) => !paidDates.has(date));
+                    if (futureBulkLoadVersion.current !== loadVersion) return;
+                    setFutureBulkDates(dates);
+                    setFutureBulkSelected(dates.slice(0, 8));
+                  } catch {
+                    if (futureBulkLoadVersion.current === loadVersion) setStatusMessage({ ok: false, text: "Gagal memuat Calendar. Coba pilih atlet lagi." });
+                  }
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black px-3 py-3 text-sm text-white"
+              >
+                <option value="">Pilih atlet...</option>
+                {athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.city || "Bandung"}</option>)}
+              </select>
+
+              {futureBulkAthleteId && (
+                <>
+                  <div className="my-3 flex items-center justify-between gap-3">
+                    <p className="text-sm font-semibold text-slate-300">Tanggal latihan mendatang</p>
+                    <button onClick={() => setFutureBulkSelected(futureBulkDates.slice(0, 8))} className="shrink-0 text-xs font-medium text-cyan-400 hover:text-cyan-300">Pilih 8 Terdekat</button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-white/10 bg-white/5">
+                    {futureBulkDates.length === 0 ? <p className="p-4 text-sm text-slate-500">Tidak ada jadwal mendatang untuk kota atlet ini.</p> : (
+                      <ul className="divide-y divide-white/5">
+                        {futureBulkDates.map((date) => {
+                          const checked = futureBulkSelected.includes(date);
+                          return <li key={date}>
+                            <label className={`flex cursor-pointer items-center gap-3 px-4 py-3 ${checked ? "bg-cyan-500/10" : "hover:bg-white/[0.03]"}`}>
+                              <input type="checkbox" checked={checked} onChange={() => setFutureBulkSelected((prev) => checked ? prev.filter((d) => d !== date) : [...prev, date].sort())} className="h-4 w-4 accent-cyan-500" />
+                              <span className="flex-1 text-sm text-white">{format(new Date(`${date}T00:00:00`), "EEEE, dd MMM yyyy", { locale: idLocale })}</span>
+                              <span className="text-sm font-bold text-cyan-300">Rp 13.000</span>
+                            </label>
+                          </li>;
+                        })}
+                      </ul>
+                    )}
+                  </div>
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/5 p-4">
+                    <p className="text-xs text-slate-400">{futureBulkSelected.length} sesi dipilih</p>
+                    <p className="mt-0.5 text-lg font-black text-cyan-400">Rp {(futureBulkSelected.length * 13000).toLocaleString("id-ID")}</p>
+                  </div>
+                </>
+              )}
+
+              {statusMessage && !statusMessage.ok && <p role="alert" className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">{statusMessage.text}</p>}
+
+              <div className="mt-4 flex gap-3">
+                <button onClick={() => setShowFutureBulkModal(false)} className="flex-1 rounded-xl border border-white/10 px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
+                <button
+                  disabled={isSubmitting || futureBulkSelected.length === 0}
+                  onClick={async () => {
+                    const athlete = athletes.find((a) => a.id === futureBulkAthleteId);
+                    if (!athlete) return;
+                    setIsSubmitting(true);
+                    try {
+                      const result = await sendMutation(fetch, "/api/kas/bulk-pay", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json", Authorization: `Bearer ${await user?.getIdToken()}` },
+                        body: JSON.stringify({ requestId: futureBulkRequestId, athleteId: athlete.id, dates: futureBulkSelected }),
+                      });
+                      if (!result.ok) throw new Error(result.error);
+                      setShowFutureBulkModal(false);
+                      setFutureBulkAthleteId("");
+                      setFutureBulkDates([]);
+                      setFutureBulkSelected([]);
+                      await loadData();
+                    } catch (error) {
+                      console.error(error);
+                      setStatusMessage({ ok: false, text: error instanceof Error ? error.message : "Pembayaran bulk gagal. Periksa koneksi lalu coba lagi." });
+                    } finally {
+                      setIsSubmitting(false);
+                    }
+                  }}
+                  className="flex-1 rounded-xl bg-cyan-500 px-4 py-3 text-sm font-bold text-black hover:bg-cyan-400 disabled:opacity-50"
+                >{isSubmitting ? "Memproses..." : `Bayar ${futureBulkSelected.length} Sesi`}</button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* MODAL TRANSAKSI */}
         {showTrxModal && (
@@ -845,6 +971,7 @@ export default function KasPage() {
                         await saveKasRecord({
                           id: r.record.id,
                           isSettled: true,
+                          paidAmount: r.record.totalBilled,
                           date: r.record.date,
                           athleteId: r.record.athleteId,
                           name: r.record.name,

@@ -66,6 +66,10 @@ await check("TIDAK bisa menambah transaksi tabungan langsung", assertFails(setDo
 await check("TIDAK bisa mengubah transaksi tabungan langsung", assertFails(updateDoc(doc(member, "crown-athlete-savings-transactions", "t1"), { amount: 1 })));
 await check("TIDAK bisa menghapus transaksi tabungan", assertFails(deleteDoc(doc(member, "crown-athlete-savings-transactions", "t1"))));
 await check("TIDAK bisa baca audit perubahan", assertFails(getDocs(collection(member, "crown-athlete-savings-audits"))));
+await check("bisa baca kas", assertSucceeds(getDocs(collection(member, "crown-kas-daily"))));
+await check("TIDAK bisa menulis kas harian", assertFails(setDoc(doc(member, "crown-kas-daily", "k1"), { date: "2026-10-10", paidAmount: 13000 })));
+await check("TIDAK bisa menulis transaksi kas", assertFails(setDoc(doc(member, "crown-kas-transactions", "kt1"), { amount: 13000 })));
+await check("TIDAK bisa menulis receipt bulk", assertFails(setDoc(doc(member, "crown-kas-bulk-requests", "kr1"), { athleteId: "member-uid" })));
 
 console.log("\nAngkatan 18 (admin-only):");
 // Runs BEFORE the Admin section below promotes member-uid to admin,
@@ -88,11 +92,14 @@ await check("bisa hapus atlet", assertSucceeds(deleteDoc(doc(admin, "crown-athle
 await check("bisa baca audit perubahan tabungan", assertSucceeds(getDocs(collection(admin, "crown-athlete-savings-audits"))));
 await check("TIDAK bisa menulis transaksi langsung", assertFails(setDoc(doc(admin, "crown-athlete-savings-transactions", "t3"), { athleteId: "admin-uid", type: "DEPOSIT", amount: 1 })));
 await check("TIDAK bisa menghapus transaksi tabungan", assertFails(deleteDoc(doc(admin, "crown-athlete-savings-transactions", "t1"))));
+await check("bisa menulis kas harian", assertSucceeds(setDoc(doc(admin, "crown-kas-daily", "k1"), { date: "2026-10-10", paidAmount: 13000 })));
+await check("bisa menulis transaksi kas", assertSucceeds(setDoc(doc(admin, "crown-kas-transactions", "kt1"), { amount: 13000 })));
+await check("TIDAK bisa menulis receipt bulk langsung", assertFails(setDoc(doc(admin, "crown-kas-bulk-requests", "kr1"), { athleteId: "admin-uid" })));
 
 console.log("\nOwner:");
 await check("bisa baca audit perubahan tabungan", assertSucceeds(getDocs(collection(owner, "crown-athlete-savings-audits"))));
 await check("TIDAK bisa menulis transaksi langsung", assertFails(setDoc(doc(owner, "crown-athlete-savings-transactions", "t4"), { athleteId: "owner-uid", type: "DEPOSIT", amount: 1 })));
 
 await env.cleanup();
-assert.equal(passed, 38, `harusnya 38 pemeriksaan lolos, dapat ${passed}`);
+assert.equal(passed, 45, `harusnya 45 pemeriksaan lolos, dapat ${passed}`);
 console.log(`\nSemua ${passed} pemeriksaan lolos.`);
