@@ -1,14 +1,8 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 
-import {
-  ADMIN_SESSION_COOKIE,
-  isValidAdminSessionToken
-} from "@/lib/admin-session";
-// Admin SDK: route ini menulis tanpa sesi login pengguna, jadi harus melewati
-// Firestore rules yang menutup akses tulis dari klien.
 import { adminDb } from "@/lib/firebase-admin";
+import { requireAdminOrResponse } from "@/lib/server-auth";
 
 type CreateAthleteBody = {
   name?: string;
@@ -20,8 +14,11 @@ type CreateAthleteBody = {
 const isInvalidDate = (value: string) => Number.isNaN(new Date(`${value}T00:00:00`).valueOf());
 
 export async function POST(request: Request) {
-  // Firebase Auth is active now. Bypassing legacy admin cookie check.
-  const adminBypass = true;
+  const admin = await requireAdminOrResponse(request, {
+    forbidden: "Hanya admin yang boleh menambah atlet.",
+    as: "message",
+  });
+  if (admin instanceof Response) return admin;
 
   const body = (await request.json()) as CreateAthleteBody;
   const name = body.name?.trim() ?? "";

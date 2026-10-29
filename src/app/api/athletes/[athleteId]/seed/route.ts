@@ -1,13 +1,8 @@
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 
-import {
-  ADMIN_SESSION_COOKIE,
-  isValidAdminSessionToken
-} from "@/lib/admin-session";
-// Admin SDK: route server tanpa sesi pengguna, harus melewati Firestore rules.
 import { adminDb } from "@/lib/firebase-admin";
+import { requireAdminOrResponse } from "@/lib/server-auth";
 
 type SeedBody = {
   currentWeight?: number;
@@ -19,8 +14,11 @@ export async function POST(
   request: Request,
   context: { params: Promise<{ athleteId: string }> }
 ) {
-  // Firebase Auth is active now. Bypassing legacy admin cookie check.
-  const adminBypass = true;
+  const admin = await requireAdminOrResponse(request, {
+    forbidden: "Hanya admin yang boleh menyimpan riwayat berat.",
+    as: "message",
+  });
+  if (admin instanceof Response) return admin;
 
   const { athleteId } = await context.params;
   const body = (await request.json()) as SeedBody;

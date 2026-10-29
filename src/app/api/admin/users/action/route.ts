@@ -1,14 +1,28 @@
 import { NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebase-admin";
+import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { requireAdminOrResponse } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const admin = await requireAdminOrResponse(request, {
+    forbidden: "Hanya admin yang boleh mengubah akun.",
+  });
+  if (admin instanceof Response) return admin;
+
   try {
     const { uid, action } = await request.json();
 
     if (!uid || !action) {
       return NextResponse.json({ error: "Missing required parameters" }, { status: 400 });
+    }
+
+    const athlete = await adminDb.collection("crown-athletes").doc(uid).get();
+    if (!athlete.exists) {
+      return NextResponse.json(
+        { error: "Akun ini bukan anggota Crown dan tidak diubah." },
+        { status: 403 },
+      );
     }
 
     if (action === "delete") {

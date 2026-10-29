@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { bearerHeaders } from "@/lib/client-auth";
 import { Badge } from "@/components/ui/badge";
 import {
   Card,
@@ -288,7 +289,7 @@ export default function AthletesDashboardPage() {
     try {
       const res = await fetch("/api/admin/users/role", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({ uid, action }),
       });
       if (res.ok) fetchUsers();
@@ -302,7 +303,7 @@ export default function AthletesDashboardPage() {
   const fetchUsers = async () => {
     try {
       setIsLoadingUsers(true);
-      const res = await fetch("/api/admin/users");
+      const res = await fetch("/api/admin/users", { headers: await bearerHeaders(user) });
       const data = await res.json();
       if (data.users) {
         setUsersList(data.users);
@@ -323,7 +324,7 @@ export default function AthletesDashboardPage() {
       setActionLoading(`${action}-${uid}`);
       const res = await fetch("/api/admin/users/action", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({ uid, action }),
       });
       

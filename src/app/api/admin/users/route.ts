@@ -1,9 +1,15 @@
 import { NextResponse } from "next/server";
 import { adminAuth, adminDb } from "@/lib/firebase-admin";
+import { requireAdminOrResponse } from "@/lib/server-auth";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const admin = await requireAdminOrResponse(request, {
+    forbidden: "Hanya admin yang boleh melihat daftar akun.",
+  });
+  if (admin instanceof Response) return admin;
+
   try {
     // Ambil SEMUA user dari Firebase Auth (Gorillatix + Crown)
     const listUsersResult = await adminAuth.listUsers(1000);

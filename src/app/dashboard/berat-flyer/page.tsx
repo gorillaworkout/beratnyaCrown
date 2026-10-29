@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { bearerHeaders } from "@/lib/client-auth";
 import Image from "next/image";
 import {
   collection,
@@ -634,7 +635,7 @@ export default function DashboardPage() {
       setIsResetting(true);
       const response = await fetch("/api/athletes/reset", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({ confirm: "RESET" })
       });
       const result = await response.json();
@@ -693,9 +694,7 @@ export default function DashboardPage() {
       setIsAdding(true);
       const response = await fetch("/api/athletes", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({
           name: trimmedName,
           currentWeight: weightValue,
@@ -776,9 +775,7 @@ export default function DashboardPage() {
       setIsUpdating(true);
       const response = await fetch(`/api/athletes/${athlete.id}`, {
         method: "PATCH",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({
           currentWeight: weightValue,
           trainingDate: updatedDate,
@@ -819,9 +816,7 @@ export default function DashboardPage() {
       setIsSeedingLogs(true);
       const response = await fetch(`/api/athletes/${detailAthlete.id}/seed`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: await bearerHeaders(user),
         body: JSON.stringify({
           currentWeight: detailAthlete.currentWeight,
           previousWeight: detailAthlete.previousWeight,

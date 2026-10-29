@@ -32,13 +32,30 @@ export async function requireAdmin(request: Request): Promise<VerifiedAdmin> {
   };
 }
 
-export function authErrorResponse(error: unknown): Response | null {
+export function authErrorResponse(
+  error: unknown,
+  options: { forbidden?: string; as?: "error" | "message" } = {},
+): Response | null {
   const message = error instanceof Error ? error.message : "";
-  if (message === "UNAUTHORIZED") {
-    return Response.json({ error: "Silakan login kembali." }, { status: 401 });
+  const forbidden = options.forbidden ?? "Hanya admin yang boleh mengubah tabungan.";
+  const text = message === "UNAUTHORIZED" ? "Silakan login kembali." : message === "FORBIDDEN" ? forbidden : "";
+  if (!text) return null;
+  const status = message === "UNAUTHORIZED" ? 401 : 403;
+  if (options.as === "message") {
+    return Response.json({ ok: false, message: text }, { status });
   }
-  if (message === "FORBIDDEN") {
-    return Response.json({ error: "Hanya admin yang boleh mengubah tabungan." }, { status: 403 });
+  return Response.json({ error: text }, { status });
+}
+
+export async function requireAdminOrResponse(
+  request: Request,
+  options: { forbidden?: string; as?: "error" | "message" } = {},
+): Promise<VerifiedAdmin | Response> {
+  try {
+    return await requireAdmin(request);
+  } catch (error) {
+    const response = authErrorResponse(error, options);
+    if (response) return response;
+    throw error;
   }
-  return null;
 }

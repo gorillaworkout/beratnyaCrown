@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 
 import { adminDb } from "@/lib/firebase-admin";
+import { requireAdminOrResponse } from "@/lib/server-auth";
 
 /**
  * Reset sesi latihan: hapus permanen seluruh riwayat log berat (subcollection
@@ -10,13 +11,19 @@ import { adminDb } from "@/lib/firebase-admin";
  *
  * Destruktif dan tidak bisa dibatalkan. Client wajib mengirim confirm: "RESET".
  *
- * Memakai Admin SDK: route ini berjalan tanpa sesi login pengguna, jadi harus
- * melewati Firestore rules yang menutup akses tulis dari klien.
+ * Memakai Admin SDK supaya penghapusan tidak bergantung pada rules klien.
+ * Hanya admin (token Firebase) yang boleh memanggil route ini.
  *
  * ponytail: delete berurutan, cukup untuk skala tim (puluhan athlete).
  * Kalau nanti ribuan doc, naikkan ke writeBatch (500 doc per batch).
  */
 export async function POST(request: Request) {
+  const admin = await requireAdminOrResponse(request, {
+    forbidden: "Hanya admin yang boleh mereset sesi.",
+    as: "message",
+  });
+  if (admin instanceof Response) return admin;
+
   const body = (await request.json().catch(() => ({}))) as { confirm?: string };
   if (body.confirm !== "RESET") {
     return NextResponse.json(
