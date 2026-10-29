@@ -1,50 +1,60 @@
-import { NextResponse } from 'next/server';
-import crypto from 'crypto';
-import { db } from '@/lib/firebase';
-import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { NextResponse } from "next/server";
+import { FieldValue } from "firebase-admin/firestore";
+import { adminDb } from "@/lib/firebase-admin";
+import { coerceRupiah, gobizOrderId, gobizSignature, signaturesMatch } from "@/lib/gobiz";
+import { jakartaDateString } from "@/lib/jakarta-date";
+
+export const dynamic = "force-dynamic";
+export const runtime = "nodejs";
 
 export async function POST(req: Request) {
+  const secret = process.env.GOBIZ_RELAY_SECRET;
+  if (!secret) {
+    console.error("GoBiz webhook: GOBIZ_RELAY_SECRET is not set.");
+    return NextResponse.json({ success: false, message: "Webhook secret is not configured." }, { status: 500 });
+  }
+
   try {
     const rawBody = await req.text();
-    const signature = req.headers.get('X-Go-Signature');
-    
-    // Default to an empty string if relay secret isn't provided via env yet
-    const SECRET_KEY = process.env.GOBIZ_RELAY_SECRET || "cb481840dc460a8092804e91ca1e384cc3bbfb166873dc89ceeb072b0accfe6f";
-    
-    if (!signature) {
-      return NextResponse.json({ success: false, message: 'Missing signature' }, { status: 401 });
+    const signature = req.headers.get("X-Go-Signature");
+    if (!signaturesMatch(gobizSignature(secret, rawBody), signature)) {
+      console.warn("GoBiz webhook: signature rejected.");
+      return NextResponse.json({ success: false, message: "Invalid signature" }, { status: 401 });
     }
 
-    const hash = crypto.createHmac('sha256', SECRET_KEY).update(rawBody).digest('hex');
-    
-    if (hash !== signature) {
-      console.warn("GoBiz Webhook: Signature mismatch", { expected: hash, received: signature });
-      return NextResponse.json({ success: false, message: 'Invalid signature' }, { status: 401 });
+    const payload = JSON.parse(rawBody) as unknown;
+    const orderId = gobizOrderId(payload);
+    const transaction = payload && typeof payload === "object" && "transaction" in payload
+      ? (payload as { transaction?: { gross_amount?: unknown } }).transaction ?? payload
+      : payload;
+    const amount = coerceRupiah(
+      transaction && typeof transaction === "object" && "gross_amount" in transaction
+        ? (transaction as { gross_amount?: unknown }).gross_amount
+        : undefined,
+    );
+    if (!orderId || amount === null) {
+      return NextResponse.json({ success: false, message: "Payload pembayaran tidak valid." }, { status: 400 });
     }
 
-    const payload = JSON.parse(rawBody);
-    
-    // Log for debugging
-    console.log("GoBiz Webhook Payload Received:", JSON.stringify(payload, null, 2));
-
-    // Depending on the event type from GoBiz, we save it to our database
-    // "payment_status_updated" or similar is typical
-    const transaction = payload.transaction || payload;
-    
-    // Save to Firestore
-    await addDoc(collection(db, "crown-kas-transactions"), {
-      type: "IN_OTHER", // default type for external QRIS
-      amount: transaction.gross_amount || 0,
-      description: `QRIS GoPay - ${transaction.order_id || 'Unknown Order'}`,
-      date: new Date().toISOString().split('T')[0],
-      source: "gobiz_webhook",
-      raw_payload: payload,
-      createdAt: serverTimestamp()
+    const ref = adminDb.collection("crown-kas-transactions").doc(orderId);
+    const created = await adminDb.runTransaction(async (tx) => {
+      const existing = await tx.get(ref);
+      if (existing.exists) return false;
+      tx.set(ref, {
+        type: "IN_OTHER",
+        amount,
+        description: `QRIS GoPay - ${orderId}`,
+        date: jakartaDateString(),
+        source: "gobiz_webhook",
+        raw_payload: payload,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+      return true;
     });
 
-    return NextResponse.json({ success: true, message: 'OK' });
-  } catch (error) {
-    console.error("GoBiz Webhook Error:", error);
-    return NextResponse.json({ success: false, error: String(error) }, { status: 500 });
+    return NextResponse.json({ success: true, duplicate: !created });
+  } catch {
+    console.error("GoBiz webhook: failed to record payment.");
+    return NextResponse.json({ success: false, error: "Gagal mencatat pembayaran." }, { status: 500 });
   }
 }
