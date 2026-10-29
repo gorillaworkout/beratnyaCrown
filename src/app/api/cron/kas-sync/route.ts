@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
+import { bearerMatches } from "@/lib/cron-auth";
+import { chunkList, isBillableTrainingDate, jakartaDateString, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
 
 // Dynamic import to avoid build issues
 let adminDb: any = null;
@@ -11,25 +13,31 @@ async function getAdminDb() {
   return adminDb;
 }
 
+export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 export const maxDuration = 300; // 5 min timeout for backfill
 
-// Kas counting resumed on this date (first training back). Anything before
-// this is historical/manual — never backfill phantom alpa debt for it.
-// 2026-08-26 was opr/percobaan (no kas); kas starts 2026-08-29.
-const KAS_START = "2026-08-29";
+export async function GET(request: Request) {
+  const secret = process.env.CRON_SECRET;
+  if (!secret) {
+    console.error("Kas sync: CRON_SECRET is not set.");
+    return NextResponse.json({ error: "CRON_SECRET is not set." }, { status: 500 });
+  }
+  if (!bearerMatches(request.headers.get("authorization"), secret)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
 
-export async function GET() {
   try {
     const db = await getAdminDb();
     if (!db) {
       return NextResponse.json({ error: "Firebase admin not available" }, { status: 500 });
     }
 
-    // 1. Past training dates from crown-schedules (status=latihan/tambahan,
-    //    date >= KAS_START and <= today)
+    // 1. Past training dates from crown-schedules (status=latihan/tambahan).
+    //    Only dates that have already ended in Asia/Jakarta are billed.
+    //    Existing kas rows are never rewritten.
     // Fetch all + filter in memory — avoids needing a composite index (status+date)
-    const today = new Date().toISOString().split("T")[0];
+    const today = jakartaDateString();
     const schedSnap = await db.collection("crown-schedules").get();
 
     const trainingDates = new Set<string>();
@@ -37,8 +45,8 @@ export async function GET() {
       const s = d.data();
       if (
         (s.status === "latihan" || s.status === "tambahan") &&
-        s.date >= KAS_START &&
-        s.date <= today
+        typeof s.date === "string" &&
+        isBillableTrainingDate(s.date, today)
       ) {
         trainingDates.add(s.date);
       }
@@ -61,40 +69,43 @@ export async function GET() {
       }
     });
 
-    // 4. Create missing records (alpa: Rp 26.000)
-    const batch = db.batch();
+    // 4. Create missing records (alpa: Rp 26.000). Never update an existing row.
     const recordsRef = db.collection("crown-kas-daily");
-    let count = 0;
+    const pending: Array<{ ref: ReturnType<typeof recordsRef.doc>; data: Record<string, unknown> }> = [];
 
     for (const date of dates) {
       for (const athlete of athletes) {
         const key = `${date}|${athlete.id}`;
         if (existing.has(key)) continue;
 
-        const newRef = recordsRef.doc();
-        batch.set(newRef, {
-          date,
-          athleteId: athlete.id,
-          name: athlete.name,
-          division: Array.isArray(athlete.divisions) ? athlete.divisions.join(", ") : athlete.division || "",
-          paidKas: true,
-          isLate: false,
-          noNews: true,
-          isExcused: false,
-          isExcusedWork: false,
-          isExcusedOther: false,
-          totalBilled: 26000,
-          isSettled: false,
-          createdAt: FieldValue.serverTimestamp(),
-          updatedAt: FieldValue.serverTimestamp(),
+        pending.push({
+          ref: recordsRef.doc(),
+          data: {
+            date,
+            athleteId: athlete.id,
+            name: athlete.name,
+            division: Array.isArray(athlete.divisions) ? athlete.divisions.join(", ") : athlete.division || "",
+            paidKas: true,
+            isLate: false,
+            noNews: true,
+            isExcused: false,
+            isExcusedWork: false,
+            isExcusedOther: false,
+            totalBilled: 26000,
+            isSettled: false,
+            createdAt: FieldValue.serverTimestamp(),
+            updatedAt: FieldValue.serverTimestamp(),
+          },
         });
-        count++;
       }
     }
 
-    if (count > 0) {
+    for (const group of chunkList(pending, KAS_SYNC_BATCH)) {
+      const batch = db.batch();
+      for (const item of group) batch.set(item.ref, item.data);
       await batch.commit();
     }
+    const count = pending.length;
 
     return NextResponse.json({
       ok: true,

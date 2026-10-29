@@ -241,7 +241,13 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
 
 }
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export async function GET(request: Request) {
+  if (request.method !== "GET") {
+    return NextResponse.json({ error: "Method not allowed" }, { status: 405 });
+  }
   try {
     const schedule = await generateSchedule();
 
@@ -301,8 +307,6 @@ export async function GET() {
             : `📍 Lokasi: ${entry.city}`
         );
       }
-      if (entry.note) descParts.push(`📝 Catatan: ${entry.note}`);
-      
       const description = descParts.join("\\n");
 
       lines.push("BEGIN:VEVENT");
@@ -353,7 +357,7 @@ export async function GET() {
       headers: {
         "Content-Type": "text/calendar; charset=utf-8",
         "Content-Disposition": 'attachment; filename="jadwal-crown-allstar.ics"',
-        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Cache-Control": "public, max-age=300, s-maxage=300",
       },
     });
   } catch (err: any) {
