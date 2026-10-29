@@ -41,7 +41,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
-import { resolveAdditionalCity } from "@/lib/schedule-city";
+import {
+  calendarTileClass,
+  resolveAdditionalCity,
+  selectCalendarPaintEntry,
+} from "@/lib/schedule-city";
 import {
   collection,
   getDocs,
@@ -1241,30 +1245,6 @@ export default function JadwalPage() {
     );
   }
 
-  const getStatusColor = (entryObj?: ScheduleEntry) => {
-    if (!entryObj) return "";
-    if (entryObj.status === "libur") return "bg-gradient-to-br from-red-500 to-red-600";
-    if (entryObj.status === "event") return "bg-gradient-to-br from-indigo-500 to-purple-600";
-    if (entryObj.holidayName && entryObj.status !== "tambahan" && entryObj.status !== "latihan" && entryObj.status !== "event") return "bg-gradient-to-br from-zinc-600 to-zinc-800";
-    
-    // Jika Latihan / Latihan Tambahan dan ada warna bajunya, paksa ikuti warna bajunya
-    if ((entryObj.status === "latihan" || entryObj.status === "tambahan") && entryObj.shirtColor) {
-        switch(entryObj.shirtColor.name) {
-          case "Merah": return "bg-gradient-to-br from-red-500 to-red-700";
-          case "Hitam": return "bg-gradient-to-br from-slate-700 to-slate-900";
-          case "Biru": return "bg-gradient-to-br from-blue-500 to-blue-700";
-          case "Orange": return "bg-gradient-to-br from-orange-500 to-orange-700";
-          case "Ungu": return "bg-gradient-to-br from-purple-500 to-purple-700";
-          case "Pink": return "bg-gradient-to-br from-pink-500 to-pink-700";
-          case "Kuning": return "bg-gradient-to-br from-yellow-500 to-yellow-700";
-          case "Hijau": return "bg-gradient-to-br from-green-500 to-green-700";
-        }
-    }
-    
-    if (entryObj.status === "tambahan") return "bg-gradient-to-br from-amber-500 to-amber-600";
-    
-    return "bg-gradient-to-br from-blue-500 to-blue-600";
-  };
 
   const todayStr = `${now.getFullYear()}-${String(
     now.getMonth() + 1
@@ -1334,7 +1314,7 @@ export default function JadwalPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className={`${glassCardClass} ${todayEntry ? getStatusColor(todayEntry) : ''}`}>
+          <Card className={`${glassCardClass} ${calendarTileClass(todayEntry)}`}>
             <CardContent className="p-4 text-center">
               <p className={`text-xs uppercase tracking-wider text-slate-400`}>
                 Hari Ini
@@ -1563,6 +1543,10 @@ export default function JadwalPage() {
                 ).padStart(2, "0")}-${String(cell).padStart(2, "0")}`;
                 const dayEntries = schedule.filter((s) => s.date === dateStr);
                 const entry = dayEntries[0];
+                // Warna/ikon mengikuti sesi latihan sungguhan. Baris libur yang
+                // urut pertama tidak boleh mewarnai hari yang sebenarnya latihan.
+                const paintEntry = selectCalendarPaintEntry(dayEntries);
+                const tileColor = calendarTileClass(paintEntry);
                 // Dua kota di hari yang sama: sel kalender terlalu kecil untuk
                 // dua kartu, jadi tampilkan titik per kota. Detail lengkap ada
                 // di daftar jadwal di bawah kalender.
@@ -1607,13 +1591,13 @@ export default function JadwalPage() {
                     className={`
                       aspect-square rounded-xl flex flex-col items-center justify-center relative text-xs transition-all
                       ${
-                        entry
-                          ? `${getStatusColor(entry)} shadow-lg ${
+                        tileColor
+                          ? `${tileColor} shadow-lg ${
                               isAdmin ? "cursor-pointer hover:scale-105" : ""
                             }`
-                          : isPast
-                          ? "text-slate-700"
-                          : "text-slate-500"
+                          : `${isPast ? "text-slate-700" : "text-slate-500"}${
+                              entry && isAdmin ? " cursor-pointer" : ""
+                            }`
                       }
                       ${
                         isToday
@@ -1622,22 +1606,26 @@ export default function JadwalPage() {
                       }
                     `}
                   >
-                    {entry && (
+                    {tileColor && paintEntry && (
                       <span className="text-sm leading-none md:block hidden">
-                        {getStatusIcon(entry.status, entry)}
+                        {getStatusIcon(paintEntry.status, paintEntry)}
                       </span>
                     )}
+                    {!tileColor && paintEntry?.status === "libur" && (
+                      <span className="text-[10px] leading-none text-slate-500/60">😴</span>
+                    )}
                     <span
-                      className={`font-bold ${entry ? "text-white" : ""}`}
+                      className={`font-bold ${tileColor ? "text-white" : ""}`}
                     >
                       {cell}
                     </span>
                     {/* Jam hanya ditampilkan kalau sehari cuma ada satu latihan;
                         kalau dua kota, jamnya beda dan menampilkan salah satu
-                        saja justru menyesatkan — ganti dengan kode kota. */}
-                    {entry?.timeStart && cityDots.length < 2 && (
+                        saja justru menyesatkan — ganti dengan kode kota.
+                        Hari libur tidak menampilkan jam: tile-nya polos. */}
+                    {tileColor && paintEntry?.timeStart && cityDots.length < 2 && (
                       <span className={`text-[8px] text-white/80`}>
-                        {entry.timeStart}
+                        {paintEntry.timeStart}
                       </span>
                     )}
                     {cityDots.length > 0 && (
@@ -1653,8 +1641,8 @@ export default function JadwalPage() {
                         ))}
                       </div>
                     )}
-                    {entry?.holidayName && (
-                      <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-zinc-400 shadow-md shadow-zinc-400/50" title={entry.holidayName} />
+                    {paintEntry?.holidayName && (
+                      <div className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-zinc-400 shadow-md shadow-zinc-400/50" title={paintEntry.holidayName} />
                     )}
                   </div>
                 );
@@ -1668,7 +1656,7 @@ export default function JadwalPage() {
                 <span>Hari Ini</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <div className="w-3 h-3 rounded-full bg-gradient-to-br from-red-500 to-red-600" />
+                <span className="text-slate-500/80">😴</span>
                 <span>Libur</span>
               </div>
               <div className="flex items-center gap-1.5">
