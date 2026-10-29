@@ -1,3 +1,5 @@
+import { isHoliday } from "./holidays.ts";
+
 type KasPayment = {
   totalBilled?: number;
   paidAmount?: number;
@@ -35,6 +37,7 @@ export function isTrainingDateForCity(date: string, city: string, schedules: Kas
   const sameDate = schedules.filter((schedule) => schedule.date === date);
   const applies = sameDate.filter((schedule) => schedule.city === "Gabungan" || (schedule.city ?? "Bandung") === city);
   if (applies.length > 0) return applies.some((schedule) => schedule.status === "latihan" || schedule.status === "tambahan");
+  if (isHoliday(date)) return false;
 
   const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
   return city === "Bandung" && (weekday === 0 || weekday === 3 || weekday === 6);

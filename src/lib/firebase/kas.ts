@@ -1,7 +1,8 @@
 import { db } from "../firebase";
 import { collection, doc, getDocs, setDoc, query, orderBy, where, serverTimestamp, deleteDoc } from "firebase/firestore";
 import type { KasRecord, KasAthlete, KasTransaction } from "../types/kas";
-import { isTrainingDateForCity } from "../kas-payment";
+import { addIsoDays, listTrainingSessions } from "../team-schedule";
+import { jakartaDateString } from "../jakarta-date";
 
 export async function getKasAthletes(): Promise<KasAthlete[]> {
   const q = query(collection(db, "crown-athletes"), orderBy("name"));
@@ -119,80 +120,32 @@ export async function addCustomTrainingEvent(dateStr: string) {
 }
 
 export async function getTrainingDates(athleteCity?: string): Promise<string[]> {
-  const today = new Date();
-  const year = today.getFullYear();
-  const month = today.getMonth();
-  
-  const dates = new Set<string>();
-  
-  // 1. Get Custom Events from crown-events (legacy)
-  const qEvents = query(collection(db, "crown-events"));
-  const snapshotEvents = await getDocs(qEvents);
-  const customEvents = new Map<string, any>();
-  snapshotEvents.forEach(doc => {
+  const today = jakartaDateString();
+  const start = addIsoDays(today, -70);
+  const end = addIsoDays(today, 100);
+
+  const snapshotEvents = await getDocs(query(collection(db, "crown-events")));
+  const customEvents = new Map<string, { status?: string }>();
+  snapshotEvents.forEach((doc) => {
     const data = doc.data();
-    if (data.date) {
-      customEvents.set(data.date, data);
-    }
+    if (data.date) customEvents.set(data.date, data);
   });
 
-  // 2. Get Schedules from crown-schedules (jadwal page edits)
-  const qSchedules = query(collection(db, "crown-schedules"));
-  const snapshotSchedules = await getDocs(qSchedules);
-  const customSchedules = new Map<string, any[]>();
-  snapshotSchedules.forEach(doc => {
+  const snapshotSchedules = await getDocs(query(collection(db, "crown-schedules")));
+  const stored = snapshotSchedules.docs.map((doc) => {
     const data = doc.data();
-    if (data.date) {
-      customSchedules.set(data.date, [...(customSchedules.get(data.date) ?? []), data]);
-    }
+    return { id: doc.id, date: data.date as string, status: data.status as string | undefined, city: data.city as string | undefined };
   });
-
-  // 3. Generate Regular Training Days (Wed, Sat, Sun) starting from April 1, 2026
-  const TRAINING_START = new Date(2026, 3, 1);
-  const REGULAR_DAYS = new Set([0, 3, 6]); // Sun, Wed, Sat
-  
-  // Look 2 months back and 3 months ahead
-  for (let m = -2; m <= 3; m++) {
-    const targetDate = new Date(year, month + m, 1);
-    const y = targetDate.getFullYear();
-    const mo = targetDate.getMonth();
-    const daysInMonth = new Date(y, mo + 1, 0).getDate();
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const d = new Date(y, mo, day);
-      if (d < TRAINING_START) continue;
-
-      const dateStr = `${y}-${String(mo + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      
-      // Crown-schedules takes priority (jadwal page)
-      if (customSchedules.has(dateStr)) {
-        const schedules = customSchedules.get(dateStr) ?? [];
-        if (!athleteCity && schedules.some((sched) => sched.status === "latihan" || sched.status === "tambahan")) {
-          dates.add(dateStr);
-          continue;
-        }
-        if (athleteCity && isTrainingDateForCity(dateStr, athleteCity, schedules)) {
-          dates.add(dateStr);
-        }
-        if (!athleteCity || schedules.some((sched) => sched.city === "Gabungan" || (sched.city ?? "Bandung") === athleteCity)) {
-          continue;
-        }
-      }
-
-      // Then check crown-events (legacy)
-      if (customEvents.has(dateStr)) {
-        if (customEvents.get(dateStr).status !== "libur") {
-          dates.add(dateStr);
-        }
-        continue;
-      }
-      
-      // Regular days
-      if (REGULAR_DAYS.has(d.getDay()) && (!athleteCity || athleteCity === "Bandung")) {
-        dates.add(dateStr);
-      }
+  const scheduledDates = new Set(stored.map((schedule) => schedule.date));
+  for (const [date, event] of customEvents) {
+    if (!scheduledDates.has(date)) {
+      stored.push({ id: `event:${date}`, date, status: event.status === "libur" ? "libur" : "tambahan", city: "Bandung" });
     }
   }
 
+  const dates = new Set<string>();
+  for (const session of listTrainingSessions(stored, start, end)) {
+    if (!athleteCity || session.city === "Gabungan" || session.city === athleteCity) dates.add(session.date);
+  }
   return Array.from(dates).sort((a, b) => b.localeCompare(a));
 }

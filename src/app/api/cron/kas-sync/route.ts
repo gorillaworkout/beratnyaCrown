@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { bearerMatches } from "@/lib/cron-auth";
-import { chunkList, isBillableTrainingDate, jakartaDateString, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
+import { chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
+import { addIsoDays, listTrainingSessions, type StoredSchedule } from "@/lib/team-schedule";
 
 // Dynamic import to avoid build issues
 let adminDb: any = null;
@@ -38,20 +39,15 @@ export async function GET(request: Request) {
     //    Existing kas rows are never rewritten.
     // Fetch all + filter in memory — avoids needing a composite index (status+date)
     const today = jakartaDateString();
+    const yesterday = addIsoDays(today, -1);
     const schedSnap = await db.collection("crown-schedules").get();
-
-    const trainingDates = new Set<string>();
-    schedSnap.docs.forEach((d: any) => {
-      const s = d.data();
-      if (
-        (s.status === "latihan" || s.status === "tambahan") &&
-        typeof s.date === "string" &&
-        isBillableTrainingDate(s.date, today)
-      ) {
-        trainingDates.add(s.date);
-      }
-    });
-    const dates = [...trainingDates].sort();
+    const stored: StoredSchedule[] = schedSnap.docs.map((d: { id: string; data: () => StoredSchedule }) => ({
+      ...d.data(),
+      id: d.id,
+    }));
+    const dates = [...new Set(
+      listTrainingSessions(stored, KAS_START, yesterday).map((session) => session.date),
+    )].sort();
 
     // 2. Non-exempt athletes
     const athSnap = await db.collection("crown-athletes").get();

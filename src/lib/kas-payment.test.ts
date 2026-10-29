@@ -68,6 +68,15 @@ test("training date validates real dates and city-specific overrides", () => {
   assert.equal(isTrainingDateForCity("2026-02-31", "Bandung", []), false);
 });
 
+test("national holiday is not a default Bandung training day", () => {
+  assert.equal(isTrainingDateForCity("2026-05-27", "Bandung", []), false);
+  assert.equal(isTrainingDateForCity("2026-05-24", "Bandung", []), false);
+  assert.equal(
+    isTrainingDateForCity("2026-05-27", "Bandung", [{ date: "2026-05-27", city: "Bandung", status: "latihan" }]),
+    true,
+  );
+});
+
 test("gabungan applies to both cities and city libur overrides only that city", () => {
   const gabungan = [{ date: "2026-10-13", city: "Gabungan", status: "tambahan" }];
   assert.equal(isTrainingDateForCity("2026-10-13", "Bandung", gabungan), true);

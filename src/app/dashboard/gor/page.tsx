@@ -6,6 +6,7 @@ import { CheckCircle2, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
 import { cityOf, DAY_NAMES, dayNameOf, filterGorSessions, gorRateOf, summarizeGor, type GorCost, type GorSession } from "@/lib/gor";
+import { listTrainingSessions, monthBounds } from "@/lib/team-schedule";
 
 type Schedule = GorSession & { status?: string };
 
@@ -39,9 +40,10 @@ export default function GorPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [confirmOpen, busy]);
 
-  const monthSessions = useMemo(() => schedules
-    .filter((s) => (s.status === "latihan" || s.status === "tambahan") && s.date?.startsWith(month))
-    .sort((a, b) => a.date.localeCompare(b.date) || cityOf(a).localeCompare(cityOf(b))), [schedules, month]);
+  const monthSessions = useMemo(() => {
+    const bounds = monthBounds(month);
+    return listTrainingSessions(schedules, bounds.start, bounds.end);
+  }, [schedules, month]);
   const cities = useMemo(() => [...new Set(monthSessions.map(cityOf))].sort(), [monthSessions]);
   const days = useMemo(() => {
     const present = new Set(monthSessions.map((s) => dayNameOf(s.date)));

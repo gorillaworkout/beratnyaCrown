@@ -41,6 +41,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
+import { daysBetween, jakartaDateString, jakartaParts } from "@/lib/jakarta-date";
 import {
   calendarTileClass,
   resolveAdditionalCity,
@@ -226,9 +227,9 @@ export default function JadwalPage() {
 
   // ─── State ───────────────────────────────────────────────────────────────
 
-  const now = new Date();
-  const [currentYear, setCurrentYear] = useState(now.getFullYear());
-  const [currentMonth, setCurrentMonth] = useState(now.getMonth());
+  const nowParts = jakartaParts();
+  const [currentYear, setCurrentYear] = useState(nowParts.year);
+  const [currentMonth, setCurrentMonth] = useState(nowParts.month);
   const [scheduleData, setScheduleData] = useState<ScheduleEntry[]>([]);
   const [events, setEvents] = useState<CrownEvent[]>([]);
   const [firestoreLoading, setFirestoreLoading] = useState(true);
@@ -456,7 +457,7 @@ export default function JadwalPage() {
       // Hari Latihan = jika ada custom jadwal Latihan, atau (hari reguler, TIDAK ADA event, TIDAK ADA jadwal libur)
       const isTrainingDay = 
         customSchedules.some((s) => s.status === "latihan" || s.status === "tambahan") || 
-        (!customSchedule && isRegular && !isEventDay);
+        (!customSchedule && isRegular && !isEventDay && !holidayName);
       
       if (isTrainingDay) {
         const colorIndex = getDeterministicShirtColor(dateStr);
@@ -494,7 +495,16 @@ export default function JadwalPage() {
           eventEmoji: isEventDay.emoji,
         });
       } else {
-        if (isRegular) {
+        if (isRegular && holidayName) {
+          entries.push({
+            date: dateStr,
+            dayName,
+            isRegular: true,
+            status: "libur",
+            shirtColor: undefined,
+            holidayName,
+          });
+        } else if (isRegular) {
           // Bandung Rabu (3) & Sabtu (6) mulai 17:30
           // Minggu (0) tetap 10:00 - 13:00
           const defaultTimeStart = getDefaultTimeStart(dayOfWeek, DEFAULT_CITY);
@@ -571,9 +581,9 @@ export default function JadwalPage() {
   };
 
   const goToday = () => {
-    const today = new Date();
-    setCurrentYear(today.getFullYear());
-    setCurrentMonth(today.getMonth());
+    const today = jakartaParts();
+    setCurrentYear(today.year);
+    setCurrentMonth(today.month);
   };
 
   // ─── Calendar Sync Trigger ────────────────────────────────────────────────
@@ -761,11 +771,8 @@ export default function JadwalPage() {
   // ─── Countdown ───────────────────────────────────────────────────────────
 
   const getCountdown = (dateStr: string): string => {
-    const target = new Date(dateStr + "T00:00:00");
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const diffMs = target.getTime() - today.getTime();
-    const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+    const today = jakartaDateString();
+    const diffDays = daysBetween(today, dateStr);
 
     if (diffDays < 0) return "Sudah lewat";
     if (diffDays === 0) return "Hari ini!";
@@ -796,7 +803,7 @@ export default function JadwalPage() {
         if (customSchedule.status === "latihan" || customSchedule.status === "tambahan") {
           isTrainingDay = true;
         }
-      } else if (isRegular && !isEvent) {
+      } else if (isRegular && !isEvent && !holidayName) {
         isTrainingDay = true;
       }
       
@@ -1086,13 +1093,14 @@ export default function JadwalPage() {
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
       const customSchedule = pickDaySchedule(scheduleData, dateStr);
       const isEvent = events.some((e) => e.date === dateStr);
+      const holidayName = isHoliday(dateStr);
       
       let isTrainingDay = false;
       if (customSchedule) {
         if (customSchedule.status === "latihan" || customSchedule.status === "tambahan") {
           isTrainingDay = true;
         }
-      } else if (isRegular && !isEvent) {
+      } else if (isRegular && !isEvent && !holidayName) {
         isTrainingDay = true;
       }
       
@@ -1219,10 +1227,11 @@ export default function JadwalPage() {
       const isRegular = REGULAR_DAYS.has(dayOfWeek) && current >= TRAINING_START;
       const customSchedule = pickDaySchedule(scheduleData, dateStr);
       const isEvent = events.some(e => e.date === dateStr);
+      const holidayName = isHoliday(dateStr);
       let isTrainingDay = false;
       if (customSchedule) {
         isTrainingDay = customSchedule.status === "latihan" || customSchedule.status === "tambahan";
-      } else if (isRegular && !isEvent) {
+      } else if (isRegular && !isEvent && !holidayName) {
         isTrainingDay = true;
       }
       const absCt = getAbsenceCount(dateStr);
@@ -1246,9 +1255,7 @@ export default function JadwalPage() {
   }
 
 
-  const todayStr = `${now.getFullYear()}-${String(
-    now.getMonth() + 1
-  ).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+  const todayStr = jakartaDateString();
   const validSessions = schedule.filter(s => s.status !== "libur" && s.status !== "event");
   const totalSessions = validSessions.length;
   const regularCount = validSessions.filter((s) => s.isRegular).length;
@@ -1356,8 +1363,9 @@ export default function JadwalPage() {
             {(() => {
               const kejurda = events.find(e => e.name.toLowerCase().includes("kejurda"));
               const kejurnas = events.find(e => e.name.toLowerCase().includes("kejurnas"));
-              const hasKejurda = kejurda && new Date(kejurda.date) > new Date();
-              const hasKejurnas = kejurnas && new Date(kejurnas.date) > new Date();
+              const todayJakarta = jakartaDateString();
+              const hasKejurda = kejurda && kejurda.date >= todayJakarta;
+              const hasKejurnas = kejurnas && kejurnas.date >= todayJakarta;
               if (!hasKejurda && !hasKejurnas) return null;
               return (
                 <div className="flex flex-wrap items-center gap-3 bg-gradient-to-r from-amber-500/10 to-cyan-500/10 border border-white/10 rounded-lg px-4 py-3 mb-1">
@@ -1387,8 +1395,8 @@ export default function JadwalPage() {
             {events.map((ev) => {
               const countdown = getCountdown(ev.date);
               const sessionsLeft = getTrainingSessionsUntil(ev.date);
-              const evDate = new Date(ev.date + "T00:00:00");
-              const isPast = evDate < now;
+              const evDate = new Date(`${ev.date}T00:00:00`);
+              const isPast = ev.date < jakartaDateString();
               return (
                 <div
                   key={ev.id || ev.date}
@@ -1965,7 +1973,7 @@ export default function JadwalPage() {
                     timeStart = customSchedule.timeStart || timeStart;
                     timeEnd = customSchedule.timeEnd || timeEnd;
                   }
-                } else if (isRegular && !isEvent) {
+                } else if (isRegular && !isEvent && !holidayName) {
                   isTrainingDay = true;
                 }
                 

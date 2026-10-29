@@ -184,20 +184,11 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
         continue;
       }
 
-      // Check National Holiday
+      // Libur nasional tanpa override tersimpan bukan sesi latihan.
       const holidayCheck = isHoliday(dateStr);
       if (holidayCheck) {
-        // If it's a regular training day on a holiday, mark it as "libur" but keep a note
         if (REGULAR_DAYS.has(d.getDay())) {
-           schedule.push({
-             date: dateStr,
-             status: "latihan", // Still marked as training, but with a warning note
-             timeStart: getDefaultTimeStart(d.getDay(), DEFAULT_CITY),
-             timeEnd: d.getDay() === 0 ? "13:00" : "22:00",
-             holidayName: holidayCheck,
-             shirtColor: SHIRT_COLORS[getDeterministicShirtColor(dateStr)]
-             , city: DEFAULT_CITY
-           });
+          schedule.push({ date: dateStr, status: "libur", holidayName: holidayCheck });
         }
         continue;
       }
