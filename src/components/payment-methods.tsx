@@ -94,7 +94,7 @@ export function PaymentMethods() {
               <button type="button" onClick={() => setOpen(payment)} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-white transition hover:bg-white/[0.12]">
                 <Maximize2 className="h-3.5 w-3.5" /> Perbesar
               </button>
-              <a href={payment.image} download={`QRIS-Crown-${payment.label}.jpg`} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-white transition hover:bg-white/[0.12]">
+              <a href={payment.image} download={`QRIS-Crown-${payment.label}.${payment.image.split(".").pop() || "jpg"}`} className="inline-flex items-center justify-center gap-1.5 rounded-lg border border-white/15 bg-white/[0.06] px-3 py-2 text-xs font-medium text-white transition hover:bg-white/[0.12]">
                 <Download className="h-3.5 w-3.5" /> Simpan QR
               </a>
             </div>

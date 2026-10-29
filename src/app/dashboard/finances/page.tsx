@@ -305,7 +305,7 @@ export default function FinancesPage() {
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#1a1a1a,_#050505_55%,_#000_100%)] p-3 text-slate-100 sm:p-4">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 pt-20">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
 
         {/* Header */}
         <header className="flex flex-col gap-4 rounded-2xl border border-white/10 bg-black/40 p-4 sm:p-6 backdrop-blur-xl">

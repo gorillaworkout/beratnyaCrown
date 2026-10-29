@@ -23,6 +23,9 @@ import { useAuth } from "@/lib/auth-context";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { kasOutstanding, kasPaidAmount, nextTrainingDates, reconcileKasPayment } from "@/lib/kas-payment";
+import { summarizeCityKas } from "@/lib/kas-city";
+import { csvTable } from "@/lib/csv";
+import { jakartaDateString } from "@/lib/jakarta-date";
 import { newRequestId, sendMutation } from "@/lib/savings-client";
 
 export default function KasPage() {
@@ -39,6 +42,8 @@ export default function KasPage() {
 
   const cities = useMemo(() => [...new Set(athletes.map((a) => a.city?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "id")), [athletes]);
   const visibleAthletes = useMemo(() => cityFilter === "all" ? athletes : athletes.filter((a) => a.city === cityFilter), [athletes, cityFilter]);
+  const athleteCities = useMemo(() => new Map(athletes.map((athlete) => [athlete.id || "", athlete.city])), [athletes]);
+  const cityKas = useMemo(() => summarizeCityKas(allRecords, athleteCities, cityFilter), [allRecords, athleteCities, cityFilter]);
 
   useEffect(() => {
     if (user?.email === "darmawanbayu1@gmail.com") {
@@ -158,7 +163,7 @@ export default function KasPage() {
 
       // Smart default date: today if it's a training day, otherwise closest past training date
       if (!selectedDate && dates.length > 0 && activeTab === "daily") {
-        const todayISO = new Date().toISOString().split('T')[0];
+        const todayISO = jakartaDateString();
         if (dates.includes(todayISO)) {
           setSelectedDate(todayISO);
         } else {
@@ -196,7 +201,7 @@ export default function KasPage() {
     setIsSubmitting(true);
     try {
       await addKasTransaction({
-        date: new Date().toISOString().split('T')[0],
+        date: jakartaDateString(),
         type: trxType,
         amount: Number(trxAmount),
         description: trxDesc.trim()
@@ -391,18 +396,16 @@ export default function KasPage() {
       r.date, r.name, r.paidKas ? "Ya" : "Tidak", r.isLate ? "Ya" : "Tidak", r.noNews ? "Ya" : "Tidak", r.isExcused ? "Ya" : "Tidak", r.totalBilled, r.isSettled ? "Ya" : "Tidak"
     ]);
 
-    let csvContent = "data:text/csv;charset=utf-8," + headers.join(",") + "\\n";
-    rows.forEach(row => {
-      csvContent += row.join(",") + "\\n";
-    });
-
-    const encodedUri = encodeURI(csvContent);
+    const csvContent = csvTable([headers, ...rows]);
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
+    link.setAttribute("href", url);
     link.setAttribute("download", "Rekap_Kas_Crown.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -454,6 +457,7 @@ export default function KasPage() {
             <p className="mt-1 text-lg font-bold text-emerald-400">
               Rp {summary.currentBalance.toLocaleString("id-ID")}
             </p>
+            {cityFilter !== "all" ? <p className="mt-1 text-[10px] text-slate-500">Saldo gabungan. Job tidak dipisah kota.</p> : null}
           </div>
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Pemasukan</p>
@@ -464,16 +468,21 @@ export default function KasPage() {
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Lunas</p>
             <p className="mt-1 text-lg font-bold text-cyan-400">
-              Rp {summary.totalSettled.toLocaleString("id-ID")}
+              Rp {(cityFilter === "all" ? summary.totalSettled : cityKas.settled).toLocaleString("id-ID")}
             </p>
           </div>
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Piutang</p>
             <p className="mt-1 text-lg font-bold text-red-400">
-              Rp {Math.max(0, summary.totalBilled - summary.totalSettled).toLocaleString("id-ID")}
+              Rp {(cityFilter === "all" ? Math.max(0, summary.totalBilled - summary.totalSettled) : cityKas.outstanding).toLocaleString("id-ID")}
             </p>
           </div>
         </section>
+        {cityFilter !== "all" ? (
+          <p className="text-xs text-slate-400">
+            Lunas dan piutang mengikuti kota atlet{cityKas.unknown > 0 ? `. ${cityKas.unknown} catatan tanpa kota tetap di angka gabungan` : ""}.
+          </p>
+        ) : null}
 
         {/* TAB 1: KAS HARIAN */}
         {activeTab === "daily" && (

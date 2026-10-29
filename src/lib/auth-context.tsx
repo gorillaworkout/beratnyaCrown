@@ -94,16 +94,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (!sessionStorage.getItem(key)) {
             sessionStorage.setItem(key, "1");
             const coordsRaw = localStorage.getItem("crown-share-gps-coords");
-            void fetch("/api/login-log", {
+            void firebaseUser.getIdToken().then((token) => fetch("/api/login-log", {
               method: "POST",
-              headers: { "Content-Type": "application/json" },
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${token}`,
+              },
               body: JSON.stringify({
-                uid: firebaseUser.uid,
-                email: firebaseUser.email,
-                name: firebaseUser.displayName,
                 coords: coordsRaw ? JSON.parse(coordsRaw) : null,
               }),
-            }).catch(() => {});
+            })).catch(() => {});
           }
         } catch {
           // sessionStorage bisa diblokir di mode privat — abaikan.

@@ -1256,6 +1256,9 @@ export default function JadwalPage() {
 
 
   const todayStr = jakartaDateString();
+  const todayTrainings = schedule.filter(
+    (entry) => entry.date === todayStr && (entry.status === "latihan" || entry.status === "tambahan"),
+  );
   const validSessions = schedule.filter(s => s.status !== "libur" && s.status !== "event");
   const totalSessions = validSessions.length;
   const regularCount = validSessions.filter((s) => s.isRegular).length;
@@ -1321,23 +1324,22 @@ export default function JadwalPage() {
               </p>
             </CardContent>
           </Card>
-          <Card className={`${glassCardClass} ${calendarTileClass(todayEntry)}`}>
+          <Card className={`${glassCardClass} ${calendarTileClass(todayTrainings[0] ?? todayEntry)}`}>
             <CardContent className="p-4 text-center">
               <p className={`text-xs uppercase tracking-wider text-slate-400`}>
                 Hari Ini
               </p>
-              {todayEntry ? (
-                <div className="mt-1">
-                  <p className={`text-xl font-bold text-white`}>
-                    {todayEntry.timeStart}
-                  </p>
-                  <p className={`text-xs text-slate-400`}>
-                    {todayEntry.status === "libur"
-                      ? "Libur"
-                      : todayEntry.status === "tambahan"
-                      ? "Latihan Extra"
-                      : "Ada Latihan"}
-                  </p>
+              {todayTrainings.length > 0 ? (
+                <div className="mt-1 space-y-1">
+                  {todayTrainings.map((entry) => (
+                    <div key={`${entry.city ?? "kota"}-${entry.status}-${entry.timeStart}`}>
+                      <p className="text-xl font-bold text-white">{entry.timeStart}</p>
+                      <p className="text-xs text-slate-400">
+                        {entry.city ? `${CITY_META[entry.city].label} · ` : ""}
+                        {entry.status === "tambahan" ? "Latihan Extra" : "Ada Latihan"}
+                      </p>
+                    </div>
+                  ))}
                 </div>
               ) : (
                 <p className="text-3xl mt-1">
