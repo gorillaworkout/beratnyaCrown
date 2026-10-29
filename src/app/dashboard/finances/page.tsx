@@ -35,6 +35,7 @@ export default function FinancesPage() {
   const [showModal, setShowModal] = useState(false);
   const [editingRecord, setEditingRecord] = useState<FinanceRecord | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [saveError, setSaveError] = useState("");
   const [formData, setFormData] = useState({
     type: "INCOME" as FinanceType,
     amount: "",
@@ -59,6 +60,7 @@ export default function FinancesPage() {
       setNeeds(needsData);
     } catch (error) {
       console.error("Error loading finances:", error);
+      setSaveError("Gagal memuat data keuangan.");
     } finally {
       setLoading(false);
     }
@@ -114,14 +116,20 @@ export default function FinancesPage() {
   async function handleSaveRecord(e: React.FormEvent) {
     e.preventDefault();
     if (!formData.amount || !formData.description) return;
+    const amount = Number(formData.amount);
+    if (!Number.isFinite(amount)) {
+      setSaveError("Nominal tidak valid.");
+      return;
+    }
     
     setIsSubmitting(true);
+    setSaveError("");
     try {
       if (editingRecord?.id) {
         // Edit existing
         await updateFinanceRecord(editingRecord.id, {
           type: formData.type,
-          amount: Number(formData.amount),
+          amount,
           description: formData.description,
           date: formData.date,
           status: formData.type === 'DEBT' ? (editingRecord.status || 'PENDING') : undefined
@@ -130,7 +138,7 @@ export default function FinancesPage() {
         // Add new
         const newRecord: Omit<FinanceRecord, "id" | "createdAt"> = {
           type: formData.type,
-          amount: Number(formData.amount),
+          amount,
           description: formData.description,
           date: formData.date,
         };
@@ -144,6 +152,7 @@ export default function FinancesPage() {
       await loadData();
     } catch (error) {
       console.error("Failed to save record:", error);
+      setSaveError("Gagal menyimpan catatan keuangan.");
     } finally {
       setIsSubmitting(false);
     }
@@ -156,6 +165,7 @@ export default function FinancesPage() {
       await loadData();
     } catch (error) {
       console.error("Failed to delete record:", error);
+      setSaveError("Gagal menghapus catatan keuangan.");
     }
   }
 
@@ -166,6 +176,7 @@ export default function FinancesPage() {
       await loadData();
     } catch (error) {
       console.error("Failed to update debt:", error);
+      setSaveError("Gagal menandai hutang lunas.");
     }
   }
 
@@ -176,6 +187,7 @@ export default function FinancesPage() {
       await loadData();
     } catch (error) {
       console.error("Failed to undo debt:", error);
+      setSaveError("Gagal mengembalikan status hutang.");
     }
   }
 
@@ -213,6 +225,7 @@ export default function FinancesPage() {
       await loadData();
     } catch(error) {
       console.error("Failed to save need:", error);
+      setSaveError("Gagal menyimpan wishlist.");
     } finally {
       setIsSubmitting(false);
     }
@@ -225,6 +238,7 @@ export default function FinancesPage() {
       await loadData();
     } catch(err) {
       console.error(err);
+      setSaveError("Gagal menghapus wishlist.");
     }
   }
 
@@ -264,6 +278,7 @@ export default function FinancesPage() {
       alert("Berhasil dicatat ke Keuangan!");
     } catch(error) {
       console.error("Error updating need status:", error);
+      setSaveError("Gagal mencatat pembelian.");
       alert("Gagal mengupdate status.");
     } finally {
       setIsSubmitting(false);
@@ -303,6 +318,7 @@ export default function FinancesPage() {
               <p className="text-sm text-slate-400 mt-1">
                 Catat pemasukan job, pengeluaran umum, dan hutang (di luar uang kas rutin).
               </p>
+              {saveError ? <p role="alert" className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">{saveError}</p> : null}
             </div>
             <div className="flex gap-2">
               <button

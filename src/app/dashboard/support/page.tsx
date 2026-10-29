@@ -25,7 +25,7 @@ interface ShirtOrder {
 }
 
 export default function DanusSupportPage() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, isViewer } = useAuth();
   
   const [orders, setOrders] = useState<ShirtOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,13 +54,14 @@ export default function DanusSupportPage() {
   }, [isAdmin]);
 
   const handleOpenEdit = (order: ShirtOrder) => {
+    if (isViewer) return;
     setEditingOrder({ ...order });
     setAdminPaymentFile(null);
     setOpen(true);
   };
 
   const handleSave = async () => {
-    if (!editingOrder?.id) return;
+    if (isViewer || !editingOrder?.id) return;
     
     setIsUploading(true);
     try {
@@ -351,6 +352,7 @@ export default function DanusSupportPage() {
                           variant="ghost" 
                           size="sm" 
                           onClick={() => handleOpenEdit(order)}
+                          disabled={isViewer}
                           className="text-slate-400 hover:text-white hover:bg-slate-800"
                         >
                           <Edit className="w-4 h-4 mr-2" /> Edit

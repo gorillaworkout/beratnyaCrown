@@ -9,7 +9,7 @@ import {
   signOut as firebaseSignOut,
   onAuthStateChanged,
 } from "firebase/auth";
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc } from "firebase/firestore";
 
 const OWNER_EMAIL = "darmawanbayu1@gmail.com";
 
@@ -19,6 +19,7 @@ type AuthContextType = {
   isAdmin: boolean;
   role: string;
   isViewer: boolean;
+  accessDenied: string;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
 };
@@ -29,6 +30,7 @@ const AuthContext = createContext<AuthContextType>({
   isAdmin: false,
   role: "athlete",
   isViewer: false,
+  accessDenied: "",
   signInWithGoogle: async () => {},
   signOut: async () => {},
 });
@@ -42,6 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [role, setRole] = useState("athlete");
+  const [accessDenied, setAccessDenied] = useState("");
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -51,22 +54,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const athleteRef = doc(db, "crown-athletes", firebaseUser.uid);
           const athleteSnap = await getDoc(athleteRef);
           if (!athleteSnap.exists()) {
-            await setDoc(athleteRef, {
-              email: firebaseUser.email,
-              name: firebaseUser.displayName,
-              photoURL: firebaseUser.photoURL,
-              role: "athlete",
-              createdAt: new Date().toISOString(),
-              targetWeight: 0,
+            const response = await fetch("/api/auth/access", {
+              method: "POST",
+              headers: { Authorization: `Bearer ${await firebaseUser.getIdToken()}` },
             });
-            setRole("athlete");
-            setIsAdmin(false);
+            if (!response.ok) {
+              const payload = (await response.json().catch(() => ({}))) as { error?: string };
+              setAccessDenied(payload.error || "Akun Google ini belum terdaftar di Crown.");
+              await firebaseSignOut(auth);
+              setUser(null);
+              setRole("athlete");
+              setIsAdmin(false);
+              setLoading(false);
+              return;
+            }
+            const created = await getDoc(athleteRef);
+            const userRole = created.data()?.role || "athlete";
+            setRole(userRole);
+            setIsAdmin(firebaseUser.email === OWNER_EMAIL || userRole === "admin");
+            setAccessDenied("");
           } else {
             const userRole = athleteSnap.data()?.role || "athlete";
             setRole(userRole);
             setIsAdmin(
               firebaseUser.email === OWNER_EMAIL || userRole === "admin"
             );
+            setAccessDenied("");
           }
         } catch (error) {
           console.error("Error upserting athlete:", error);
@@ -106,6 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    setAccessDenied("");
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({
       prompt: 'select_account'
@@ -138,7 +152,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, isAdmin, role, isViewer: role === "viewer", signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, isAdmin, role, isViewer: role === "viewer", accessDenied, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );

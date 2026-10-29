@@ -8,7 +8,7 @@ import Image from "next/image";
 const glassCardClass = "border-white/10 bg-white/5 backdrop-blur-md shadow-xl";
 
 export default function LoginPage() {
-  const { user, loading, signInWithGoogle } = useAuth();
+  const { user, loading, signInWithGoogle, accessDenied } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -63,6 +63,7 @@ export default function LoginPage() {
         </div>
 
         {/* Google Sign In Button */}
+        {accessDenied ? <p className="mb-4 text-sm text-red-400">{accessDenied}</p> : null}
         <button
           onClick={signInWithGoogle}
           className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/20 bg-white/10 px-4 py-3.5 text-sm font-semibold text-white transition-all hover:bg-white/20 hover:shadow-lg hover:shadow-white/5 active:scale-[0.98]"

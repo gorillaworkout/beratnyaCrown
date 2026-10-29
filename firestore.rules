@@ -18,6 +18,22 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    function hasProfile() {
+      return signedIn()
+        && exists(/databases/$(database)/documents/crown-athletes/$(request.auth.uid));
+    }
+
+    function isViewer() {
+      return hasProfile()
+        && get(/databases/$(database)/documents/crown-athletes/$(request.auth.uid)).data.role == 'viewer';
+    }
+
+    // Anggota biasa boleh mengubah data operasional. Viewer hanya membaca.
+    // Akun Google tanpa dokumen atlet tidak lolos.
+    function isMemberWriter() {
+      return hasProfile() && !isViewer();
+    }
+
     // Admin ditentukan dari dokumen atlet miliknya sendiri, bukan dari klaim
     // yang bisa dikarang klien.
     function isAdmin() {
@@ -48,31 +64,40 @@ service cloud.firestore {
     }
 
     match /crown-athletes/{doc} {
-      allow read: if signedIn();
-      allow create, update: if isAdmin() || (signedIn() && !claimsAdminRole());
+      // Dokumen sendiri boleh dibaca walau belum ada, supaya login bisa
+      // membedakan anggota lama dan akun baru. Profil orang lain butuh anggota.
+      allow read: if signedIn() && (request.auth.uid == doc || hasProfile() || isAdmin());
+      // Profil baru hanya dibuat server (Admin SDK) setelah lolos allowlist.
+      allow create: if false;
+      allow update: if isAdmin() || (
+        isMemberWriter()
+        && request.auth.uid == doc
+        && !claimsAdminRole()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'kasExempt', 'coachFeeExempt'])
+      );
       allow delete: if isAdmin();
     }
 
-    match /crown-schedules/{doc}     { allow read, write: if signedIn(); }
-    match /crown-events/{doc}        { allow read, write: if signedIn(); }
-    match /crown-absences/{doc}      { allow read, write: if signedIn(); }
-    match /crown-attendance/{doc}    { allow read, write: if signedIn(); }
-    match /crown-piket/{doc}         { allow read, write: if signedIn(); }
-    match /crown-p3k/{doc}           { allow read, write: if signedIn(); }
-    match /crown-kas-daily/{doc}     { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /crown-kas-transactions/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /crown-schedules/{doc}     { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-events/{doc}        { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-absences/{doc}      { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-attendance/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-piket/{doc}         { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-p3k/{doc}           { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-kas-daily/{doc}     { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown-kas-transactions/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-kas-bulk-requests/{doc} { allow read, write: if false; }
     // Uang pelatih: semua anggota boleh melihat, hanya admin yang mengubah.
-    match /crown_coach_fees/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /crown-gor-costs/{doc} { allow read: if signedIn(); allow write: if isAdmin(); }
-    match /crown-milestones/{doc}    { allow read, write: if signedIn(); }
-    match /crown-info-board/{doc}    { allow read: if signedIn(); allow write: if isAdmin(); }
+    match /crown_coach_fees/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown-gor-costs/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown-milestones/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown-info-board/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
 
     // Tabungan atlet: seluruh anggota boleh melihat ledger. Semua mutasi hanya
     // melalui API Admin SDK agar validasi, identitas editor, dan audit trail
     // tidak dapat dilewati dari DevTools. Transaksi tidak pernah dihapus.
     match /crown-athlete-savings-transactions/{doc} {
-      allow read: if signedIn();
+      allow read: if hasProfile() || isAdmin();
       allow write: if false;
     }
     match /crown-athlete-savings-audits/{doc} {
@@ -80,19 +105,20 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    match /crown-locations/{doc}     { allow read, write: if signedIn(); }
-    match /crown_finance_needs/{doc} { allow read, write: if signedIn(); }
-    match /danus_shirts/{doc}        { allow read, write: if signedIn(); }
+    match /crown-locations/{doc}     { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
+    match /crown_finance_needs/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown_finances/{doc}      { allow read, write: if isAdmin(); }
+    match /danus_shirts/{doc}        { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
 
     // ── Berat badan ─────────────────────────────────────────────────────────
     // Dibaca anggota lewat dashboard; semua penulisan lewat API server
     // (Admin SDK), termasuk reset sesi yang menghapus riwayat.
     match /athletes/{athleteId} {
-      allow read: if signedIn();
+      allow read: if hasProfile() || isAdmin();
       allow write: if false;
 
       match /weights/{weightId} {
-        allow read: if signedIn();
+        allow read: if hasProfile() || isAdmin();
         allow write: if false;
       }
     }
