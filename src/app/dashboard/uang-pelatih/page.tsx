@@ -62,8 +62,10 @@ export default function UangPelatihPage() {
   const members = useMemo(() => athletes.filter((a) => a.role !== "coach").sort((a, b) => a.name.localeCompare(b.name)), [athletes]);
   const cities = useMemo(() => [...new Set(members.map((a) => a.city))].sort(), [members]);
   const ready = loadedMonth === month;
+  // Atlet bebas permanen (BEBAS) tidak muncul di list sama sekali.
   const rows = useMemo(() => members
     .filter((a) => city === "all" || a.city === city)
+    .filter((a) => statusOf(a, records, month) !== "BEBAS")
     .filter((a) => filter === "all" || statusOf(a, records, month) === filter), [members, city, filter, records, month]);
   const summary = summarizeFees(members.filter((a) => city === "all" || a.city === city), records, month);
   // Selama data bulan ini belum termuat semua atlet tampak "belum bayar" — jangan bisa dipilih/ditimpa.
@@ -122,7 +124,7 @@ export default function UangPelatihPage() {
       </select>
       <select value={filter} onChange={(e) => setFilter(e.target.value)} className={selectClass} aria-label="Status">
         <option value="all">Semua status</option>
-        {(Object.keys(LABEL) as (keyof typeof LABEL)[]).map((k) => <option key={k} value={k}>{LABEL[k]}</option>)}
+        {(Object.keys(LABEL) as (keyof typeof LABEL)[]).filter((k) => k !== "BEBAS").map((k) => <option key={k} value={k}>{LABEL[k]}</option>)}
       </select>
     </div>
 
