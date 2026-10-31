@@ -27,3 +27,32 @@ export function chunkList<T>(items: T[], size: number): T[][] {
   for (let i = 0; i < items.length; i += size) chunks.push(items.slice(i, i + size));
   return chunks;
 }
+
+/** Tanggal join athlete dalam zona Asia/Jakarta.
+ *  Prioritas: createTime dokumen Firestore, lalu field createdAt (string ISO
+ *  atau Timestamp). Tanpa sinyal apa pun, kembalikan KAS_START (perilaku lama). */
+export function athleteJoinDate(athlete: {
+  createTime?: unknown;
+  createdAt?: unknown;
+}): string {
+  return toJakartaDate(athlete.createTime) ?? toJakartaDate(athlete.createdAt) ?? KAS_START;
+}
+
+function toJakartaDate(value: unknown): string | null {
+  if (!value) return null;
+  if (typeof value === "string") {
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? null : jakartaDateString(d);
+  }
+  if (typeof value === "object") {
+    const v = value as { toDate?: unknown; seconds?: unknown };
+    if (typeof v.toDate === "function") {
+      const d = (v.toDate as () => Date)();
+      return d instanceof Date && !Number.isNaN(d.getTime()) ? jakartaDateString(d) : null;
+    }
+    if (typeof v.seconds === "number") {
+      return jakartaDateString(new Date(v.seconds * 1000));
+    }
+  }
+  return null;
+}

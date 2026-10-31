@@ -698,11 +698,15 @@ export default function KasPage() {
         {/* TAB 2: TUNGGAKAN ATLET (BULK PAYMENT) */}
         {activeTab === "debt" && (
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
-            <div className="border-b border-white/10 bg-white/[0.02] p-4 sm:p-6 flex items-center justify-between">
+            <div className="border-b border-white/10 bg-white/[0.02] p-4 sm:p-6 flex items-center justify-between gap-3">
               <h2 className="text-lg font-semibold text-white">Atlet dengan Tunggakan</h2>
+              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} aria-label="Filter kota" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                <option value="all">Semua kota</option>
+                {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+              </select>
             </div>
             <div className="p-4 sm:p-6">
-              {athletes.filter(a => unpaidRecords.some(r => r.athleteId === a.id)).length === 0 ? (
+              {visibleAthletes.filter(a => unpaidRecords.some(r => r.athleteId === a.id)).length === 0 ? (
                 <div className="text-center text-slate-500 py-8">Hebat! Tidak ada atlet yang nunggak.</div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

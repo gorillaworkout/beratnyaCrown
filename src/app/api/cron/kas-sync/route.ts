@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { FieldValue } from "firebase-admin/firestore";
 import { bearerMatches } from "@/lib/cron-auth";
-import { chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
+import { athleteJoinDate, chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
 import { addIsoDays, listTrainingSessions, type StoredSchedule } from "@/lib/team-schedule";
 
 // Dynamic import to avoid build issues
@@ -49,11 +49,16 @@ export async function GET(request: Request) {
       listTrainingSessions(stored, KAS_START, yesterday).map((session) => session.date),
     )].sort();
 
-    // 2. Non-exempt athletes
+    // 2. Non-exempt athletes (tanggal join diterapkan pada langkah 4)
     const athSnap = await db.collection("crown-athletes").get();
     const athletes = athSnap.docs
-      .map((d: any) => ({ id: d.id, ...d.data() }))
+      .map((d: any) => ({ id: d.id, createTime: d.createTime, ...d.data() }))
       .filter((a: any) => !a.kasExempt);
+
+    // Kas hanya berjalan sejak athlete join: tanggal join = createTime dokumen
+    // (fallback: field createdAt), dalam zona Asia/Jakarta. Tanpa sinyal tanggal,
+    // pakai KAS_START seperti sebelumnya.
+    const joinDateByAthlete = new Map(athletes.map((a: any) => [a.id, athleteJoinDate(a)]));
 
     // 3. Existing kas records for these dates
     const kasSnap = await db.collection("crown-kas-daily").get();
@@ -65,12 +70,15 @@ export async function GET(request: Request) {
       }
     });
 
-    // 4. Create missing records (alpa: Rp 26.000). Never update an existing row.
+    // 4. Create missing records (alpa: Rp 26.000) for sessions on/after each
+    //    athlete's join date. Never update an existing row.
     const recordsRef = db.collection("crown-kas-daily");
     const pending: Array<{ ref: ReturnType<typeof recordsRef.doc>; data: Record<string, unknown> }> = [];
 
     for (const date of dates) {
       for (const athlete of athletes) {
+        // Lewati sesi sebelum athlete join — kas masuk dari latihan pertama sejak join.
+        if (date < (joinDateByAthlete.get(athlete.id) ?? KAS_START)) continue;
         const key = `${date}|${athlete.id}`;
         if (existing.has(key)) continue;
 

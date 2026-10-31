@@ -25,7 +25,16 @@ const trainingDates = [...new Set(
 console.log("Past training dates:", trainingDates.length, "|", trainingDates.join(", "));
 
 const athSnap = await db.collection("crown-athletes").get();
-const athletes = athSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(a => !a.kasExempt);
+const jakarta = (d) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta" }).format(d);
+const toJakartaDate = (v) => {
+  if (!v) return null;
+  if (typeof v === "string") { const d = new Date(v); return Number.isNaN(d.getTime()) ? null : jakarta(d); }
+  if (typeof v.toDate === "function") return jakarta(v.toDate());
+  if (typeof v.seconds === "number") return jakarta(new Date(v.seconds * 1000));
+  return null;
+};
+const joinDateOf = (a, createTime) => toJakartaDate(createTime) ?? toJakartaDate(a.createdAt) ?? KAS_START;
+const athletes = athSnap.docs.map(d => ({ id: d.id, ...d.data(), joinDate: joinDateOf(d.data(), d.createTime) })).filter(a => !a.kasExempt);
 console.log("Active athletes (non-exempt):", athletes.length);
 
 const kasSnap = await db.collection("crown-kas-daily").get();
@@ -37,6 +46,7 @@ const byDate = {};
 for (const date of trainingDates) {
   let missing = 0;
   for (const a of athletes) {
+    if (date < a.joinDate) continue; // belum join: kas mulai dari latihan pertama sejak join
     if (!existing.has(`${date}|${a.id}`)) {
       missing++;
       count++;
