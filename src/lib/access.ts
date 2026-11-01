@@ -15,10 +15,13 @@ export function accessDecision(input: {
   email?: string | null;
   allowed: Set<string>;
   ownerEmail?: string;
-}): "existing" | "allowlist" | "owner" | "denied" {
+}): "existing" | "allowlist" | "owner" | "open" | "denied" {
   if (input.hasAthleteDoc) return "existing";
   const email = input.email?.trim().toLowerCase() ?? "";
   if (email && input.ownerEmail && email === input.ownerEmail.trim().toLowerCase()) return "owner";
   if (email && input.allowed.has(email)) return "allowlist";
+  // Kebijakan owner 1 Nov 2026: semua akun Gmail boleh login, tanpa daftar
+  // manual. Akun yang tidak diizinkan diblokir dari admin, bukan ditolak di pintu.
+  if (email) return "open";
   return "denied";
 }

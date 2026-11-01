@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   });
   if (decision === "denied") {
     return NextResponse.json(
-      { allowed: false, error: "Akun Google ini belum terdaftar di Crown." },
+      { allowed: false, error: "Akun Google ini tidak memiliki email sehingga tidak bisa login." },
       { status: 403 },
     );
   }

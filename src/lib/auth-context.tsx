@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
             if (!response.ok) {
               const payload = (await response.json().catch(() => ({}))) as { error?: string };
-              setAccessDenied(payload.error || "Akun Google ini belum terdaftar di Crown.");
+              setAccessDenied(payload.error || "Login gagal. Silakan coba lagi.");
               await firebaseSignOut(auth);
               setUser(null);
               setRole("athlete");

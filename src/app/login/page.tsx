@@ -91,7 +91,7 @@ export default function LoginPage() {
 
         {/* Info text */}
         <p className="mt-6 text-center text-xs text-slate-500">
-          Gunakan akun Gmail yang terdaftar di tim
+          Masuk dengan akun Gmail apa pun, tidak perlu daftar dulu
         </p>
       </div>
     </div>
