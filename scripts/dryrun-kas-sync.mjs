@@ -16,13 +16,17 @@ const today = new Date().toISOString().split("T")[0];
 const KAS_START = "2026-08-29";
 
 const schedSnap = await db.collection("crown-schedules").get();
-const trainingDates = [...new Set(
-  schedSnap.docs
-    .map(d => d.data())
-    .filter(s => (s.status === "latihan" || s.status === "tambahan") && s.date >= KAS_START && s.date <= today)
-    .map(s => s.date)
-)].sort();
+// Sesi beserta kotanya (cerminan cityOf di team-schedule: selain Jakarta/Gabungan = Bandung).
+// Catatan: dry-run ini hanya menghitung jadwal tersimpan, tanpa sesi virtual Bandung
+// yang dipakai cron asli lewat listTrainingSessions.
+const cityOf = (city) => (city === "Jakarta" || city === "Gabungan" ? city : "Bandung");
+const sessions = schedSnap.docs
+  .map(d => d.data())
+  .filter(s => (s.status === "latihan" || s.status === "tambahan") && s.date >= KAS_START && s.date <= today)
+  .map(s => ({ date: s.date, city: cityOf(s.city) }));
+const trainingDates = [...new Set(sessions.map(s => s.date))].sort();
 console.log("Past training dates:", trainingDates.length, "|", trainingDates.join(", "));
+console.log("Past training sessions:", sessions.length);
 
 const athSnap = await db.collection("crown-athletes").get();
 const jakarta = (d) => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta" }).format(d);
@@ -41,19 +45,29 @@ const kasSnap = await db.collection("crown-kas-daily").get();
 const existing = new Set(kasSnap.docs.map(d => `${d.data().date}|${d.data().athleteId}`));
 console.log("Existing kas records:", kasSnap.size);
 
+// Aturan kota (cerminan athletesForSession di src/lib/kas-city.ts): sesi kota X
+// hanya menagih atlet kota X; sesi Gabungan menagih semua kota; atlet tanpa kota
+// tetap ditagih di semua sesi. Satu tanggal bisa punya dua sesi — planned
+// mencegah atlet yang sama dihitung dua kali untuk tanggal itu.
 let count = 0;
 const byDate = {};
-for (const date of trainingDates) {
-  let missing = 0;
+const byCity = {};
+const planned = new Set();
+for (const session of sessions) {
   for (const a of athletes) {
-    if (date < a.joinDate) continue; // belum join: kas mulai dari latihan pertama sejak join
-    if (!existing.has(`${date}|${a.id}`)) {
-      missing++;
-      count++;
-    }
+    const aCity = (a.city || "").trim();
+    if (session.city !== "Gabungan" && aCity && aCity !== session.city) continue;
+    if (session.date < a.joinDate) continue; // belum join: kas mulai dari latihan pertama sejak join
+    const key = `${session.date}|${a.id}`;
+    if (existing.has(key) || planned.has(key)) continue;
+    planned.add(key);
+    count++;
+    byDate[session.date] = (byDate[session.date] || 0) + 1;
+    const bucket = aCity || "tanpa kota";
+    byCity[bucket] = (byCity[bucket] || 0) + 1;
   }
-  byDate[date] = missing;
 }
 console.log("Would create:", count, "records");
 console.log("Per date:", JSON.stringify(byDate, null, 0));
+console.log("Per city:", JSON.stringify(byCity, null, 0));
 console.log("Today:", today);

@@ -1,7 +1,7 @@
 import { db } from "../firebase";
 import { collection, doc, getDocs, setDoc, query, orderBy, where, serverTimestamp, deleteDoc } from "firebase/firestore";
-import type { KasRecord, KasAthlete, KasTransaction } from "../types/kas";
-import { addIsoDays, listTrainingSessions } from "../team-schedule";
+import type { KasRecord, KasAthlete, KasTransaction, KasDebt } from "../types/kas";
+import { addIsoDays, listTrainingSessions, monthBounds, type StoredSchedule, type TrainingSession } from "../team-schedule";
 import { jakartaDateString } from "../jakarta-date";
 
 export async function getKasAthletes(): Promise<KasAthlete[]> {
@@ -71,6 +71,32 @@ export async function deleteKasTransaction(id: string) {
   await deleteDoc(doc(db, "crown-kas-transactions", id));
 }
 
+export async function getKasDebts(): Promise<KasDebt[]> {
+  const q = query(collection(db, "crown-kas-debts"), orderBy("date", "desc"));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...(doc.data() as Omit<KasDebt, 'id'>),
+  }));
+}
+
+export async function addKasDebt(debt: Partial<KasDebt>) {
+  const newRef = doc(collection(db, "crown-kas-debts"));
+  await setDoc(newRef, {
+    ...debt,
+    createdAt: serverTimestamp(),
+  });
+  return newRef.id;
+}
+
+export async function setKasDebtSettled(id: string, isSettled: boolean) {
+  await setDoc(doc(db, "crown-kas-debts", id), { isSettled }, { merge: true });
+}
+
+export async function deleteKasDebt(id: string) {
+  await deleteDoc(doc(db, "crown-kas-debts", id));
+}
+
 export async function getKasSummary() {
   const dailySnap = await getDocs(collection(db, "crown-kas-daily"));
   let totalBilled = 0;
@@ -119,11 +145,8 @@ export async function addCustomTrainingEvent(dateStr: string) {
   });
 }
 
-export async function getTrainingDates(athleteCity?: string): Promise<string[]> {
-  const today = jakartaDateString();
-  const start = addIsoDays(today, -70);
-  const end = addIsoDays(today, 100);
-
+/** Jadwal tersimpan (crown-schedules + crown-events) untuk listTrainingSessions. */
+async function getStoredSchedules(): Promise<StoredSchedule[]> {
   const snapshotEvents = await getDocs(query(collection(db, "crown-events")));
   const customEvents = new Map<string, { status?: string }>();
   snapshotEvents.forEach((doc) => {
@@ -142,6 +165,21 @@ export async function getTrainingDates(athleteCity?: string): Promise<string[]> 
       stored.push({ id: `event:${date}`, date, status: event.status === "libur" ? "libur" : "tambahan", city: "Bandung" });
     }
   }
+  return stored;
+}
+
+/** Semua sesi latihan (tanggal + kota) dalam satu bulan, dari jadwal tersimpan. */
+export async function getTrainingSessionsForMonth(yearMonth: string): Promise<TrainingSession[]> {
+  const { start, end } = monthBounds(yearMonth);
+  return listTrainingSessions(await getStoredSchedules(), start, end);
+}
+
+export async function getTrainingDates(athleteCity?: string): Promise<string[]> {
+  const today = jakartaDateString();
+  const start = addIsoDays(today, -70);
+  const end = addIsoDays(today, 100);
+
+  const stored = await getStoredSchedules();
 
   const dates = new Set<string>();
   for (const session of listTrainingSessions(stored, start, end)) {

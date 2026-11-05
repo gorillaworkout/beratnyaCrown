@@ -3,6 +3,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { bearerMatches } from "@/lib/cron-auth";
 import { athleteJoinDate, chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
 import { addIsoDays, listTrainingSessions, type StoredSchedule } from "@/lib/team-schedule";
+import { athletesForSession } from "@/lib/kas-city";
 
 // Dynamic import to avoid build issues
 let adminDb: any = null;
@@ -45,13 +46,23 @@ export async function GET(request: Request) {
       ...d.data(),
       id: d.id,
     }));
-    const dates = [...new Set(
-      listTrainingSessions(stored, KAS_START, yesterday).map((session) => session.date),
-    )].sort();
+    // Sesi dipertahankan beserta kotanya: satu tanggal bisa punya dua sesi
+    // (mis. Bandung + Jakarta di hari yang sama), dan tiap sesi hanya menagih
+    // atlet kotanya sendiri. Sesi Gabungan menagih semua kota.
+    const sessions = listTrainingSessions(stored, KAS_START, yesterday);
+    const dates = [...new Set(sessions.map((session) => session.date))].sort();
 
     // 2. Non-exempt athletes (tanggal join diterapkan pada langkah 4)
     const athSnap = await db.collection("crown-athletes").get();
-    const athletes = athSnap.docs
+    type SyncAthlete = {
+      id: string;
+      city?: string | null;
+      name: string;
+      division?: string | null;
+      divisions?: string[];
+      createTime: any;
+    };
+    const athletes: SyncAthlete[] = athSnap.docs
       .map((d: any) => ({ id: d.id, createTime: d.createTime, ...d.data() }))
       .filter((a: any) => !a.kasExempt);
 
@@ -75,12 +86,17 @@ export async function GET(request: Request) {
     const recordsRef = db.collection("crown-kas-daily");
     const pending: Array<{ ref: ReturnType<typeof recordsRef.doc>; data: Record<string, unknown> }> = [];
 
-    for (const date of dates) {
-      for (const athlete of athletes) {
+    // Satu tanggal bisa muncul di dua sesi (mis. Bandung + Jakarta); planned
+    // mencegah atlet yang sama dibuatkan dua baris untuk tanggal itu.
+    const planned = new Set<string>();
+    for (const session of sessions) {
+      const date = session.date;
+      for (const athlete of athletesForSession(session.city, athletes)) {
         // Lewati sesi sebelum athlete join — kas masuk dari latihan pertama sejak join.
         if (date < (joinDateByAthlete.get(athlete.id) ?? KAS_START)) continue;
         const key = `${date}|${athlete.id}`;
-        if (existing.has(key)) continue;
+        if (existing.has(key) || planned.has(key)) continue;
+        planned.add(key);
 
         pending.push({
           ref: recordsRef.doc(),
@@ -114,6 +130,7 @@ export async function GET(request: Request) {
     return NextResponse.json({
       ok: true,
       trainingDates: dates.length,
+      sessions: sessions.length,
       athletes: athletes.length,
       created: count,
     });

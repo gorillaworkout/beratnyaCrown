@@ -86,6 +86,7 @@ service cloud.firestore {
     match /crown-p3k/{doc}           { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-kas-daily/{doc}     { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-kas-transactions/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown-kas-debts/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-kas-bulk-requests/{doc} { allow read, write: if false; }
     // Uang pelatih: semua anggota boleh melihat, hanya admin yang mengubah.
     match /crown_coach_fees/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }

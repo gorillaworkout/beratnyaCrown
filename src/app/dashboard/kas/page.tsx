@@ -14,8 +14,14 @@ import {
   getAllKasRecords,
   getTrainingDates,
   addCustomTrainingEvent,
+  getKasDebts,
+  addKasDebt,
+  setKasDebtSettled,
+  deleteKasDebt,
+  getTrainingSessionsForMonth,
 } from "@/lib/firebase/kas";
-import type { KasAthlete, KasRecord, KasTransaction, TransactionType } from "@/lib/types/kas";
+import type { KasAthlete, KasRecord, KasTransaction, KasDebt, TransactionType } from "@/lib/types/kas";
+import type { TrainingSession } from "@/lib/team-schedule";
 import { KAS_STATUS_OPTIONS, kasStatusOf, kasStatusPatch, type KasStatus } from "@/lib/kas-status";
 import { format } from "date-fns";
 import { id as idLocale } from "date-fns/locale";
@@ -23,7 +29,7 @@ import { useAuth } from "@/lib/auth-context";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { kasOutstanding, kasPaidAmount, nextTrainingDates, reconcileKasPayment } from "@/lib/kas-payment";
-import { summarizeCityKas } from "@/lib/kas-city";
+import { kasCityBalance, monthlyProjection, sessionDatesForCity, summarizeCityKas, summarizeCityTransactions } from "@/lib/kas-city";
 import { csvTable } from "@/lib/csv";
 import { jakartaDateString } from "@/lib/jakarta-date";
 import { newRequestId, sendMutation } from "@/lib/savings-client";
@@ -39,11 +45,102 @@ export default function KasPage() {
   const { user } = useAuth();
   const [isKasAdmin, setIsKasAdmin] = useState(false);
   const [cityFilter, setCityFilter] = useState("all");
+  const [debts, setDebts] = useState<KasDebt[]>([]);
+  const [projectionMonth, setProjectionMonth] = useState(() => jakartaDateString().slice(0, 7));
+  const [projectionSessions, setProjectionSessions] = useState<TrainingSession[]>([]);
+  const [projectionLoading, setProjectionLoading] = useState(false);
+
+  // Modal Hutang
+  const [showDebtModal, setShowDebtModal] = useState(false);
+  const [debtCreditor, setDebtCreditor] = useState("");
+  const [debtAmount, setDebtAmount] = useState("");
+  const [debtCity, setDebtCity] = useState("");
+  const [debtDesc, setDebtDesc] = useState("");
+  const [debtDate, setDebtDate] = useState(() => jakartaDateString());
 
   const cities = useMemo(() => [...new Set(athletes.map((a) => a.city?.trim()).filter(Boolean) as string[])].sort((a, b) => a.localeCompare(b, "id")), [athletes]);
   const visibleAthletes = useMemo(() => cityFilter === "all" ? athletes : athletes.filter((a) => a.city === cityFilter), [athletes, cityFilter]);
   const athleteCities = useMemo(() => new Map(athletes.map((athlete) => [athlete.id || "", athlete.city])), [athletes]);
   const cityKas = useMemo(() => summarizeCityKas(allRecords, athleteCities, cityFilter), [allRecords, athleteCities, cityFilter]);
+
+  const cityLedgers = useMemo(() => cities.map((city) => {
+    const daily = summarizeCityKas(allRecords, athleteCities, city);
+    const trx = summarizeCityTransactions(transactions, city);
+    const debt = debts
+      .filter((d) => !d.isSettled && d.city?.trim() === city)
+      .reduce((sum, d) => sum + (d.amount || 0), 0);
+    const balance = kasCityBalance({ settled: daily.settled, job: trx.job, otherIn: trx.otherIn, expense: trx.expense });
+    return {
+      city,
+      daily,
+      trx,
+      debt,
+      balance,
+      netBalance: balance - debt,
+    };
+  }), [cities, allRecords, athleteCities, transactions, debts]);
+
+  const unassignedTrx = useMemo(() => {
+    const rows = transactions.filter((trx) => !trx.city?.trim());
+    return {
+      count: rows.length,
+      income: rows.reduce((sum, trx) => sum + (trx.type === "IN_JOB" || trx.type === "IN_OTHER" ? trx.amount || 0 : 0), 0),
+      expense: rows.reduce((sum, trx) => sum + (trx.type === "OUT_EXPENSE" ? trx.amount || 0 : 0), 0),
+    };
+  }, [transactions]);
+
+  const visibleTransactions = useMemo(
+    () => (cityFilter === "all" ? transactions : transactions.filter((trx) => trx.city === cityFilter)),
+    [cityFilter, transactions],
+  );
+  const hiddenUnassignedTrxCount = cityFilter === "all" ? 0 : transactions.filter((trx) => !trx.city?.trim()).length;
+
+  const gabunganDebt = useMemo(
+    () => debts.filter((d) => !d.isSettled && !d.city?.trim()).reduce((sum, d) => sum + (d.amount || 0), 0),
+    [debts],
+  );
+  const combinedNetBalance = useMemo(
+    () => cityLedgers.reduce((sum, l) => sum + l.netBalance, 0) - gabunganDebt,
+    [cityLedgers, gabunganDebt],
+  );
+
+  const noCityAthleteCount = useMemo(() => athletes.filter((a) => !a.city?.trim()).length, [athletes]);
+
+  // Bulan sebelum bulan proyeksi, untuk tingkat realisasi bulan lalu.
+  const prevMonth = useMemo(() => {
+    const [year, month] = projectionMonth.split("-").map(Number);
+    const prev = new Date(Date.UTC(year, month - 2, 1));
+    return `${prev.getUTCFullYear()}-${String(prev.getUTCMonth() + 1).padStart(2, "0")}`;
+  }, [projectionMonth]);
+
+  const projections = useMemo(() => cities.map((city) => {
+    const dates = sessionDatesForCity(projectionSessions, city);
+    const athleteCount = athletes.filter((a) => a.city?.trim() === city).length;
+    const prev = summarizeCityKas(allRecords.filter((r) => r.date.startsWith(prevMonth)), athleteCities, city);
+    const settledThis = summarizeCityKas(allRecords.filter((r) => r.date.startsWith(projectionMonth)), athleteCities, city).settled;
+    return {
+      city,
+      dates,
+      athleteCount,
+      ...monthlyProjection({
+        athleteCount,
+        sessionDates: dates,
+        billedPrevMonth: prev.billed,
+        settledPrevMonth: prev.settled,
+        settledThisMonth: settledThis,
+      }),
+    };
+  }), [cities, projectionSessions, athletes, allRecords, athleteCities, prevMonth, projectionMonth]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setProjectionLoading(true);
+    getTrainingSessionsForMonth(projectionMonth)
+      .then((sessions) => { if (!cancelled) setProjectionSessions(sessions); })
+      .catch((error) => console.error("Gagal memuat sesi proyeksi:", error))
+      .finally(() => { if (!cancelled) setProjectionLoading(false); });
+    return () => { cancelled = true; };
+  }, [projectionMonth]);
 
   useEffect(() => {
     if (user?.email === "darmawanbayu1@gmail.com") {
@@ -123,6 +220,8 @@ export default function KasPage() {
   const [trxType, setTrxType] = useState<TransactionType>("IN_JOB");
   const [trxAmount, setTrxAmount] = useState("");
   const [trxDesc, setTrxDesc] = useState("");
+  const [trxCity, setTrxCity] = useState("");
+
 
   useEffect(() => {
     void loadData();
@@ -147,6 +246,12 @@ export default function KasPage() {
       } else if (activeTab === "recap" || activeTab === "debt") {
         p.push(Promise.resolve([])); // Handled by allRecords
       }
+
+      // Transaksi selalu dimuat supaya ringkasan per kota punya data di semua tab.
+      p.push(getKasTransactions());
+
+      // Hutang selalu dimuat supaya saldo per kota bersih dari hutang.
+      p.push(getKasDebts());
 
       const results = await Promise.all(p);
       setAthletes(results[0].filter((a: KasAthlete) => !a.kasExempt).sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
@@ -184,7 +289,8 @@ export default function KasPage() {
       setUnpaidRecords(unpaid);
 
       if (activeTab === "daily") setRecords(results[4] || []);
-      else if (activeTab === "transactions") setTransactions(results[4] || []);
+      setTransactions(results[5] || []);
+      setDebts(results[6] || []);
 
     } catch (error) {
       console.error("Failed to load kas data:", error);
@@ -200,14 +306,17 @@ export default function KasPage() {
     if (!trxAmount || !trxDesc.trim()) return;
     setIsSubmitting(true);
     try {
-      await addKasTransaction({
+      const payload: Partial<KasTransaction> = {
         date: jakartaDateString(),
         type: trxType,
         amount: Number(trxAmount),
-        description: trxDesc.trim()
-      });
+        description: trxDesc.trim(),
+      };
+      if (trxCity) payload.city = trxCity;
+      await addKasTransaction(payload);
       setTrxAmount("");
       setTrxDesc("");
+      setTrxCity("");
       setShowTrxModal(false);
       await loadData();
     } catch (error) {
@@ -221,6 +330,54 @@ export default function KasPage() {
     if (!confirm("Yakin hapus transaksi ini?")) return;
     try {
       await deleteKasTransaction(id);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function handleAddDebt(e: React.FormEvent) {
+    e.preventDefault();
+    if (!debtCreditor.trim() || !debtAmount) return;
+    setIsSubmitting(true);
+    try {
+      const payload: Partial<KasDebt> = {
+        date: debtDate || jakartaDateString(),
+        creditor: debtCreditor.trim(),
+        amount: Number(debtAmount),
+        isSettled: false,
+      };
+      if (debtCity) payload.city = debtCity;
+      if (debtDesc.trim()) payload.description = debtDesc.trim();
+      await addKasDebt(payload);
+      setDebtCreditor("");
+      setDebtAmount("");
+      setDebtCity("");
+      setDebtDesc("");
+      setDebtDate(jakartaDateString());
+      setShowDebtModal(false);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleToggleDebtSettled(debt: KasDebt) {
+    if (!isKasAdmin || !debt.id) return;
+    try {
+      await setKasDebtSettled(debt.id, !debt.isSettled);
+      await loadData();
+    } catch (error) {
+      console.error(error);
+    }
+  }
+
+  async function handleDeleteDebt(id: string) {
+    if (!confirm("Yakin hapus hutang ini?")) return;
+    try {
+      await deleteKasDebt(id);
       await loadData();
     } catch (error) {
       console.error(error);
@@ -457,7 +614,7 @@ export default function KasPage() {
             <p className="mt-1 text-lg font-bold text-emerald-400">
               Rp {summary.currentBalance.toLocaleString("id-ID")}
             </p>
-            {cityFilter !== "all" ? <p className="mt-1 text-[10px] text-slate-500">Saldo gabungan. Job tidak dipisah kota.</p> : null}
+            {cityFilter !== "all" ? <p className="mt-1 text-[10px] text-slate-500">Saldo di atas masih gabungan semua kota — rincian per kota ada di Ringkasan per Kota di bawah.</p> : null}
           </div>
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Pemasukan</p>
@@ -483,6 +640,131 @@ export default function KasPage() {
             Lunas dan piutang mengikuti kota atlet{cityKas.unknown > 0 ? `. ${cityKas.unknown} catatan tanpa kota tetap di angka gabungan` : ""}.
           </p>
         ) : null}
+
+        {/* Ringkasan per Kota */}
+        <section>
+          <h2 className="mb-2 text-sm font-semibold text-white">Ringkasan per Kota</h2>
+          {cities.length === 0 ? (
+            <p className="text-xs text-slate-400">Belum ada kota pada data atlet.</p>
+          ) : (
+            <div className="grid gap-2 sm:grid-cols-2">
+              {cityLedgers.map(({ city, daily, trx, debt, netBalance }) => (
+                <div key={city} className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
+                  <p className="text-sm font-bold text-white">{city}</p>
+                  <dl className="mt-2 space-y-1 text-xs text-slate-300">
+                    <div className="flex justify-between"><dt>Kas lunas</dt><dd className="font-semibold text-cyan-400">Rp {daily.settled.toLocaleString("id-ID")}</dd></div>
+                    <div className="flex justify-between"><dt>Pemasukan job</dt><dd className="font-semibold text-emerald-400">Rp {trx.job.toLocaleString("id-ID")}</dd></div>
+                    <div className="flex justify-between"><dt>Pemasukan lain</dt><dd className="font-semibold text-emerald-400">Rp {trx.otherIn.toLocaleString("id-ID")}</dd></div>
+                    <div className="flex justify-between"><dt>Pengeluaran</dt><dd className="font-semibold text-rose-400">Rp {trx.expense.toLocaleString("id-ID")}</dd></div>
+                    <div className="flex justify-between"><dt>Piutang</dt><dd className="font-semibold text-red-400">Rp {daily.outstanding.toLocaleString("id-ID")}</dd></div>
+                    {debt > 0 ? <div className="flex justify-between"><dt>Hutang belum lunas</dt><dd className="font-semibold text-rose-400">− Rp {debt.toLocaleString("id-ID")}</dd></div> : null}
+                  </dl>
+                  {netBalance < 0 ? (
+                    <p className="mt-2 text-sm font-bold text-red-400">Butuh subsidi Rp {(-netBalance).toLocaleString("id-ID")}</p>
+                  ) : (
+                    <p className="mt-2 text-sm font-bold text-emerald-400">{debt > 0 ? "Saldo bersih" : "Saldo"} Rp {netBalance.toLocaleString("id-ID")}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+          {unassignedTrx.count > 0 ? (
+            <p className="mt-2 text-xs text-slate-400">
+              {unassignedTrx.count} transaksi (pemasukan Rp {unassignedTrx.income.toLocaleString("id-ID")}, pengeluaran Rp {unassignedTrx.expense.toLocaleString("id-ID")}) belum dipisah kota — tidak masuk ke saldo kota mana pun.
+            </p>
+          ) : null}
+        </section>
+
+        {/* Hutang Kas */}
+        <section className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
+          <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Hutang Kas</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Hutang yang harus dibayar dari kas — mengurangi saldo kota sampai ditandai lunas.</p>
+            </div>
+            {isKasAdmin && (
+              <button onClick={() => setShowDebtModal(true)} className="flex items-center gap-2 rounded-xl bg-rose-500/20 border border-rose-500/30 px-3 py-2 text-xs font-semibold text-rose-300 hover:bg-rose-500/30">
+                <Plus className="h-3.5 w-3.5" /> Tambah Hutang
+              </button>
+            )}
+          </div>
+          {loading ? (
+            <p className="px-6 py-8 text-center text-sm text-slate-500">Memuat...</p>
+          ) : debts.length === 0 ? (
+            <p className="px-6 py-8 text-center text-sm text-slate-500">Belum ada hutang kas.</p>
+          ) : (
+            <ul className="divide-y divide-white/10">
+              {debts.map((debt) => (
+                <li key={debt.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-white">{debt.creditor}</p>
+                    <p className="text-xs text-slate-400">
+                      {format(new Date(debt.date), 'dd MMM yyyy', { locale: idLocale })} · {debt.city || "Gabungan"}{debt.description ? ` · ${debt.description}` : ""}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className={`text-sm font-bold ${debt.isSettled ? "text-slate-500 line-through" : "text-rose-400"}`}>Rp {debt.amount.toLocaleString("id-ID")}</span>
+                    <span className={`rounded px-2 py-1 text-xs ${debt.isSettled ? "bg-emerald-500/10 text-emerald-400" : "bg-rose-500/10 text-rose-400"}`}>{debt.isSettled ? "Lunas" : "Belum lunas"}</span>
+                    {isKasAdmin && (
+                      <>
+                        <button onClick={() => handleToggleDebtSettled(debt)} className="text-xs font-semibold text-cyan-400 hover:text-cyan-300">{debt.isSettled ? "Batalkan lunas" : "Tandai lunas"}</button>
+                        <button onClick={() => handleDeleteDebt(debt.id!)} aria-label="Hapus hutang" className="text-slate-500 hover:text-red-400 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                      </>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {gabunganDebt > 0 ? (
+            <p className="border-t border-white/10 bg-white/[0.02] px-4 py-3 text-xs text-slate-400 sm:px-6">
+              Hutang gabungan belum lunas Rp {gabunganDebt.toLocaleString("id-ID")} — total bersih gabungan (jumlah saldo bersih kota) Rp {combinedNetBalance.toLocaleString("id-ID")}.
+            </p>
+          ) : null}
+        </section>
+
+        {/* Proyeksi Bulanan */}
+        <section className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
+          <div className="flex flex-col gap-4 border-b border-white/10 bg-white/[0.02] p-4 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <h2 className="text-lg font-semibold text-white">Proyeksi Bulanan</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Perkiraan pemasukan kas per kota dalam satu bulan, dari jadwal latihan dan roster atlet saat ini.</p>
+            </div>
+            <label className="flex items-center gap-2 text-sm text-slate-400">
+              Bulan
+              <input type="month" value={projectionMonth} onChange={(e) => { if (e.target.value) setProjectionMonth(e.target.value); }} className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none" />
+            </label>
+          </div>
+          <div className="p-4 sm:p-6">
+            <p className="mb-4 text-xs text-slate-400">Proyeksi memakai roster atlet saat ini (dianggap tetap sepanjang bulan) dan tarif hadir Rp13.000 — telat/alpa menaikkan tagihan tapi belum tentu jadi pemasukan. Tingkat realisasi bulan lalu adalah angka tercatat.</p>
+            {projectionLoading ? (
+              <p className="py-8 text-center text-sm text-slate-500">Memuat jadwal...</p>
+            ) : cities.length === 0 ? (
+              <p className="py-8 text-center text-sm text-slate-500">Belum ada kota pada data atlet.</p>
+            ) : (
+              <div className="grid gap-2 sm:grid-cols-2">
+                {projections.map((p) => (
+                  <div key={p.city} className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
+                    <p className="text-sm font-bold text-white">{p.city}</p>
+                    <dl className="mt-2 space-y-1 text-xs text-slate-300">
+                      <div className="flex justify-between"><dt>Sesi latihan</dt><dd className="font-semibold text-white">{p.sessions} tanggal</dd></div>
+                      <div className="flex justify-between"><dt>Atlet aktif</dt><dd className="font-semibold text-white">{p.athleteCount}</dd></div>
+                      <div className="flex justify-between"><dt>Proyeksi tagihan (semua hadir)</dt><dd className="font-semibold text-cyan-400">Rp {p.baseline.toLocaleString("id-ID")}</dd></div>
+                      <div className="flex justify-between"><dt>Realisasi bulan lalu (tercatat)</dt><dd className="font-semibold text-white">{p.realization === null ? "Belum ada data" : `${Math.round(p.realization * 100)}%`}</dd></div>
+                      <div className="flex justify-between"><dt>Proyeksi pemasukan realistis</dt><dd className="font-semibold text-emerald-400">{p.realistic === null ? "—" : `Rp ${p.realistic.toLocaleString("id-ID")}`}</dd></div>
+                      <div className="flex justify-between"><dt>Sudah masuk bulan ini</dt><dd className="font-semibold text-emerald-400">Rp {p.settled.toLocaleString("id-ID")}</dd></div>
+                      <div className="flex justify-between"><dt>Sisa proyeksi</dt><dd className="font-semibold text-white">{p.remaining === null ? "—" : `Rp ${p.remaining.toLocaleString("id-ID")}`}</dd></div>
+                    </dl>
+                    <p className="mt-2 text-[11px] leading-relaxed text-slate-500">Tanggal: {p.dates.length > 0 ? p.dates.map((d) => format(new Date(`${d}T00:00:00`), "d MMM", { locale: idLocale })).join(", ") : "—"}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+            {noCityAthleteCount > 0 ? (
+              <p className="mt-3 text-xs text-slate-400">{noCityAthleteCount} atlet aktif tanpa kota — tidak masuk proyeksi kota mana pun.</p>
+            ) : null}
+          </div>
+        </section>
 
         {/* TAB 1: KAS HARIAN */}
         {activeTab === "daily" && (
@@ -628,7 +910,16 @@ export default function KasPage() {
                 <Wallet className="h-5 w-5 text-indigo-400" />
                 <h2 className="text-lg font-semibold text-white">Uang Job & Pengeluaran Manual</h2>
               </div>
+              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} aria-label="Filter kota" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                <option value="all">Semua kota</option>
+                {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+              </select>
             </div>
+            {cityFilter !== "all" ? (
+              <p className="border-b border-white/10 bg-white/[0.02] px-4 py-2 text-xs text-slate-400 sm:px-6">
+                Menampilkan hanya transaksi {cityFilter}. {hiddenUnassignedTrxCount} transaksi tanpa kota disembunyikan oleh filter ini.
+              </p>
+            ) : null}
 
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm text-slate-300">
@@ -636,6 +927,7 @@ export default function KasPage() {
                   <tr>
                     <th className="px-6 py-4 font-medium">Tanggal</th>
                     <th className="px-6 py-4 font-medium">Tipe</th>
+                    <th className="px-6 py-4 font-medium">Kota</th>
                     <th className="px-6 py-4 font-medium">Keterangan</th>
                     <th className="px-6 py-4 font-medium text-right">Nominal</th>
                     <th className="px-6 py-4 font-medium text-center">Aksi</th>
@@ -643,11 +935,11 @@ export default function KasPage() {
                 </thead>
                 <tbody className="divide-y divide-white/10">
                   {loading ? (
-                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Memuat...</td></tr>
-                  ) : transactions.length === 0 ? (
-                    <tr><td colSpan={5} className="px-6 py-12 text-center text-slate-500">Belum ada catatan transaksi.</td></tr>
+                    <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">Memuat...</td></tr>
+                  ) : visibleTransactions.length === 0 ? (
+                    <tr><td colSpan={6} className="px-6 py-12 text-center text-slate-500">Belum ada catatan transaksi.</td></tr>
                   ) : (
-                    transactions.map((trx) => (
+                    visibleTransactions.map((trx) => (
                       <tr key={trx.id} className="hover:bg-white/[0.02]">
                         <td className="px-6 py-4">{format(new Date(trx.date), 'dd MMM yyyy', { locale: idLocale })}</td>
                         <td className="px-6 py-4">
@@ -655,6 +947,7 @@ export default function KasPage() {
                           {trx.type === 'IN_OTHER' && <span className="inline-flex items-center gap-1 text-emerald-400 bg-emerald-500/10 px-2 py-1 rounded text-xs"><ArrowUpCircle className="w-3 h-3" /> Pemasukan</span>}
                           {trx.type === 'OUT_EXPENSE' && <span className="inline-flex items-center gap-1 text-rose-400 bg-rose-500/10 px-2 py-1 rounded text-xs"><ArrowDownCircle className="w-3 h-3" /> Pengeluaran</span>}
                         </td>
+                        <td className="px-6 py-4">{trx.city || "Gabungan"}</td>
                         <td className="px-6 py-4 text-white">
                           {trx.description}
                         </td>
@@ -866,6 +1159,13 @@ export default function KasPage() {
                     </select>
                   </div>
                   <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Kota</label>
+                    <select value={trxCity} onChange={(e) => setTrxCity(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white">
+                      <option value="">Gabungan (tidak dipisah kota)</option>
+                      {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                    </select>
+                  </div>
+                  <div>
                     <label className="mb-2 block text-sm font-medium text-slate-400">Nominal (Rp)</label>
                     <input type="number" required value={trxAmount} onChange={(e) => setTrxAmount(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white placeholder-slate-600" placeholder="1000000" />
                   </div>
@@ -878,6 +1178,48 @@ export default function KasPage() {
                   <button type="button" onClick={() => setShowTrxModal(false)} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
                   <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-indigo-500 px-4 py-3 text-sm font-bold text-white hover:bg-indigo-400 disabled:opacity-50">
                     {isSubmitting ? "Menyimpan..." : "Simpan Transaksi"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL HUTANG */}
+        {showDebtModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 px-4 backdrop-blur-sm">
+            <div className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111] p-6 shadow-2xl">
+              <h3 className="mb-4 text-xl font-bold text-white">Tambah Hutang Kas</h3>
+              <form onSubmit={handleAddDebt}>
+                <div className="space-y-4">
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Kreditur (yang harus dibayar)</label>
+                    <input type="text" required value={debtCreditor} onChange={(e) => setDebtCreditor(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white placeholder-slate-600" placeholder="Contoh: Aadi" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Nominal (Rp)</label>
+                    <input type="number" required value={debtAmount} onChange={(e) => setDebtAmount(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white placeholder-slate-600" placeholder="400000" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Kota</label>
+                    <select value={debtCity} onChange={(e) => setDebtCity(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white">
+                      <option value="">Gabungan (tidak dipisah kota)</option>
+                      {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Tanggal</label>
+                    <input type="date" required value={debtDate} onChange={(e) => setDebtDate(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white" />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-sm font-medium text-slate-400">Keterangan (opsional)</label>
+                    <input type="text" value={debtDesc} onChange={(e) => setDebtDesc(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black px-4 py-3 text-white placeholder-slate-600" placeholder="Contoh: Pinjaman dana talangan" />
+                  </div>
+                </div>
+                <div className="mt-8 flex gap-3">
+                  <button type="button" onClick={() => setShowDebtModal(false)} className="flex-1 rounded-xl border border-white/10 bg-transparent px-4 py-3 text-sm font-medium text-white hover:bg-white/5">Batal</button>
+                  <button type="submit" disabled={isSubmitting} className="flex-1 rounded-xl bg-rose-500 px-4 py-3 text-sm font-bold text-white hover:bg-rose-400 disabled:opacity-50">
+                    {isSubmitting ? "Menyimpan..." : "Simpan Hutang"}
                   </button>
                 </div>
               </form>

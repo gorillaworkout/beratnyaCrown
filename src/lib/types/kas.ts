@@ -40,7 +40,22 @@ export interface KasTransaction {
   type: TransactionType;
   amount: number;
   description: string;
+  /** Kota (Jakarta/Bandung) untuk split kas per kota; kosong = gabungan/tanpa kota. */
+  city?: string;
   source?: string;
   raw_payload?: any;
+  createdAt?: any;
+}
+
+export interface KasDebt {
+  id?: string;
+  date: string;
+  /** Pihak yang harus dibayar, mis. nama orang. */
+  creditor: string;
+  amount: number;
+  /** Kota (Jakarta/Bandung) yang menanggung hutang; kosong = Gabungan. */
+  city?: string;
+  description?: string;
+  isSettled: boolean;
   createdAt?: any;
 }
