@@ -15,6 +15,22 @@ export function kasOutstanding(record: KasPayment): number {
   return Math.max(0, (record.totalBilled ?? 0) - kasPaidAmount(record));
 }
 
+export type AthleteArrears = { amount: number; sessions: number };
+
+/** Tunggakan kas per atlet: jumlah sisa tagihan + berapa sesi menunggak. */
+export function summarizeArrears(records: (KasPayment & { athleteId: string })[]): Map<string, AthleteArrears> {
+  const byAthlete = new Map<string, AthleteArrears>();
+  for (const record of records) {
+    const outstanding = kasOutstanding(record);
+    if (outstanding <= 0) continue;
+    const current = byAthlete.get(record.athleteId) ?? { amount: 0, sessions: 0 };
+    current.amount += outstanding;
+    current.sessions += 1;
+    byAthlete.set(record.athleteId, current);
+  }
+  return byAthlete;
+}
+
 export function reconcileKasPayment(record: KasPayment, legacyPaidAmount?: number): { paidAmount: number; isSettled: boolean } {
   const paidAmount = legacyPaidAmount ?? kasPaidAmount(record);
   return { paidAmount, isSettled: kasOutstanding({ ...record, paidAmount }) === 0 };

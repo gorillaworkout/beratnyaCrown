@@ -25,6 +25,8 @@ import { db } from "@/lib/firebase";
 import { collection, onSnapshot, addDoc, deleteDoc, updateDoc, doc, query, orderBy, limit } from "firebase/firestore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { getAllKasRecords } from "@/lib/firebase/kas";
+import { summarizeArrears } from "@/lib/kas-payment";
 
 type FirebaseUser = {
   uid: string;
@@ -135,6 +137,36 @@ function DivisionPills({ divisions, size = "sm" }: { divisions: string[]; size?:
   );
 }
 
+function KasArrearsBadge({
+  athleteId,
+  kasExempt,
+  loaded,
+  arrears,
+}: {
+  athleteId: string;
+  kasExempt?: boolean;
+  loaded: boolean;
+  arrears: Map<string, { amount: number; sessions: number }>;
+}) {
+  // Belum dimuat: jangan tampilkan apa-apa supaya tidak ada badge "Lunas" palsu.
+  // Atlet yang bebas kas sudah punya badge "Bebas Kas" sendiri.
+  if (!loaded || kasExempt) return null;
+  const a = arrears.get(athleteId);
+  if (a) {
+    return (
+      <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/30 font-medium">
+        Tunggakan Rp {a.amount.toLocaleString("id-ID")}
+        {a.sessions > 1 ? ` · ${a.sessions}×` : ""}
+      </span>
+    );
+  }
+  return (
+    <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/25 font-medium">
+      Lunas
+    </span>
+  );
+}
+
 export default function AthletesDashboardPage() {
   const { user, isAdmin } = useAuth();
   const [usersList, setUsersList] = useState<FirebaseUser[]>([]);
@@ -155,6 +187,9 @@ export default function AthletesDashboardPage() {
   const [filterDivision, setFilterDivision] = useState<string>("all");
   const [filterCity, setFilterCity] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
+  const [arrearsByAthlete, setArrearsByAthlete] = useState<Map<string, { amount: number; sessions: number }>>(new Map());
+  const [kasLoaded, setKasLoaded] = useState(false);
+  const [filterArrearsOnly, setFilterArrearsOnly] = useState(false);
   const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
   const [gpsShared, setGpsShared] = useState(false);
   const [gpsError, setGpsError] = useState("");
@@ -207,10 +242,28 @@ export default function AthletesDashboardPage() {
     return () => unsub();
   }, []);
 
+  // Tunggakan kas per atlit (untuk badge di kartu + filter bersih-bersih).
+  // Dimuat sekali saat halaman dibuka; sumbernya sama dengan menu kas
+  // (getAllKasRecords + kasOutstanding), jadi angkanya konsisten.
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+    getAllKasRecords()
+      .then((records) => {
+        if (cancelled) return;
+        setArrearsByAthlete(summarizeArrears(records));
+        setKasLoaded(true);
+      })
+      .catch((e) => console.error("Failed to load kas arrears", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [isAdmin]);
+
   const filteredAthletes = useMemo(() => {
     const sorted = [...crownAthletes].sort((a, b) => a.name.localeCompare(b.name));
-    return sorted.filter((a) => (filterDivision === "all" || a.divisions.includes(filterDivision)) && (filterCity === "all" || a.city === filterCity));
-  }, [crownAthletes, filterDivision, filterCity]);
+    return sorted.filter((a) => (filterDivision === "all" || a.divisions.includes(filterDivision)) && (filterCity === "all" || a.city === filterCity) && (!filterArrearsOnly || arrearsByAthlete.has(a.id)));
+  }, [crownAthletes, filterDivision, filterCity, filterArrearsOnly, arrearsByAthlete]);
 
   const divisionCounts = useMemo(() => {
     const counts: Record<string, number> = { all: crownAthletes.length };
@@ -427,6 +480,19 @@ export default function AthletesDashboardPage() {
                   <option value="all">Semua kota</option><option value="Bandung">Bandung</option><option value="Jakarta">Jakarta</option>
                 </select>
               </div>
+
+              {/* Filter tunggakan — untuk bersih-bersih atlit yang sudah tidak latihan */}
+              <button
+                onClick={() => setFilterArrearsOnly((v) => !v)}
+                className={`w-full rounded-xl border p-3 flex items-center justify-between text-xs font-medium transition-all ${
+                  filterArrearsOnly
+                    ? "border-rose-500/40 bg-rose-500/10 text-rose-300"
+                    : "border-white/10 bg-white/5 text-slate-400 hover:bg-white/10"
+                }`}
+              >
+                <span>Hanya yang ada tunggakan kas</span>
+                <span>{kasLoaded ? `${arrearsByAthlete.size} atlit` : "memuat…"}</span>
+              </button>
 
               {/* Add Button / Form */}
               {!showAddForm ? (
@@ -680,6 +746,9 @@ export default function AthletesDashboardPage() {
                               Bebas Kas
                             </span>
                           )}
+
+                          {/* Badge tunggakan / lunas kas */}
+                          <KasArrearsBadge athleteId={ath.id} kasExempt={ath.kasExempt} loaded={kasLoaded} arrears={arrearsByAthlete} />
 
                           {/* Coach Fee Exempt Badge */}
                           {ath.coachFeeExempt && (

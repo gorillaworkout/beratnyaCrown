@@ -6,6 +6,7 @@ import {
   isTrainingDateForCity,
   nextTrainingDates,
   reconcileKasPayment,
+  summarizeArrears,
 } from "./kas-payment.ts";
 
 test("legacy settled records remain fully paid", () => {
@@ -43,6 +44,24 @@ test("status changes preserve prepaid kas and expose only the remainder", () => 
     paidAmount: 13_000,
     isSettled: true,
   });
+});
+
+test("summarizeArrears totals outstanding per athlete and counts sessions", () => {
+  const result = summarizeArrears([
+    { athleteId: "a", totalBilled: 26_000, paidAmount: 13_000, isSettled: false },
+    { athleteId: "a", totalBilled: 13_000, isSettled: false },
+    { athleteId: "b", totalBilled: 13_000, isSettled: false },
+  ]);
+  assert.deepEqual(result.get("a"), { amount: 26_000, sessions: 2 });
+  assert.deepEqual(result.get("b"), { amount: 13_000, sessions: 1 });
+});
+
+test("summarizeArrears ignores settled and zero-billed records", () => {
+  const result = summarizeArrears([
+    { athleteId: "a", totalBilled: 26_000, isSettled: true },
+    { athleteId: "a", totalBilled: 0, paidAmount: 13_000, isSettled: true },
+  ]);
+  assert.equal(result.size, 0);
 });
 
 test("next training dates excludes today, past dates, and duplicates", () => {
