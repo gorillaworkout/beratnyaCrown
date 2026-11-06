@@ -8,9 +8,9 @@ export interface KasRecord {
   isLate: boolean;
   noNews: boolean;
   isExcused: boolean;
-  /** Izin karena kerja/sekolah → free (Rp 0) */
+  /** LEGACY (sebelum Nov 2026): izin kerja/sekolah → free (Rp 0). Tidak lagi ditawarkan; hanya untuk membaca baris lama. */
   isExcusedWork?: boolean;
-  /** Izin lainnya → Rp 23,000 (kas 13rb + denda 10rb) */
+  /** LEGACY (sebelum Nov 2026): izin lainnya → Rp 23,000 (kas 13rb + denda 10rb). Tidak lagi ditawarkan; hanya untuk membaca baris lama. */
   isExcusedOther?: boolean;
   totalBilled: number;
   /** Nominal yang sudah diterima. Dibutuhkan saat kas sudah dibayar lalu kena denda. */

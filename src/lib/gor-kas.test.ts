@@ -6,7 +6,7 @@ import { dayNameOf, filterGorSessions, gorRateOf, summarizeGor } from "./gor.ts"
 test("kas status patch sets flags and recalculates bill", () => {
   assert.deepEqual(
     Object.fromEntries(KAS_STATUS_OPTIONS.map((o) => [o.value, kasStatusPatch(o.value).totalBilled])),
-    { hadir: 13000, telat: 18000, telat_saja: 5000, alpa: 26000, izin_kerja: 0, izin_lain: 23000 },
+    { hadir: 13000, telat: 18000, telat_saja: 5000, alpa: 26000 },
   );
   const izin = kasStatusPatch("izin_kerja");
   assert.equal(izin.isExcusedWork, true);

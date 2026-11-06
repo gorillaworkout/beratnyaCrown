@@ -184,9 +184,9 @@ export default function KasPage() {
   const [futureBulkRequestId, setFutureBulkRequestId] = useState("");
   const futureBulkLoadVersion = useRef(0);
 
-  // Koreksi status langsung dari Tunggakan (mis. ternyata izin). Nominal dihitung
-  // ulang; kalau jadi Rp 0 baris hilang dari tunggakan. Cron hanya membuat record
-  // untuk tanggal yang belum ada, jadi perubahan ini tidak ditimpa jadi Alpa lagi.
+  // Koreksi status langsung dari Tunggakan (mis. ternyata izin → jadi Hadir/Rp13rb,
+  // bukan gratis lagi; tanpa izin = Alpa/Rp26rb). Nominal dihitung ulang; cron hanya
+  // membuat record untuk tanggal yang belum ada, jadi perubahan ini tidak ditimpa jadi Alpa lagi.
   async function changeDebtStatus(record: KasRecord, status: KasStatus) {
     if (!isKasAdmin || !record.id || statusSaving || isSubmitting) return;
     const patch = kasStatusPatch(status);
@@ -403,9 +403,9 @@ export default function KasPage() {
   };
 
   const calculateTotal = (paidKas: boolean, isLate: boolean, noNews: boolean, isExcused: boolean, isExcusedWork?: boolean, isExcusedOther?: boolean) => {
-    // Izin Kerja/Sekolah → free
+    // LEGACY (sebelum Nov 2026, tidak lagi bisa dipilih): Izin Kerja/Sekolah → free
     if (isExcusedWork) return 0;
-    // Izin Lainnya → Rp 23,000 (kas 13rb + denda 10rb)
+    // LEGACY: Izin Lainnya → Rp 23,000 (kas 13rb + denda 10rb)
     if (isExcusedOther) return 23000;
     // Legacy isExcused → free (backward compat)
     if (isExcused) return 0;
@@ -418,7 +418,7 @@ export default function KasPage() {
 
   async function handleRecordChange(
     athlete: KasAthlete,
-    field: "paidKas" | "isLate" | "noNews" | "isExcused" | "isExcusedWork" | "isExcusedOther",
+    field: "paidKas" | "isLate" | "noNews",
     value: boolean,
   ) {
     const existingRecord = getAthleteRecord(athlete.id!);
@@ -429,47 +429,21 @@ export default function KasPage() {
     let newIsExcusedWork = !!existingRecord.isExcusedWork;
     let newIsExcusedOther = !!existingRecord.isExcusedOther;
 
+    // Opsi Izin (kerja/lain) dihapus Nov 2026: atlet aktif wajib bayar kas.
+    // Mengubah Kas/Telat/Alpa pada baris lama yang masih berflag izin akan
+    // menghapus flag izin tersebut (baris kembali ditagih normal).
+    if (field === "paidKas" || field === "isLate" || field === "noNews") {
+      newIsExcused = false;
+      newIsExcusedWork = false;
+      newIsExcusedOther = false;
+    }
     if (field === "paidKas") newPaidKas = value;
     if (field === "isLate") newIsLate = value;
-    if (field === "isExcusedWork") {
-      newIsExcusedWork = value;
-      if (value) {
-        newIsExcusedOther = false;
-        newIsExcused = false;
-        newPaidKas = false;
-        newIsLate = false;
-        newNoNews = false;
-      }
-    }
-    if (field === "isExcusedOther") {
-      newIsExcusedOther = value;
-      if (value) {
-        newIsExcusedWork = false;
-        newIsExcused = false;
-        newPaidKas = false;
-        newIsLate = false;
-        newNoNews = false;
-      }
-    }
-    // Legacy isExcused → treat as isExcusedWork
-    if (field === "isExcused") {
-      newIsExcused = value;
-      if (value) {
-        newPaidKas = false;
-        newIsLate = false;
-        newNoNews = false;
-        newIsExcusedWork = false;
-        newIsExcusedOther = false;
-      }
-    }
     if (field === "noNews") {
       newNoNews = value;
       if (value) {
         newPaidKas = true;
         newIsLate = false;
-        newIsExcused = false;
-        newIsExcusedWork = false;
-        newIsExcusedOther = false;
       }
     }
 
@@ -827,8 +801,6 @@ export default function KasPage() {
                     <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Kas</th>
                     <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Telat</th>
                     <th className="px-2 py-3 text-center font-medium w-[50px] sm:w-[60px]">Alpa</th>
-                    <th className="px-2 py-3 text-center font-medium w-[60px] sm:w-[80px]"><span className="hidden sm:inline">Izin </span><span className="text-emerald-400">Kerja</span></th>
-                    <th className="px-2 py-3 text-center font-medium w-[60px] sm:w-[80px]"><span className="hidden sm:inline">Izin </span><span className="text-yellow-400">Lain</span></th>
                     <th className="px-3 py-3 text-right font-medium w-[90px] sm:w-[110px]">Tagihan</th>
                     <th className="px-3 py-3 text-center font-medium w-[70px] sm:w-[90px]">Status</th>
                   </tr>
@@ -836,34 +808,27 @@ export default function KasPage() {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Memuat data...</td>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">Memuat data...</td>
                     </tr>
                   ) : athletes.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
+                      <td colSpan={6} className="px-6 py-12 text-center text-slate-500">Belum ada atlet.</td>
                     </tr>
                   ) : (
                     visibleAthletes.map((athlete, idx) => {
                       const record = getAthleteRecord(athlete.id!);
-                      const isAnyExcused = !!record.isExcusedWork || !!record.isExcusedOther || !!record.isExcused;
                       const stripe = idx % 2 === 0 ? "bg-transparent" : "bg-white/[0.025]";
                       return (
                         <tr key={athlete.id} className={`${stripe} hover:bg-white/[0.05] transition-colors`}>
                           <td className="pl-4 sm:pl-6 pr-2 py-3 font-medium text-white truncate max-w-[120px] sm:max-w-none">{athlete.name}</td>
                           <td className="px-2 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.paidKas} onChange={(e) => handleRecordChange(athlete, "paidKas", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-cyan-500 focus:ring-cyan-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
                           <td className="px-2 py-3 text-center">
-                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews || isAnyExcused} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
+                            <input type="checkbox" checked={!!record.isLate} disabled={!isKasAdmin || !!record.noNews} onChange={(e) => handleRecordChange(athlete, "isLate", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-orange-500 focus:ring-orange-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
                           <td className="px-2 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin || isAnyExcused} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
-                          </td>
-                          <td className="px-2 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedWork} onChange={(e) => handleRecordChange(athlete, "isExcusedWork", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-emerald-500 focus:ring-emerald-500 focus:ring-offset-black cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
-                          </td>
-                          <td className="px-2 py-3 text-center">
-                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.isExcusedOther} onChange={(e) => handleRecordChange(athlete, "isExcusedOther", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-yellow-500 focus:ring-yellow-500 focus:ring-offset-black cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed" />
+                            <input type="checkbox" disabled={!isKasAdmin} checked={!!record.noNews} onChange={(e) => handleRecordChange(athlete, "noNews", e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-black/50 text-red-500 focus:ring-red-500 focus:ring-offset-black cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed" />
                           </td>
                           <td className="px-3 py-3 text-right font-semibold text-cyan-400">
                             {(record.totalBilled || 0) > 0 ? `Rp ${((record.totalBilled || 0) / 1000).toFixed(0)}rb` : <span className="text-slate-600">-</span>}
@@ -881,11 +846,10 @@ export default function KasPage() {
                   )}
                   {/* Total Tagihan */}
                   <tr className="bg-white/[0.04] border-t border-white/10">
-                    <td colSpan={6} className="pl-4 sm:pl-6 pr-2 py-3 text-right font-semibold text-slate-300 text-sm">Total Tagihan Hari Ini</td>
+                    <td colSpan={4} className="pl-4 sm:pl-6 pr-2 py-3 text-right font-semibold text-slate-300 text-sm">Total Tagihan Hari Ini</td>
                     <td className="px-3 py-3 text-right font-bold text-yellow-400 text-sm">
                       {todayTotal > 0 ? `Rp ${(todayTotal / 1000).toFixed(0)}rb` : "-"}
                     </td>
-                    <td></td>
                     <td></td>
                   </tr>
                 </tbody>
@@ -896,8 +860,6 @@ export default function KasPage() {
               <span><span className="inline-block w-2 h-2 rounded-full bg-cyan-500 mr-1.5"></span>Kas = 13rb</span>
               <span><span className="inline-block w-2 h-2 rounded-full bg-orange-500 mr-1.5"></span>Telat = +5rb</span>
               <span><span className="inline-block w-2 h-2 rounded-full bg-red-500 mr-1.5"></span>Alpa = 26rb</span>
-              <span><span className="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1.5"></span>Izin Kerja = Gratis</span>
-              <span><span className="inline-block w-2 h-2 rounded-full bg-yellow-500 mr-1.5"></span>Izin Lain = 23rb</span>
             </div>
           </section>
         )}
