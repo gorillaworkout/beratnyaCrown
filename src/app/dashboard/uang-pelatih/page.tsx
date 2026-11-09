@@ -43,7 +43,7 @@ export default function UangPelatihPage() {
 
   useEffect(() => onSnapshot(collection(db, "crown-athletes"), (s) => setAthletes(s.docs.map((d) => {
     const x = d.data() as Record<string, unknown>;
-    return { id: d.id, name: String(x.name ?? ""), city: String(x.city || "Bandung"), role: String(x.role || "athlete"), coachFeeExempt: !!x.coachFeeExempt, divisions: Array.isArray(x.divisions) ? (x.divisions as string[]) : [] };
+    return { id: d.id, name: String(x.name ?? ""), city: String(x.city || "Bandung"), role: String(x.role || "athlete"), coachFeeExempt: !!x.coachFeeExempt, vakum: !!x.vakum, divisions: Array.isArray(x.divisions) ? (x.divisions as string[]) : [] };
   }))), []);
   useEffect(() => {
     setRecords({}); setLoadedMonth(""); setLoadError(false);

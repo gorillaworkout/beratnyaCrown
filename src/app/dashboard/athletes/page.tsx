@@ -49,6 +49,7 @@ type Athlete = {
   divisions: string[];
   kasExempt?: boolean;
   coachFeeExempt?: boolean;
+  vakum?: boolean;
   gender?: Gender;
   city?: string;
   role?: AthleteRole;
@@ -236,7 +237,7 @@ export default function AthletesDashboardPage() {
         } else if (data.division) {
           divisions = [data.division];
         }
-        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, gender: data.gender || "", city: data.city || "Bandung", role: data.role || "athlete" };
+        return { id: d.id, name: data.name || "", divisions, kasExempt: !!data.kasExempt, coachFeeExempt: !!data.coachFeeExempt, vakum: !!data.vakum, gender: data.gender || "", city: data.city || "Bandung", role: data.role || "athlete" };
       }));
     });
     return () => unsub();
@@ -326,6 +327,14 @@ export default function AthletesDashboardPage() {
   const handleToggleCoachExempt = async (id: string, currentValue: boolean) => {
     try {
       await updateDoc(doc(db, "crown-athletes", id), { coachFeeExempt: !currentValue });
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const handleToggleVakum = async (id: string, currentValue: boolean) => {
+    try {
+      await updateDoc(doc(db, "crown-athletes", id), { vakum: !currentValue });
     } catch (e) {
       console.error(e);
     }
@@ -747,6 +756,13 @@ export default function AthletesDashboardPage() {
                             </span>
                           )}
 
+                          {/* Vakum Badge */}
+                          {ath.vakum && (
+                            <span className="mt-1 inline-flex items-center text-[9px] px-1.5 py-0.5 rounded-full bg-violet-500/15 text-violet-300 border border-violet-500/30 font-medium">
+                              Vakum
+                            </span>
+                          )}
+
                           {/* Badge tunggakan / lunas kas */}
                           <KasArrearsBadge athleteId={ath.id} kasExempt={ath.kasExempt} loaded={kasLoaded} arrears={arrearsByAthlete} />
 
@@ -780,6 +796,17 @@ export default function AthletesDashboardPage() {
                               }`}
                             >
                               <span className="text-[9px] font-bold leading-none">Iuran</span>
+                            </button>
+                            <button 
+                              onClick={() => handleToggleVakum(ath.id, !!ath.vakum)}
+                              title={ath.vakum ? "Aktifkan lagi (tagih kas & iuran)" : "Vakum: berhenti tagih kas & iuran pelatih"}
+                              className={`h-7 w-7 rounded-md flex items-center justify-center active:scale-95 transition-all ${
+                                ath.vakum 
+                                  ? "text-violet-400 bg-violet-500/10 hover:bg-violet-500/20" 
+                                  : "text-slate-500 hover:text-violet-300 hover:bg-violet-500/10"
+                              }`}
+                            >
+                              <span className="text-[9px] font-bold leading-none">Vakum</span>
                             </button>
                             <button 
                               onClick={() => { 

@@ -52,7 +52,8 @@ export async function GET(request: Request) {
     const sessions = listTrainingSessions(stored, KAS_START, yesterday);
     const dates = [...new Set(sessions.map((session) => session.date))].sort();
 
-    // 2. Non-exempt athletes (tanggal join diterapkan pada langkah 4)
+    // 2. Non-exempt athletes (tanggal join diterapkan pada langkah 4).
+    //    Atlet vakum juga dilewati — tidak ditagih kas selama vakum.
     const athSnap = await db.collection("crown-athletes").get();
     type SyncAthlete = {
       id: string;
@@ -64,7 +65,7 @@ export async function GET(request: Request) {
     };
     const athletes: SyncAthlete[] = athSnap.docs
       .map((d: any) => ({ id: d.id, createTime: d.createTime, ...d.data() }))
-      .filter((a: any) => !a.kasExempt);
+      .filter((a: any) => !a.kasExempt && !a.vakum);
 
     // Kas hanya berjalan sejak athlete join: tanggal join = createTime dokumen
     // (fallback: field createdAt), dalam zona Asia/Jakarta. Tanpa sinyal tanggal,

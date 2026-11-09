@@ -29,6 +29,8 @@ export interface KasAthlete {
   kasExempt?: boolean;
   /** Bebas iuran pelatih */
   coachFeeExempt?: boolean;
+  /** Vakum — tidak ditagih kas harian & iuran pelatih selama vakum */
+  vakum?: boolean;
   createdAt?: any;
 }
 

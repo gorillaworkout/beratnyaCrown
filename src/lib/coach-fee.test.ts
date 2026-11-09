@@ -11,10 +11,11 @@ test("billing starts October 2026 and rejects malformed months", () => {
   for (const bad of ["", "2026-13", "2026-00", "2026-1", "x"]) assert.equal(isBillingMonth(bad), false);
 });
 
-test("coach and exempt athletes never pay", () => {
+test("coach, exempt and vakum athletes never pay", () => {
   assert.equal(isPayer(A("a")), true);
   assert.equal(isPayer(A("b", { coachFeeExempt: true })), false);
   assert.equal(isPayer(A("c", { role: "coach" })), false);
+  assert.equal(isPayer(A("v", { vakum: true })), false);
 });
 
 test("status: exempt wins over stored record; default unpaid", () => {
@@ -31,6 +32,12 @@ test("summary separates paid / unpaid / free / exempt and ignores coaches", () =
   };
   assert.deepEqual(summarizeFees(athletes, rec, "2026-10"), { lunas: 1, belum: 2, gratis: 1, bebas: 1, collected: 100000, outstanding: 200000 });
   assert.equal(summarizeFees(athletes, rec, "2026-11").lunas, 0);
+});
+
+test("vakum athletes are not billed: BEBAS and excluded from outstanding", () => {
+  assert.equal(statusOf(A("v", { vakum: true }), {}, "2026-11"), "BEBAS");
+  const athletes = [A("a"), A("v", { vakum: true })];
+  assert.deepEqual(summarizeFees(athletes, {}, "2026-11"), { lunas: 0, belum: 1, gratis: 0, bebas: 1, collected: 0, outstanding: 100000 });
 });
 
 test("money already collected stays counted if athlete is later marked exempt", () => {

@@ -73,7 +73,7 @@ service cloud.firestore {
         isMemberWriter()
         && request.auth.uid == doc
         && !claimsAdminRole()
-        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'kasExempt', 'coachFeeExempt'])
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'kasExempt', 'coachFeeExempt', 'vakum'])
       );
       allow delete: if isAdmin();
     }

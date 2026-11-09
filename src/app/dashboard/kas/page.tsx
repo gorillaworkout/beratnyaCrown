@@ -254,7 +254,7 @@ export default function KasPage() {
       p.push(getKasDebts());
 
       const results = await Promise.all(p);
-      setAthletes(results[0].filter((a: KasAthlete) => !a.kasExempt).sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
+      setAthletes(results[0].filter((a: KasAthlete) => !a.kasExempt && !a.vakum).sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
       const dates = results[2];
       setTrainingDates(dates);
 

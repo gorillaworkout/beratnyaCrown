@@ -5,13 +5,14 @@ export const COACH_FEE_START = "2026-10";
 export const COACH_FEE_COLLECTION = "crown_coach_fees";
 
 export type FeeStatus = "BELUM_BAYAR" | "LUNAS" | "GRATIS";
-export type FeeAthlete = { id: string; name: string; city: string; role?: string; coachFeeExempt?: boolean };
+export type FeeAthlete = { id: string; name: string; city: string; role?: string; coachFeeExempt?: boolean; vakum?: boolean };
 export type FeeRecord = { status: FeeStatus; amount?: number };
 
 export const feeDocId = (athleteId: string, month: string) => `${athleteId}_${month}`;
 export const isBillingMonth = (month: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month >= COACH_FEE_START;
 // Pelatih tidak membayar; atlet bebas ditandai permanen dari Data Atlet.
-export const isPayer = (a: FeeAthlete) => a.role !== "coach" && !a.coachFeeExempt;
+// Atlet vakum juga tidak ditagih selama vakum.
+export const isPayer = (a: FeeAthlete) => a.role !== "coach" && !a.coachFeeExempt && !a.vakum;
 
 export function statusOf(a: FeeAthlete, records: Record<string, FeeRecord>, month: string): FeeStatus | "BEBAS" {
   if (!isPayer(a)) return "BEBAS";
