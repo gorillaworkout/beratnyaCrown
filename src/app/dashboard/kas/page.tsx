@@ -836,7 +836,7 @@ export default function KasPage() {
                           <td className="px-3 py-3 text-center">
                             {(record.totalBilled || 0) > 0 || (record.paidAmount || 0) > 0 ? (
                               <button onClick={() => isKasAdmin && handleSettledToggle(athlete, kasOutstanding(record) > 0)} className={`inline-flex items-center justify-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition-colors ${kasOutstanding(record) === 0 ? "bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20" : "bg-red-500/10 text-red-400 hover:bg-red-500/20"}`}>
-                                {kasOutstanding(record) === 0 ? <><CheckCircle2 className="h-3 w-3 hidden sm:block" />Lunas</> : <><XCircle className="h-3 w-3 hidden sm:block" />Sisa {(kasOutstanding(record) / 1000).toFixed(0)}rb</>}
+                                {kasOutstanding(record) === 0 ? <><CheckCircle2 className="h-3 w-3 hidden sm:block" />Lunas</> : <><XCircle className="h-3 w-3 hidden sm:block" />Belum Lunas</>}
                               </button>
                             ) : <span className="text-slate-700">-</span>}
                           </td>
