@@ -12,6 +12,8 @@ export const feeDocId = (athleteId: string, month: string) => `${athleteId}_${mo
 export const isBillingMonth = (month: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(month) && month >= COACH_FEE_START;
 // Pelatih tidak membayar; atlet bebas ditandai permanen dari Data Atlet.
 // Atlet vakum juga tidak ditagih selama vakum.
+// Urutan tampil di daftar: yang belum bayar dulu, baru lunas, lalu gratis.
+export const PAYMENT_STATUS_ORDER: Record<FeeStatus, number> = { BELUM_BAYAR: 0, LUNAS: 1, GRATIS: 2 };
 export const isPayer = (a: FeeAthlete) => a.role !== "coach" && !a.coachFeeExempt && !a.vakum;
 
 export function statusOf(a: FeeAthlete, records: Record<string, FeeRecord>, month: string): FeeStatus | "BEBAS" {

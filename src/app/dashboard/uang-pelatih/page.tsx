@@ -5,7 +5,7 @@ import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch 
 import { CheckCircle2, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { COACH_FEE, COACH_FEE_COLLECTION, feeDocId, isBillingMonth, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "@/lib/coach-fee";
+import { COACH_FEE, COACH_FEE_COLLECTION, feeDocId, isBillingMonth, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "@/lib/coach-fee";
 
 type Athlete = FeeAthlete & { divisions: string[] };
 
@@ -63,10 +63,28 @@ export default function UangPelatihPage() {
   const cities = useMemo(() => [...new Set(members.map((a) => a.city))].sort(), [members]);
   const ready = loadedMonth === month;
   // Atlet bebas permanen (BEBAS) tidak muncul di list sama sekali.
+  // Hitungan per status (mengikuti filter kota, sebelum filter status) untuk chip.
+  const statusCounts = useMemo(() => {
+    const c = { BELUM_BAYAR: 0, LUNAS: 0, GRATIS: 0 };
+    for (const a of members) {
+      if (city !== "all" && a.city !== city) continue;
+      const st = statusOf(a, records, month);
+      if (st !== "BEBAS") c[st]++;
+    }
+    return c;
+  }, [members, city, records, month]);
+  // Belum bayar selalu di atas supaya tidak tercampur dengan yang sudah lunas.
   const rows = useMemo(() => members
     .filter((a) => city === "all" || a.city === city)
     .filter((a) => statusOf(a, records, month) !== "BEBAS")
-    .filter((a) => filter === "all" || statusOf(a, records, month) === filter), [members, city, filter, records, month]);
+    .filter((a) => filter === "all" || statusOf(a, records, month) === filter)
+    .sort((a, b) => {
+      const sa = statusOf(a, records, month);
+      const sb = statusOf(b, records, month);
+      const ra = sa === "BEBAS" ? 99 : PAYMENT_STATUS_ORDER[sa];
+      const rb = sb === "BEBAS" ? 99 : PAYMENT_STATUS_ORDER[sb];
+      return ra - rb || a.name.localeCompare(b.name);
+    }), [members, city, filter, records, month]);
   const summary = summarizeFees(members.filter((a) => city === "all" || a.city === city), records, month);
   // Selama data bulan ini belum termuat semua atlet tampak "belum bayar" — jangan bisa dipilih/ditimpa.
   const unpaidVisible = ready ? rows.filter((a) => statusOf(a, records, month) === "BELUM_BAYAR") : [];
@@ -122,10 +140,15 @@ export default function UangPelatihPage() {
       <select value={city} onChange={(e) => setCity(e.target.value)} className={selectClass} aria-label="Kota">
         <option value="all">Semua kota</option>{cities.map((c) => <option key={c} value={c}>{c}</option>)}
       </select>
-      <select value={filter} onChange={(e) => setFilter(e.target.value)} className={selectClass} aria-label="Status">
-        <option value="all">Semua status</option>
-        {(Object.keys(LABEL) as (keyof typeof LABEL)[]).filter((k) => k !== "BEBAS").map((k) => <option key={k} value={k}>{LABEL[k]}</option>)}
-      </select>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filter status">
+      {(["all", "BELUM_BAYAR", "LUNAS", "GRATIS"] as const).map((k) => {
+        const active = filter === k;
+        const count = k === "all" ? statusCounts.BELUM_BAYAR + statusCounts.LUNAS + statusCounts.GRATIS : statusCounts[k];
+        const label = k === "all" ? "Semua" : LABEL[k];
+        return <button key={k} onClick={() => setFilter(k)} aria-pressed={active} className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${active ? "border-cyan-400 bg-cyan-500/20 text-cyan-200" : "border-white/15 bg-white/5 text-slate-300 hover:bg-white/10"}`}>{label} · {count}</button>;
+      })}
     </div>
 
     {loadError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">Gagal memuat pembayaran bulan ini. Muat ulang halaman; tombol bayar dikunci sampai data masuk.</p>}

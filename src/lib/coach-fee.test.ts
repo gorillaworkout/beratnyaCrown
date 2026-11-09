@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COACH_FEE, feeDocId, isBillingMonth, isPayer, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "./coach-fee.ts";
+import { COACH_FEE, feeDocId, isBillingMonth, isPayer, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "./coach-fee.ts";
 
 const A = (id: string, extra: Partial<FeeAthlete> = {}): FeeAthlete => ({ id, name: id, city: "Bandung", ...extra });
 
@@ -38,6 +38,11 @@ test("vakum athletes are not billed: BEBAS and excluded from outstanding", () =>
   assert.equal(statusOf(A("v", { vakum: true }), {}, "2026-11"), "BEBAS");
   const athletes = [A("a"), A("v", { vakum: true })];
   assert.deepEqual(summarizeFees(athletes, {}, "2026-11"), { lunas: 0, belum: 1, gratis: 0, bebas: 1, collected: 0, outstanding: 100000 });
+});
+
+test("payment order puts unpaid first, then paid, then free", () => {
+  assert.ok(PAYMENT_STATUS_ORDER.BELUM_BAYAR < PAYMENT_STATUS_ORDER.LUNAS);
+  assert.ok(PAYMENT_STATUS_ORDER.LUNAS < PAYMENT_STATUS_ORDER.GRATIS);
 });
 
 test("money already collected stays counted if athlete is later marked exempt", () => {

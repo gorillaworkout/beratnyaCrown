@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { athletesForSession, kasRecordCity, kasCityBalance, monthlyProjection, sessionDatesForCity, summarizeCityKas, summarizeCityTransactions } from "./kas-city.ts";
+import { athletesForSession, hasSessionForAthlete, nextUnpaidTrainingDates, kasRecordCity, kasCityBalance, monthlyProjection, sessionDatesForCity, summarizeCityKas, summarizeCityTransactions } from "./kas-city.ts";
 
 test("kas city comes from the record, then the athlete, and never invents one", () => {
   const athletes = new Map<string, string | undefined>([["a", "Jakarta"], ["b", "  "]]);
@@ -131,4 +131,39 @@ test("monthly projection: no last-month billing means baseline only, remaining n
   });
   assert.equal(over.realistic, 136500);
   assert.equal(over.remaining, 0);
+});
+
+test("session coverage is per city: a libur in one city does not cancel the other", () => {
+  const sessions = [
+    { date: "2026-10-17", city: "Bandung" },
+    { date: "2026-10-18", city: "Gabungan" },
+  ];
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-17", "Jakarta"), false);
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-17", "Bandung"), true);
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-17", ""), true);
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-18", "Jakarta"), true);
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-18", "Bandung"), true);
+  assert.equal(hasSessionForAthlete(sessions, "2026-10-19", "Bandung"), false);
+  assert.equal(hasSessionForAthlete([], "2026-10-17", "Jakarta"), false);
+});
+
+test("next unpaid training dates: rolls over to the next sessions for the athlete's city", () => {
+  const sessions = [
+    { date: "2026-11-11", city: "Bandung" },
+    { date: "2026-11-11", city: "Jakarta" },
+    { date: "2026-11-14", city: "Jakarta" },
+    { date: "2026-11-18", city: "Gabungan" },
+    { date: "2026-11-21", city: "Bandung" },
+  ];
+  // Atlet Jakarta: 11 Nov (sesi Jakarta) + 14 Nov + 18 Nov (Gabungan); 21 Nov Bandung tidak.
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "Jakarta", new Set(), "2026-11-10", 10), ["2026-11-11", "2026-11-14", "2026-11-18"]);
+  // Tanggal yang sudah punya baris dilewati.
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "Jakarta", new Set(["2026-11-11"]), "2026-11-10", 10), ["2026-11-14", "2026-11-18"]);
+  // Atlet Bandung: 11 Nov + 18 Nov (Gabungan) + 21 Nov; 14 Nov (Jakarta saja) tidak.
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "Bandung", new Set(), "2026-11-10", 10), ["2026-11-11", "2026-11-18", "2026-11-21"]);
+  // Atlet tanpa kota ikut semua sesi; satu tanggal dengan dua sesi kota dihitung sekali.
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "", new Set(), "2026-11-10", 10), ["2026-11-11", "2026-11-14", "2026-11-18", "2026-11-21"]);
+  // Hanya tanggal sesudah afterDate, dan limit berlaku.
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "Jakarta", new Set(), "2026-11-14", 1), ["2026-11-18"]);
+  assert.deepEqual(nextUnpaidTrainingDates(sessions, "Jakarta", new Set(), "2026-11-21", 10), []);
 });

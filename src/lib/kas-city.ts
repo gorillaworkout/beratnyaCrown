@@ -99,6 +99,55 @@ export function athletesForSession<T extends { city?: string | null }>(
 }
 
 /**
+ * Apakah atlet kota `city` (kosong = tanpa kota, ikut semua sesi) punya sesi
+ * latihan pada tanggal `date`. Dipakai kas-sync untuk membersihkan tagihan
+ * tanggal yang belakangan diubah jadi libur: libur satu kota hanya
+ * membatalkan kota itu (sesi Gabungan tetap berlaku untuk semua).
+ */
+export function hasSessionForAthlete(
+  sessions: readonly { date: string; city?: string | null }[],
+  date: string,
+  athleteCity?: string | null,
+): boolean {
+  const city = athleteCity?.trim();
+  for (const session of sessions) {
+    if (session.date !== date) continue;
+    const sessionCity = session.city?.trim();
+    if (sessionCity === "Gabungan" || !city || sessionCity === city) return true;
+  }
+  return false;
+}
+
+/**
+ * Tanggal latihan berikutnya untuk atlet kota `city` yang belum punya baris
+ * kas. Dipakai kas-sync untuk rollover bayar di muka: kalau tanggal yang
+ * sudah dibayar jadi libur, pembayarannya pindah ke latihan berikutnya.
+ * - Hanya tanggal sesudah `afterDate`, maksimal `limit` tanggal, terurut.
+ * - Tanggal yang sudah ada di `existingDates` dilewati (termasuk baris yang
+ *   dibuat lebih dulu dalam run yang sama).
+ * - Sesi Gabungan berlaku untuk semua kota; atlet tanpa kota ikut semua sesi;
+ *   satu tanggal yang punya dua sesi kota dihitung sekali.
+ */
+export function nextUnpaidTrainingDates(
+  sessions: readonly { date: string; city?: string | null }[],
+  athleteCity: string | null | undefined,
+  existingDates: ReadonlySet<string>,
+  afterDate: string,
+  limit: number,
+): string[] {
+  const city = athleteCity?.trim();
+  const dates = new Set<string>();
+  for (const session of sessions) {
+    if (session.date <= afterDate) continue;
+    if (existingDates.has(session.date)) continue;
+    const sessionCity = session.city?.trim();
+    if (sessionCity !== "Gabungan" && city && sessionCity !== city) continue;
+    dates.add(session.date);
+  }
+  return [...dates].sort().slice(0, limit);
+}
+
+/**
  * Tanggal-tanggal berbeda dalam satu bulan saat atlet kota `city` latihan.
  * Tanggal Gabungan dihitung untuk kedua kota. Hasil terurut.
  */
