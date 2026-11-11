@@ -38,6 +38,9 @@ export default function KasPage() {
   const [activeTab, setActiveTab] = useState<"daily" | "debt" | "transactions" | "recap">("daily");
 
   const [athletes, setAthletes] = useState<KasAthlete[]>([]);
+  // Roster lengkap tanpa filter (dipakai mencocokkan user login dengan atletnya;
+  // `athletes` di atas sudah difilter bebas kas/vakum).
+  const [allAthletes, setAllAthletes] = useState<KasAthlete[]>([]);
   const [records, setRecords] = useState<KasRecord[]>([]);
   const [transactions, setTransactions] = useState<KasTransaction[]>([]);
   const [allRecords, setAllRecords] = useState<KasRecord[]>([]);
@@ -171,6 +174,32 @@ export default function KasPage() {
   const [trainingDates, setTrainingDates] = useState<string[]>([]);
   const [unpaidRecords, setUnpaidRecords] = useState<KasRecord[]>([]);
 
+  // Atlet milik user yang login — tab Tunggakan non-admin hanya menampilkan
+  // tunggakannya sendiri. Cocokkan uid ke id doc atlet (doc dari login Google
+  // punya id == uid), atau email (case-insensitive).
+  const selfAthlete = useMemo(() => {
+    if (!user) return null;
+    return allAthletes.find((a) =>
+      (user.uid && a.id === user.uid) ||
+      (user.email && a.email && a.email.toLowerCase() === user.email.toLowerCase()),
+    ) ?? null;
+  }, [allAthletes, user]);
+
+  // Daftar tanggal tunggakan milik sendiri, urut tanggal menaik.
+  const selfUnpaid = useMemo(() => {
+    if (!selfAthlete?.id) return [];
+    return unpaidRecords
+      .filter((r) => r.athleteId === selfAthlete.id)
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [unpaidRecords, selfAthlete]);
+
+  const selfTotalUnpaid = useMemo(
+    () => selfUnpaid.reduce((sum, r) => sum + kasOutstanding(r), 0),
+    [selfUnpaid],
+  );
+
+  const selfName = selfAthlete?.name ?? "";
+
   // Bulk Payment Modal State
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [selectedAthleteForBulk, setSelectedAthleteForBulk] = useState<KasAthlete | null>(null);
@@ -255,6 +284,7 @@ export default function KasPage() {
 
       const results = await Promise.all(p);
       setAthletes(results[0].filter((a: KasAthlete) => !a.kasExempt && !a.vakum).sort((a: KasAthlete, b: KasAthlete) => a.name.localeCompare(b.name)));
+      setAllAthletes(results[0]);
       const dates = results[2];
       setTrainingDates(dates);
 
@@ -956,14 +986,56 @@ export default function KasPage() {
         {activeTab === "debt" && (
           <section className="mt-8 rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
             <div className="border-b border-white/10 bg-white/[0.02] p-4 sm:p-6 flex items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Atlet dengan Tunggakan</h2>
-              <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} aria-label="Filter kota" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none">
-                <option value="all">Semua kota</option>
-                {cities.map((city) => <option key={city} value={city}>{city}</option>)}
-              </select>
+              <h2 className="text-lg font-semibold text-white">{isKasAdmin ? "Atlet dengan Tunggakan" : "Tunggakan Saya"}</h2>
+              {isKasAdmin ? (
+                <select value={cityFilter} onChange={(e) => setCityFilter(e.target.value)} aria-label="Filter kota" className="rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white focus:border-cyan-500 focus:outline-none">
+                  <option value="all">Semua kota</option>
+                  {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                </select>
+              ) : null}
             </div>
             <div className="p-4 sm:p-6">
-              {visibleAthletes.filter(a => unpaidRecords.some(r => r.athleteId === a.id)).length === 0 ? (
+              {!isKasAdmin ? (
+                selfUnpaid.length === 0 ? (
+                  selfAthlete ? (
+                    <div className="text-center py-8">
+                      <p className="text-lg font-bold text-emerald-400">Lunas!</p>
+                      <p className="text-slate-500">Kamu tidak punya tunggakan.</p>
+                    </div>
+                  ) : (
+                    <div className="text-center text-slate-500 py-8">Akun ini tidak terdaftar sebagai atlet, jadi tidak ada tunggakan yang ditampilkan.</div>
+                  )
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4 flex flex-col justify-between">
+                      <div>
+                        <h3 className="font-bold text-white text-lg">{selfName}</h3>
+                        <p className="text-xs text-slate-400 mb-3">{selfUnpaid.length}x Latihan Belum Bayar</p>
+                        <div className="text-2xl font-black text-red-400 mb-4">Rp {selfTotalUnpaid.toLocaleString("id-ID")}</div>
+                        <div className="mb-4 space-y-1">
+                          {selfUnpaid.map((r) => (
+                            <div key={r.id ?? r.date} className="flex items-center justify-between gap-2 rounded-lg bg-black/30 px-3 py-2 text-sm">
+                              <span className="text-slate-300">{format(new Date(`${r.date}T00:00:00`), "EEEE, dd MMM yyyy", { locale: idLocale })}</span>
+                              <span className="font-semibold text-red-300">Rp {kasOutstanding(r).toLocaleString("id-ID")}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                      <div>
+                        <button
+                          onClick={() => {
+                            if (!isKasAdmin) return;
+                          }}
+                          className="w-full rounded-lg px-4 py-2 text-sm font-semibold transition-colors bg-white/5 text-slate-500 cursor-not-allowed"
+                        >
+                          Bayar Tagihan
+                        </button>
+                        <p className="mt-2 text-center text-[11px] text-slate-500">Pelunasan hanya bisa dilakukan admin — hubungi admin untuk melunasi.</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              ) : visibleAthletes.filter(a => unpaidRecords.some(r => r.athleteId === a.id)).length === 0 ? (
                 <div className="text-center text-slate-500 py-8">Hebat! Tidak ada atlet yang nunggak.</div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

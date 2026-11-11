@@ -25,6 +25,8 @@ export interface KasAthlete {
   division: string;
   gender?: "L" | "P" | "";
   city?: string;
+  /** Email Google atlet (untuk mencocokkan user login dengan roster) */
+  email?: string;
   /** Bebas kas — tidak muncul di tabel kas harian */
   kasExempt?: boolean;
   /** Bebas iuran pelatih */
