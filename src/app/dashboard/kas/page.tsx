@@ -588,7 +588,7 @@ export default function KasPage() {
             <p className="mt-1 text-lg font-bold text-emerald-400">
               Rp {summary.currentBalance.toLocaleString("id-ID")}
             </p>
-            {cityFilter !== "all" ? <p className="mt-1 text-[10px] text-slate-500">Saldo di atas masih gabungan semua kota — rincian per kota ada di Ringkasan per Kota di bawah.</p> : null}
+            {cityFilter !== "all" && isKasAdmin ? <p className="mt-1 text-[10px] text-slate-500">Saldo di atas masih gabungan semua kota — rincian per kota ada di Ringkasan per Kota di bawah.</p> : null}
           </div>
           <div className="rounded-xl border border-white/10 bg-black/40 p-3 backdrop-blur-xl">
             <p className="text-[10px] text-slate-400 uppercase tracking-wider">Pemasukan</p>
@@ -616,6 +616,7 @@ export default function KasPage() {
         ) : null}
 
         {/* Ringkasan per Kota */}
+        {isKasAdmin && (
         <section>
           <h2 className="mb-2 text-sm font-semibold text-white">Ringkasan per Kota</h2>
           {cities.length === 0 ? (
@@ -648,6 +649,7 @@ export default function KasPage() {
             </p>
           ) : null}
         </section>
+        )}
 
         {/* Hutang Kas */}
         <section className="rounded-2xl border border-white/10 bg-black/40 backdrop-blur-xl overflow-hidden">
