@@ -7,6 +7,9 @@ import {
   nextTrainingDates,
   reconcileKasPayment,
   summarizeArrears,
+  excusedNamesByDate,
+  isExcusedOn,
+  isDefaultAlpaRow,
 } from "./kas-payment.ts";
 
 test("legacy settled records remain fully paid", () => {
@@ -106,4 +109,44 @@ test("gabungan applies to both cities and city libur overrides only that city", 
   ];
   assert.equal(isTrainingDateForCity("2026-10-14", "Bandung", mixed), false);
   assert.equal(isTrainingDateForCity("2026-10-14", "Jakarta", mixed), true);
+});
+
+test("excusedNamesByDate groups izin names per date and trims (Bundel A)", () => {
+  const byDate = excusedNamesByDate([
+    { date: "2026-11-14", absences: [{ name: "  Bayu " }, { name: "Amalia" }] },
+    { date: "2026-11-14", absences: [{ name: "Bayu" }] },
+    { date: "2026-11-18", absences: [{ name: "Karysa" }] },
+    { date: "2026-11-21", absences: [] },
+    { date: "", absences: [{ name: "Nobody" }] },
+  ]);
+  assert.deepEqual([...(byDate.get("2026-11-14") ?? [])].sort(), ["Amalia", "Bayu"]);
+  assert.deepEqual([...(byDate.get("2026-11-18") ?? [])], ["Karysa"]);
+  assert.equal(byDate.get("2026-11-21")?.size, 0);
+  assert.equal(byDate.has(""), false);
+});
+
+test("isExcusedOn matches only the excused athlete on that date (Bundel A)", () => {
+  const byDate = excusedNamesByDate([
+    { date: "2026-11-14", absences: [{ name: "Bayu" }] },
+  ]);
+  assert.equal(isExcusedOn("2026-11-14", "Bayu", byDate), true);
+  assert.equal(isExcusedOn("2026-11-14", " Bayu ", byDate), true, "spasi dirapikan");
+  assert.equal(isExcusedOn("2026-11-14", "Amalia", byDate), false);
+  assert.equal(isExcusedOn("2026-11-18", "Bayu", byDate), false);
+  assert.equal(isExcusedOn("2026-11-14", "bayu", byDate), false, "nama case-sensitive");
+});
+
+test("isDefaultAlpaRow only matches untouched kas-sync rows (Bundel A)", () => {
+  const alpa = {
+    totalBilled: 26000, paidKas: true, isLate: false, noNews: true,
+    isExcused: false, isExcusedWork: false, isExcusedOther: false,
+    isSettled: false, paidAmount: 0,
+  };
+  assert.equal(isDefaultAlpaRow(alpa), true);
+  assert.equal(isDefaultAlpaRow({ ...alpa, totalBilled: 13000 }), false, "sudah diubah jadi Kas");
+  assert.equal(isDefaultAlpaRow({ ...alpa, isSettled: true }), false, "sudah lunas");
+  assert.equal(isDefaultAlpaRow({ ...alpa, paidAmount: 13000 }), false, "sudah dibayar sebagian");
+  assert.equal(isDefaultAlpaRow({ ...alpa, noNews: false }), false, "sudah dikoreksi");
+  assert.equal(isDefaultAlpaRow({ ...alpa, isLate: true }), false, "sudah ditandai telat");
+  assert.equal(isDefaultAlpaRow({ ...alpa, isExcusedWork: true }), false, "baris izin lama");
 });

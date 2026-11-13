@@ -36,6 +36,59 @@ export function reconcileKasPayment(record: KasPayment, legacyPaidAmount?: numbe
   return { paidAmount, isSettled: kasOutstanding({ ...record, paidAmount }) === 0 };
 }
 
+export type DateAbsences = { date: string; absences: { name: string }[] };
+
+/** Peta tanggal → nama atlet yang izin (dari crown-absences). Bundel A. */
+export function excusedNamesByDate(records: DateAbsences[]): Map<string, Set<string>> {
+  const byDate = new Map<string, Set<string>>();
+  for (const record of records) {
+    if (!record.date || !Array.isArray(record.absences)) continue;
+    const names = byDate.get(record.date) ?? new Set<string>();
+    for (const absence of record.absences) {
+      const name = (absence?.name ?? "").trim();
+      if (name) names.add(name);
+    }
+    byDate.set(record.date, names);
+  }
+  return byDate;
+}
+
+/** Apakah atlet `name` izin pada `date` (Bundel A: izin jadwal diteruskan ke kas). */
+export function isExcusedOn(date: string, name: string, excusedByDate: Map<string, Set<string>>): boolean {
+  return excusedByDate.get(date)?.has((name ?? "").trim()) ?? false;
+}
+
+type DefaultAlpaRow = {
+  totalBilled?: number;
+  paidKas?: boolean;
+  isLate?: boolean;
+  noNews?: boolean;
+  isExcused?: boolean;
+  isExcusedWork?: boolean;
+  isExcusedOther?: boolean;
+  isSettled?: boolean;
+  paidAmount?: number;
+};
+
+/**
+ * Baris kas default-Alpa yang belum disentuh (dibuat kas-sync, belum lunas,
+ * belum dibayar sebagian, belum diubah manual). Hanya baris seperti ini yang
+ * aman diubah otomatis saat izin diteruskan ke kas (Bundel A).
+ */
+export function isDefaultAlpaRow(record: DefaultAlpaRow): boolean {
+  return (
+    record.totalBilled === 26000 &&
+    record.paidKas === true &&
+    record.isLate === false &&
+    record.noNews === true &&
+    record.isExcused === false &&
+    record.isExcusedWork === false &&
+    record.isExcusedOther === false &&
+    record.isSettled === false &&
+    (record.paidAmount ?? 0) === 0
+  );
+}
+
 export type KasSchedule = {
   date: string;
   city?: string;

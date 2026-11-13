@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { listTrainingSessions, monthBounds } from "./team-schedule.ts";
+import { listTrainingSessions, monthBounds, holidayWarningFor } from "./team-schedule.ts";
 
 test("a stored Jakarta session does not invent a second Bandung session", () => {
   const sessions = listTrainingSessions(
@@ -40,4 +40,39 @@ test("a rest document suppresses the virtual regular session", () => {
 test("month bounds stay on the calendar month", () => {
   assert.deepEqual(monthBounds("2026-02"), { start: "2026-02-01", end: "2026-02-28" });
   assert.deepEqual(monthBounds("2026-10"), { start: "2026-10-01", end: "2026-10-31" });
+});
+
+test("holiday warning names the public holiday (Bundel A)", () => {
+  assert.equal(
+    holidayWarningFor("2026-12-25", []),
+    "adalah hari libur: Hari Raya Natal",
+  );
+  assert.equal(
+    holidayWarningFor("2026-12-25", [{ date: "2026-12-25", status: "latihan" }]),
+    "adalah hari libur: Hari Raya Natal",
+  );
+});
+
+test("holiday warning catches a stored libur marker, incl. 2027 dates isHoliday does not know (Bundel A)", () => {
+  assert.equal(
+    holidayWarningFor("2027-02-06", [{ id: "x", date: "2027-02-06", status: "libur" }]),
+    "ditandai libur di jadwal",
+  );
+  assert.equal(
+    holidayWarningFor("2026-12-23", [{ id: "x", date: "2026-12-23", status: "libur" }]),
+    "ditandai libur di jadwal",
+  );
+});
+
+test("holiday warning stays silent on a normal training day (Bundel A)", () => {
+  assert.equal(holidayWarningFor("2026-11-14", []), null);
+  assert.equal(
+    holidayWarningFor("2026-11-14", [{ id: "x", date: "2026-11-14", status: "latihan" }]),
+    null,
+  );
+  // Libur di tanggal lain tidak ikut-ikutan.
+  assert.equal(
+    holidayWarningFor("2026-11-14", [{ id: "x", date: "2026-11-15", status: "libur" }]),
+    null,
+  );
 });

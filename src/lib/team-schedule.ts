@@ -38,6 +38,25 @@ export function monthBounds(yearMonth: string): { start: string; end: string } {
   return { start: `${yearMonth}-01`, end: `${yearMonth}-${String(last).padStart(2, "0")}` };
 }
 
+/**
+ * Peringatan libur (Bundel A): alasan kenapa tanggal `date` sebaiknya tidak
+ * dijadwalkan latihan — nama hari libur nasional, atau "ditandai libur di
+ * jadwal" bila tanggal itu punya penanda libur tersimpan. Penanda libur
+ * dipakai untuk libur 2027 & jeda 20–31 Des 2026 yang dibuat manual, karena
+ * isHoliday() hanya mengenal libur 2026. Mengembalikan null bila bukan libur.
+ */
+export function holidayWarningFor(
+  date: string,
+  schedules: readonly { date: string; status?: string | null }[],
+): string | null {
+  const holidayName = isHoliday(date);
+  if (holidayName) return `adalah hari libur: ${holidayName}`;
+  if (schedules.some((schedule) => schedule.date === date && schedule.status === "libur")) {
+    return "ditandai libur di jadwal";
+  }
+  return null;
+}
+
 function cityOf(city?: string | null): ScheduleCity {
   return city === "Jakarta" || city === "Gabungan" ? city : "Bandung";
 }

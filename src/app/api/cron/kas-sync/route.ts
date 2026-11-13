@@ -4,6 +4,7 @@ import { bearerMatches } from "@/lib/cron-auth";
 import { athleteJoinDate, chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
 import { addIsoDays, listTrainingSessions, type StoredSchedule } from "@/lib/team-schedule";
 import { athletesForSession, hasSessionForAthlete, nextUnpaidTrainingDates } from "@/lib/kas-city";
+import { excusedNamesByDate, isExcusedOn } from "@/lib/kas-payment";
 
 // Dynamic import to avoid build issues
 let adminDb: any = null;
@@ -72,6 +73,17 @@ export async function GET(request: Request) {
     // pakai KAS_START seperti sebelumnya.
     const joinDateByAthlete = new Map(athletes.map((a: any) => [a.id, athleteJoinDate(a)]));
 
+    // Bundel A: izin jadwal diteruskan ke kas — atlet yang izin pada suatu
+    // tanggal tidak dibuatkan baris Alpa Rp26.000, melainkan Kas Rp13.000.
+    // crown-absences: satu dokumen per tanggal, berisi daftar nama yang izin.
+    const absSnap = await db.collection("crown-absences").get();
+    const excusedByDate = excusedNamesByDate(
+      absSnap.docs.map((d: any) => ({
+        date: (d.data().date as string | undefined) ?? d.id,
+        absences: (d.data().absences ?? []) as { name: string }[],
+      })),
+    );
+
     // 3. Existing kas records for these dates
     const kasSnap = await db.collection("crown-kas-daily").get();
     const existing = new Set<string>();
@@ -82,8 +94,9 @@ export async function GET(request: Request) {
       }
     });
 
-    // 4. Create missing records (alpa: Rp 26.000) for sessions on/after each
-    //    athlete's join date. Never update an existing row.
+    // 4. Create missing records (alpa: Rp 26.000; izin: Kas Rp 13.000,
+    //    Bundel A) for sessions on/after each athlete's join date.
+    //    Never update an existing row.
     const recordsRef = db.collection("crown-kas-daily");
     const pending: Array<{ ref: ReturnType<typeof recordsRef.doc>; data: Record<string, unknown> }> = [];
 
@@ -99,6 +112,9 @@ export async function GET(request: Request) {
         if (existing.has(key) || planned.has(key)) continue;
         planned.add(key);
 
+        // Izin (Bundel A): atlet yang izin tetap bayar kas Rp13.000, tanpa
+        // denda Alpa Rp26.000 — sama seperti status "hadir" di Kas Harian.
+        const excused = isExcusedOn(date, athlete.name, excusedByDate);
         pending.push({
           ref: recordsRef.doc(),
           data: {
@@ -108,11 +124,11 @@ export async function GET(request: Request) {
             division: Array.isArray(athlete.divisions) ? athlete.divisions.join(", ") : athlete.division || "",
             paidKas: true,
             isLate: false,
-            noNews: true,
+            noNews: !excused,
             isExcused: false,
             isExcusedWork: false,
             isExcusedOther: false,
-            totalBilled: 26000,
+            totalBilled: excused ? 13000 : 26000,
             isSettled: false,
             createdAt: FieldValue.serverTimestamp(),
             updatedAt: FieldValue.serverTimestamp(),

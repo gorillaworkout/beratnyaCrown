@@ -42,6 +42,10 @@ import { useAuth } from "@/lib/auth-context";
 import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
 import { daysBetween, jakartaDateString, jakartaParts } from "@/lib/jakarta-date";
+import { holidayWarningFor } from "@/lib/team-schedule";
+import { getKasRecordsByDate, saveKasRecord } from "@/lib/firebase/kas";
+import { kasStatusPatch } from "@/lib/kas-status";
+import { isDefaultAlpaRow } from "@/lib/kas-payment";
 import {
   calendarTileClass,
   resolveAdditionalCity,
@@ -639,6 +643,12 @@ export default function JadwalPage() {
   const saveSchedule = async () => {
     if (!editingDate) return;
 
+    // Bundel A: peringatan libur — jangan sampai latihan dijadwalkan di hari libur.
+    if (editForm.status === "latihan" || editForm.status === "tambahan") {
+      const warning = holidayWarningFor(editingDate, scheduleData);
+      if (warning && !window.confirm(`Tanggal ${editingDate} ${warning}. Tetap simpan jadwal latihan?`)) return;
+    }
+
     const date = new Date(editingDate + "T00:00:00");
     const dayOfWeek = date.getDay();
 
@@ -706,6 +716,12 @@ export default function JadwalPage() {
 
   const addCustomSchedule = async () => {
     if (!addForm.date) return;
+
+    // Bundel A: peringatan libur — jangan sampai latihan dijadwalkan di hari libur.
+    if (addForm.status === "latihan" || addForm.status === "tambahan") {
+      const warning = holidayWarningFor(addForm.date, scheduleData);
+      if (warning && !window.confirm(`Tanggal ${addForm.date} ${warning}. Tetap simpan jadwal latihan?`)) return;
+    }
 
     const existingCities = scheduleData
       .filter((s) => s.date === addForm.date && s.status !== "libur" && s.status !== "event")
@@ -849,8 +865,31 @@ export default function JadwalPage() {
         date: selectedAbsenceDate,
         absences: absenceForm,
       });
+      // Bundel A: izin jadwal diteruskan ke kas — atlet yang izin tidak kena
+      // Alpa Rp26.000. Kalau baris kas tanggal itu sudah ada dan masih
+      // default-Alpa, ubah jadi Kas Rp13.000 (tanpa denda). Kalau belum ada
+      // barisnya, kas-sync yang akan membuatkan baris Kas saat sesi itu lewat
+      // (kas-sync membaca crown-absences).
+      let forwardOk = true;
+      try {
+        const records = await getKasRecordsByDate(selectedAbsenceDate);
+        const excusedNames = new Set(absenceForm.map((a) => a.name.trim()));
+        for (const record of records) {
+          if (!record.id || !excusedNames.has((record.name ?? "").trim())) continue;
+          if (!isDefaultAlpaRow(record)) continue;
+          await saveKasRecord({ id: record.id, ...kasStatusPatch("hadir") });
+        }
+      } catch (forwardError) {
+        console.error("Gagal meneruskan izin ke kas:", forwardError);
+        forwardOk = false;
+      }
       setAbsenceDialogOpen(false);
-      showToast(`Izin ${absenceForm.length} atlit berhasil disimpan!`);
+      showToast(
+        forwardOk
+          ? `Izin ${absenceForm.length} atlit berhasil disimpan!`
+          : `Izin ${absenceForm.length} atlit tersimpan, tapi ada yang gagal diteruskan ke kas. Cek Kas Harian.`,
+        forwardOk ? "success" : "error",
+      );
     } catch (error) {
       console.error(error);
       showToast("Gagal menyimpan izin. Coba lagi.", "error");
