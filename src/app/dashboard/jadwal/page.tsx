@@ -892,6 +892,11 @@ export default function JadwalPage() {
 
   const saveAbsences = async () => {
     if (!selectedAbsenceDate) return;
+    const missingReason = absenceForm.find((a) => !a.reason?.trim());
+    if (missingReason) {
+      showToast(`Alasan izin ${missingReason.name} wajib diisi.`, "error");
+      return;
+    }
     try {
       await setDoc(doc(db, "crown-absences", selectedAbsenceDate), {
         date: selectedAbsenceDate,
@@ -2710,7 +2715,7 @@ export default function JadwalPage() {
                       {isChecked && (
                         <div className="pl-7 mt-2" onClick={(e) => e.stopPropagation()}>
                           <Input
-                            placeholder="Alasan izin (opsional)..."
+                            placeholder="Alasan izin (wajib diisi)..."
                             disabled={selfIzinLocked}
                             value={absenceForm.find(a => a.name === athlete.name)?.reason || ""}
                             onChange={(e) => updateAbsenceReason(athlete.name, e.target.value)}
