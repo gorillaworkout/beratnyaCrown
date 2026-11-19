@@ -43,6 +43,7 @@ import { db } from "@/lib/firebase";
 import { isHoliday } from "@/lib/holidays";
 import { daysBetween, jakartaDateString, jakartaParts } from "@/lib/jakarta-date";
 import { holidayWarningFor } from "@/lib/team-schedule";
+import { defaultSessionStart, izinCutoffAt } from "@/lib/attendance";
 import { getKasRecordsByDate, saveKasRecord } from "@/lib/firebase/kas";
 import { kasStatusPatch } from "@/lib/kas-status";
 import { isDefaultAlpaRow } from "@/lib/kas-payment";
@@ -275,8 +276,10 @@ export default function JadwalPage() {
   const [selectedAbsenceDate, setSelectedAbsenceDate] = useState("");
   const [absenceForm, setAbsenceForm] = useState<{name: string, reason: string}[]>([]);
   const [athleteSearch, setAthleteSearch] = useState("");
-  const [dynamicAthletes, setDynamicAthletes] = useState<{name: string, divisions: string[], gender: string, role: string}[]>([]);
+  const [dynamicAthletes, setDynamicAthletes] = useState<{id?: string, name: string, divisions: string[], gender: string, role: string, email?: string, city?: string}[]>([]);
   const [absenceDivFilter, setAbsenceDivFilter] = useState<"all" | "All Girl" | "Coed">("all");
+  // Mode dialog izin: "admin" (atur siapa saja) atau "self" (atlit isi izinnya sendiri).
+  const [absenceMode, setAbsenceMode] = useState<"admin" | "self">("admin");
   const [toast, setToast] = useState<{message: string, type: 'success' | 'error'} | null>(null);
 
   // Piket matras state — 2 phases × 4 matras × 3 people = 24 total
@@ -368,7 +371,7 @@ export default function JadwalPage() {
         let divisions: string[] = [];
         if (Array.isArray(data.divisions)) divisions = data.divisions;
         else if (data.division) divisions = [data.division];
-        return { name: (data.name as string) || "", divisions, gender: (data.gender as string) || "", role: (data.role as string) || "athlete" };
+        return { id: d.id, name: (data.name as string) || "", divisions, gender: (data.gender as string) || "", role: (data.role as string) || "athlete", email: (data.email as string) || "", city: (data.city as string) || "Bandung" };
       }).filter(a => a.name).sort((a, b) => a.name.localeCompare(b.name));
       if (athletes.length > 0) setDynamicAthletes(athletes);
     });
@@ -837,8 +840,37 @@ export default function JadwalPage() {
 
   const athleteList = dynamicAthletes.length > 0 ? dynamicAthletes : FALLBACK_ATHLETES.map(n => ({ name: n, divisions: [] as string[], gender: "", role: "athlete" }));
 
-  const openAbsenceDialog = (dateStr: string) => {
+  // Atlit yang sedang login (cocokkan akun ke data atlit, seperti "Tunggakan Saya"):
+  // doc id = uid untuk yang daftar sendiri, atau email yang sama. Coach tidak
+  // ikut izin mandiri — coach tidak ditagih kas dan tidak masuk rotasi piket.
+  const selfAthlete = useMemo(() => {
+    if (!user) return null;
+    const byId = dynamicAthletes.find((a) => a.id && a.id === user.uid);
+    if (byId && byId.role !== "coach") return byId;
+    const email = user.email?.toLowerCase();
+    if (!email) return null;
+    const byEmail = dynamicAthletes.find((a) => a.email?.toLowerCase() === email);
+    return byEmail && byEmail.role !== "coach" ? byEmail : null;
+  }, [user, dynamicAthletes]);
+
+  // Jam mulai sesi untuk kota atlit itu sendiri di tanggal itu (untuk batas H-8 jam).
+  const selfSessionStart = (dateStr: string): string => {
+    const city = selfAthlete?.city || "Bandung";
+    const entry = schedule.find(
+      (s) => s.date === dateStr && (s.status === "latihan" || s.status === "tambahan") && (s.city === city || s.city === "Gabungan"),
+    );
+    return entry?.timeStart || defaultSessionStart(dateStr, city);
+  };
+
+  // Batas H-8 jam untuk izin mandiri di tanggal yang sedang dibuka dialognya.
+  const selfCutoff = absenceMode === "self" && selfAthlete
+    ? izinCutoffAt(selectedAbsenceDate, selfSessionStart(selectedAbsenceDate))
+    : null;
+  const selfIzinLocked = selfCutoff !== null && Date.now() > selfCutoff.getTime();
+
+  const openAbsenceDialog = (dateStr: string, mode: "admin" | "self" = "admin") => {
     setSelectedAbsenceDate(dateStr);
+    setAbsenceMode(mode);
     setAthleteSearch("");
     const existing = absences.find(a => a.date === dateStr);
     setAbsenceForm(existing?.absences || []);
@@ -884,10 +916,13 @@ export default function JadwalPage() {
         forwardOk = false;
       }
       setAbsenceDialogOpen(false);
+      const savedMsg = absenceMode === "self"
+        ? "Izin kamu berhasil disimpan!"
+        : `Izin ${absenceForm.length} atlit berhasil disimpan!`;
       showToast(
         forwardOk
-          ? `Izin ${absenceForm.length} atlit berhasil disimpan!`
-          : `Izin ${absenceForm.length} atlit tersimpan, tapi ada yang gagal diteruskan ke kas. Cek Kas Harian.`,
+          ? savedMsg
+          : "Izin tersimpan, tapi ada yang gagal diteruskan ke kas. Cek Kas Harian.",
         forwardOk ? "success" : "error",
       );
     } catch (error) {
@@ -1904,6 +1939,17 @@ export default function JadwalPage() {
                           {absences.find(a => a.date === entry.date)?.absences.map(a => a.name).join(", ")}
                         </div>
                       )}
+                      {/* Izin mandiri: atlit isi izinnya sendiri, batas H-8 jam. */}
+                      {(entry.status === "latihan" || entry.status === "tambahan") && !isAdmin && selfAthlete && entry.date >= todayStr && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openAbsenceDialog(entry.date, "self"); }}
+                          className="mt-1.5 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-orange-500/40 text-orange-300 hover:bg-orange-500/10 font-medium"
+                        >
+                          {absences.find(a => a.date === entry.date)?.absences.some(a => a.name === selfAthlete.name)
+                            ? "✓ Saya Izin — ubah"
+                            : "Saya Izin"}
+                        </button>
+                      )}
                     </div>
                     <div className="text-right shrink-0">
                       {entry.timeStart && entry.timeEnd ? (
@@ -2561,20 +2607,30 @@ export default function JadwalPage() {
               <DialogHeader>
                 <DialogTitle className="text-white flex items-center gap-2">
                   <UserX className="h-5 w-5 text-orange-400" />
-                  Atur Izin Atlit
+                  {absenceMode === "self" ? "Izin Saya" : "Atur Izin Atlit"}
                 </DialogTitle>
                 <DialogDescription className="text-slate-400 text-sm">
                   {selectedAbsenceDate && new Date(selectedAbsenceDate + "T00:00:00").toLocaleDateString("id-ID", {
                     weekday: "long", day: "numeric", month: "long", year: "numeric"
                   })}
-                  {absenceForm.length > 0 && (
+                  {absenceMode === "admin" && absenceForm.length > 0 && (
                     <span className="ml-2 text-orange-400 font-medium">• {absenceForm.length} izin</span>
                   )}
+                  {absenceMode === "self" && selfCutoff && (
+                    <span className={`ml-2 font-medium ${selfIzinLocked ? "text-red-400" : "text-orange-400"}`}>
+                      • Batas izin {selfCutoff.toLocaleString("id-ID", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })} (H-8 jam)
+                    </span>
+                  )}
                 </DialogDescription>
+                {absenceMode === "self" && selfIzinLocked && (
+                  <p className="mt-2 text-xs text-red-300 bg-red-500/10 border border-red-500/20 rounded-lg px-2.5 py-1.5">
+                    Batas izin (H-8 jam sebelum latihan) sudah lewat — hubungi admin kalau tetap perlu izin.
+                  </p>
+                )}
               </DialogHeader>
 
               {/* Division Filter Tabs */}
-              <div className="flex gap-1.5 mt-3">
+              <div className={`flex gap-1.5 mt-3 ${absenceMode === "self" ? "hidden" : ""}`}>
                 {(["all", "All Girl", "Coed"] as const).map(div => (
                   <button
                     key={div}
@@ -2600,7 +2656,7 @@ export default function JadwalPage() {
               </div>
 
               {/* Search */}
-              <div className="relative mt-3">
+              <div className={`relative mt-3 ${absenceMode === "self" ? "hidden" : ""}`}>
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500" />
                 <Input
                   placeholder="Cari nama atlit..."
@@ -2613,8 +2669,9 @@ export default function JadwalPage() {
 
             {/* Athlete List — scrollable */}
             <div className="flex-1 overflow-y-auto p-4 space-y-1.5 min-h-0">
-              {athleteList
+              {(absenceMode === "self" && selfAthlete ? [selfAthlete] : athleteList)
                 .filter(a => {
+                  if (absenceMode === "self") return true;
                   const matchSearch = a.name.toLowerCase().includes(athleteSearch.toLowerCase());
                   const matchDiv = absenceDivFilter === "all" || a.divisions.includes(absenceDivFilter);
                   return matchSearch && matchDiv;
@@ -2631,12 +2688,13 @@ export default function JadwalPage() {
                       }`}
                     >
                       <div
-                        className="flex items-center gap-3 cursor-pointer"
-                        onClick={() => toggleAbsenceAthlete(athlete.name)}
+                        className={`flex items-center gap-3 ${selfIzinLocked ? "" : "cursor-pointer"}`}
+                        onClick={() => { if (!selfIzinLocked) toggleAbsenceAthlete(athlete.name); }}
                       >
                         <Checkbox
                           checked={isChecked}
-                          onCheckedChange={() => toggleAbsenceAthlete(athlete.name)}
+                          disabled={selfIzinLocked}
+                          onCheckedChange={() => { if (!selfIzinLocked) toggleAbsenceAthlete(athlete.name); }}
                           className="data-[state=checked]:bg-orange-500 data-[state=checked]:border-orange-500"
                         />
                         <span className="text-sm text-slate-200 flex-1">{athlete.name}</span>
@@ -2652,6 +2710,7 @@ export default function JadwalPage() {
                       {isChecked && (
                         <Input
                           placeholder="Alasan izin (opsional)..."
+                          disabled={selfIzinLocked}
                           value={absenceForm.find(a => a.name === athlete.name)?.reason || ""}
                           onChange={(e) => updateAbsenceReason(athlete.name, e.target.value)}
                           className="h-8 text-xs bg-black/30 border-white/10 text-white mt-2 ml-7"
@@ -2667,9 +2726,10 @@ export default function JadwalPage() {
             <div className="p-4 pt-3 border-t border-white/10 bg-slate-900/80 backdrop-blur-sm">
               <Button
                 onClick={saveAbsences}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 h-11 text-sm font-medium"
+                disabled={selfIzinLocked}
+                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white border-0 h-11 text-sm font-medium disabled:opacity-50"
               >
-                Simpan{absenceForm.length > 0 ? ` (${absenceForm.length} izin)` : ""}
+                {absenceMode === "self" ? "Simpan Izin Saya" : `Simpan${absenceForm.length > 0 ? ` (${absenceForm.length} izin)` : ""}`}
               </Button>
             </div>
           </DialogContent>

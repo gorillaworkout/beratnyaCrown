@@ -27,6 +27,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { getAllKasRecords } from "@/lib/firebase/kas";
 import { summarizeArrears } from "@/lib/kas-payment";
+import { summarizeAttendance, type AttendanceSummary } from "@/lib/attendance";
 
 type FirebaseUser = {
   uid: string;
@@ -168,6 +169,28 @@ function KasArrearsBadge({
   );
 }
 
+// Persentase kehadiran sejak Okt 2026 (dari baris kas harian): hadir = datang
+// latihan (termasuk telat), izin = izin dari jadwal, alpa = sisanya.
+function AttendanceLine({
+  athleteId,
+  loaded,
+  attendance,
+}: {
+  athleteId: string;
+  loaded: boolean;
+  attendance: Map<string, AttendanceSummary>;
+}) {
+  if (!loaded) return null;
+  const a = attendance.get(athleteId);
+  if (!a || a.total === 0) return null;
+  return (
+    <span className="mt-1 block text-[10px] text-slate-400 leading-tight">
+      Kehadiran {a.hadirPct}% · Izin {a.izinPct}% · Alpa {a.alpaPct}%{" "}
+      <span className="text-slate-500">({a.total} sesi sejak Okt 2026)</span>
+    </span>
+  );
+}
+
 export default function AthletesDashboardPage() {
   const { user, isAdmin } = useAuth();
   const [usersList, setUsersList] = useState<FirebaseUser[]>([]);
@@ -189,6 +212,7 @@ export default function AthletesDashboardPage() {
   const [filterCity, setFilterCity] = useState<string>("all");
   const [showAddForm, setShowAddForm] = useState(false);
   const [arrearsByAthlete, setArrearsByAthlete] = useState<Map<string, { amount: number; sessions: number }>>(new Map());
+  const [attendanceByAthlete, setAttendanceByAthlete] = useState<Map<string, AttendanceSummary>>(new Map());
   const [kasLoaded, setKasLoaded] = useState(false);
   const [filterArrearsOnly, setFilterArrearsOnly] = useState(false);
   const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
@@ -253,6 +277,7 @@ export default function AthletesDashboardPage() {
       .then((records) => {
         if (cancelled) return;
         setArrearsByAthlete(summarizeArrears(records));
+        setAttendanceByAthlete(summarizeAttendance(records));
         setKasLoaded(true);
       })
       .catch((e) => console.error("Failed to load kas arrears", e));
@@ -765,6 +790,7 @@ export default function AthletesDashboardPage() {
 
                           {/* Badge tunggakan / lunas kas */}
                           <KasArrearsBadge athleteId={ath.id} kasExempt={ath.kasExempt} loaded={kasLoaded} arrears={arrearsByAthlete} />
+                          <AttendanceLine athleteId={ath.id} loaded={kasLoaded} attendance={attendanceByAthlete} />
 
                           {/* Coach Fee Exempt Badge */}
                           {ath.coachFeeExempt && (
