@@ -868,6 +868,15 @@ export default function JadwalPage() {
     : null;
   const selfIzinLocked = selfCutoff !== null && Date.now() > selfCutoff.getTime();
 
+  // Tombol "Saya Izin" hanya di sesi kota atlit itu sendiri (atau sesi
+  // gabungan). Atlit tanpa kota ikut semua sesi, jadi tombolnya selalu muncul.
+  const canSelfIzinOn = (entryCity?: string): boolean => {
+    if (!selfAthlete) return false;
+    if (!selfAthlete.city) return true;
+    const city = entryCity || "Bandung";
+    return city === selfAthlete.city || city === "Gabungan";
+  };
+
   const openAbsenceDialog = (dateStr: string, mode: "admin" | "self" = "admin") => {
     setSelectedAbsenceDate(dateStr);
     setAbsenceMode(mode);
@@ -1945,7 +1954,7 @@ export default function JadwalPage() {
                         </div>
                       )}
                       {/* Izin mandiri: atlit isi izinnya sendiri, batas H-8 jam. */}
-                      {(entry.status === "latihan" || entry.status === "tambahan") && !isAdmin && selfAthlete && entry.date >= todayStr && (
+                      {(entry.status === "latihan" || entry.status === "tambahan") && !isAdmin && selfAthlete && entry.date >= todayStr && canSelfIzinOn(entry.city) && (
                         <button
                           onClick={(e) => { e.stopPropagation(); openAbsenceDialog(entry.date, "self"); }}
                           className="mt-1.5 inline-flex items-center gap-1 text-[10px] px-2 py-1 rounded-full border border-orange-500/40 text-orange-300 hover:bg-orange-500/10 font-medium"
