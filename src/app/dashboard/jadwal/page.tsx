@@ -2708,14 +2708,15 @@ export default function JadwalPage() {
                         </div>
                       </div>
                       {isChecked && (
-                        <Input
-                          placeholder="Alasan izin (opsional)..."
-                          disabled={selfIzinLocked}
-                          value={absenceForm.find(a => a.name === athlete.name)?.reason || ""}
-                          onChange={(e) => updateAbsenceReason(athlete.name, e.target.value)}
-                          className="h-8 text-xs bg-black/30 border-white/10 text-white mt-2 ml-7"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                        <div className="pl-7 mt-2" onClick={(e) => e.stopPropagation()}>
+                          <Input
+                            placeholder="Alasan izin (opsional)..."
+                            disabled={selfIzinLocked}
+                            value={absenceForm.find(a => a.name === athlete.name)?.reason || ""}
+                            onChange={(e) => updateAbsenceReason(athlete.name, e.target.value)}
+                            className="h-8 text-xs bg-black/30 border-white/10 text-white"
+                          />
+                        </div>
                       )}
                     </div>
                   );
