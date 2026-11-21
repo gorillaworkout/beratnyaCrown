@@ -85,3 +85,20 @@ test("audit changes show transaction cancellation", () => {
     { label: "Status", before: "Aktif", after: "Dibatalkan" },
   ]);
 });
+
+test("planId cicilan lolos validasi bila diisi dan dihilangkan bila kosong", () => {
+  const withPlan = validateSavingsInput({ ...base, type: "DEPOSIT", planId: "kejurda-kejurnas-2027" });
+  assert.equal(withPlan.ok, true);
+  if (withPlan.ok) assert.equal(withPlan.value.planId, "kejurda-kejurnas-2027");
+  const emptyPlan = validateSavingsInput({ ...base, type: "DEPOSIT", planId: "   " });
+  assert.equal(emptyPlan.ok, true);
+  if (emptyPlan.ok) assert.equal("planId" in emptyPlan.value, false);
+});
+
+test("audit changes menampilkan perubahan rencana", () => {
+  const before = { ...base, type: "DEPOSIT" } as SavingsTransaction;
+  const after = { ...before, planId: "kejurda-kejurnas-2027" } as SavingsTransaction;
+  assert.deepEqual(getSavingsAuditChanges(before, after), [
+    { label: "Rencana", before: "Tabungan biasa", after: "Kejurda & Kejurnas" },
+  ]);
+});

@@ -41,6 +41,10 @@ export async function PATCH(
         updatedAt: editedAt,
       };
 
+      // Bila rencana dikosongkan, hapus field planId warisan (set tanpa
+      // merge menimpa seluruh dokumen, jadi field yang hilang ikut terhapus).
+      if (!result.value.planId) delete after.planId;
+
       const { id: _id, ...storedAfter } = after;
       transaction.set(transactionRef, storedAfter);
       transaction.set(auditRef, {

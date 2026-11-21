@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 import { AlertTriangle, ArrowDownCircle, ArrowUpCircle, CheckCircle2, History, Pencil, PiggyBank, Search, Wallet, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
@@ -14,6 +14,13 @@ import {
   type SavingsTransaction,
   type SavingsTransactionType,
 } from "@/lib/athlete-savings";
+import {
+  calculateInstallmentProgressFromSavings,
+  INSTALLMENT_PLAN_ID,
+  INSTALLMENT_PLAN_NAME,
+  shortMonthLabel,
+  type InstallmentPlan,
+} from "@/lib/installments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -36,6 +43,7 @@ const emptyForm = (athlete?: Athlete): TransactionForm => ({
   type: "DEPOSIT",
   amount: "",
   purpose: "Kejurnas",
+  planId: "",
   date: today(),
   note: "",
   reason: "",
@@ -66,6 +74,7 @@ export default function AthleteSavingsPage() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [plan, setPlan] = useState<InstallmentPlan | null>(null);
   const [toast, setToast] = useState<{ tone: "success" | "error"; message: string } | null>(null);
 
   useEffect(() => {
@@ -83,6 +92,9 @@ export default function AthleteSavingsPage() {
           .sort((a, b) => a.name.localeCompare(b.name)),
       );
     });
+    const stopPlan = onSnapshot(doc(db, "crown-installment-plans", INSTALLMENT_PLAN_ID), (snapshot) => {
+      setPlan(snapshot.exists() ? ({ id: snapshot.id, ...snapshot.data() } as InstallmentPlan) : null);
+    });
     const stopTransactions = onSnapshot(collection(db, "crown-athlete-savings-transactions"), (snapshot) => {
       setTransactions(
         snapshot.docs
@@ -92,6 +104,7 @@ export default function AthleteSavingsPage() {
     });
     return () => {
       stopAthletes();
+      stopPlan();
       stopTransactions();
     };
   }, []);
@@ -112,11 +125,30 @@ export default function AthleteSavingsPage() {
 
   const rows = useMemo(() => athletes.map((athlete) => {
     const athleteTransactions = transactions.filter((item) => item.athleteId === athlete.id);
-    return { athlete, transactions: athleteTransactions, balance: calculateSavingsBalance(athleteTransactions) };
-  }), [athletes, transactions]);
+    const planTransactions = athleteTransactions.filter((item) => item.planId === INSTALLMENT_PLAN_ID);
+    return {
+      athlete,
+      transactions: athleteTransactions,
+      balance: calculateSavingsBalance(athleteTransactions),
+      cicilan: plan ? calculateInstallmentProgressFromSavings(plan, planTransactions) : null,
+    };
+  }), [athletes, transactions, plan]);
 
   const filteredRows = rows.filter(({ athlete }) => athlete.name.toLowerCase().includes(search.toLowerCase()));
   const selected = rows.find(({ athlete }) => athlete.id === selectedAthleteId) ?? null;
+  const cicilanTeam = useMemo(() => {
+    if (!plan) return null;
+    const paid = rows.reduce((sum, row) => sum + (row.cicilan?.paid ?? 0), 0);
+    const target = rows.length * plan.totalTarget;
+    const lunasCount = rows.filter((row) => (row.cicilan?.pct ?? 0) === 100).length;
+    const terms = plan.terms.map((term, index) => ({
+      ...term,
+      paid: rows.reduce((sum, row) => sum + (row.cicilan?.terms[index]?.paid ?? 0), 0),
+      expected: rows.length * term.expected,
+    }));
+    return { paid, target, remaining: Math.max(0, target - paid), lunasCount, terms };
+  }, [plan, rows]);
+
   const totalSavings = rows.reduce((sum, row) => sum + Math.max(row.balance, 0), 0);
   const totalDebt = rows.reduce((sum, row) => sum + Math.abs(Math.min(row.balance, 0)), 0);
 
@@ -136,6 +168,7 @@ export default function AthleteSavingsPage() {
       type: transaction.type,
       amount: String(transaction.amount),
       purpose: transaction.purpose,
+      planId: transaction.planId ?? "",
       date: transaction.date,
       note: transaction.note || "",
       reason: "",
@@ -147,6 +180,18 @@ export default function AthleteSavingsPage() {
   function chooseAthlete(id: string) {
     const athlete = athletes.find((item) => item.id === id);
     setForm((current) => ({ ...current, athleteId: id, athleteName: athlete?.name ?? "" }));
+  }
+
+  function choosePlan(value: string) {
+    setForm((current) => ({
+      ...current,
+      planId: value,
+      purpose: value === INSTALLMENT_PLAN_ID
+        ? INSTALLMENT_PLAN_NAME
+        : current.purpose === INSTALLMENT_PLAN_NAME
+          ? "Kejurnas"
+          : current.purpose,
+    }));
   }
 
   async function authHeaders() {
@@ -166,6 +211,7 @@ export default function AthleteSavingsPage() {
         type: form.type,
         amount: Number(form.amount),
         purpose: form.purpose,
+        planId: form.planId ?? "",
         date: form.date,
         note: form.note,
         ...(editing ? { reason: form.reason } : { requestId }),
@@ -237,6 +283,40 @@ export default function AthleteSavingsPage() {
           {isAdmin && <Button onClick={() => openCreate()} className="bg-emerald-600 hover:bg-emerald-500">Tambah Transaksi</Button>}
         </header>
 
+        {plan && cicilanTeam && (
+          <section className="overflow-hidden rounded-2xl border border-amber-500/25 bg-amber-950/10 p-5">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <h2 className="text-lg font-semibold text-amber-100">Cicilan {plan.name}</h2>
+                <p className="mt-1 text-sm text-amber-200/70">Total {rupiah.format(plan.totalTarget)} per atlet · termin Des 2026–Jun 2027</p>
+              </div>
+              <span className="rounded-full border border-amber-500/30 bg-amber-500/15 px-2.5 py-1 text-[11px] font-semibold text-amber-300">CICILAN</span>
+            </div>
+            <div className="mt-4 grid gap-3 sm:grid-cols-4">
+              <PlanStat label="Terkumpul (tim)" value={rupiah.format(cicilanTeam.paid)} />
+              <PlanStat label="Target tim" value={rupiah.format(cicilanTeam.target)} />
+              <PlanStat label="Sisa (tim)" value={rupiah.format(cicilanTeam.remaining)} />
+              <PlanStat label="Atlet lunas" value={`${cicilanTeam.lunasCount} / ${rows.length}`} />
+            </div>
+            <div className="mt-4">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wider text-slate-400">Termin · terkumpul tim</p>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                {cicilanTeam.terms.map((term) => (
+                  <div key={term.month} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-sm font-semibold text-white">{shortMonthLabel(term.month)}</span>
+                      <span className="text-[11px] text-slate-400">{rupiah.format(term.paid)} / {rupiah.format(term.expected)}</span>
+                    </div>
+                    <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-full rounded-full bg-amber-400" style={{ width: `${term.expected > 0 ? Math.min(100, Math.round((100 * term.paid) / term.expected)) : 0}%` }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </section>
+        )}
+
         <section className="grid gap-3 sm:grid-cols-3">
           <Summary label="Total Tabungan" value={rupiah.format(totalSavings)} tone="emerald" />
           <Summary label="Total Hutang" value={rupiah.format(totalDebt)} tone="rose" />
@@ -254,7 +334,18 @@ export default function AthleteSavingsPage() {
             <div className="max-h-[650px] divide-y divide-white/5 overflow-y-auto">
               {filteredRows.map((row) => (
                 <button key={row.athlete.id} onClick={() => setSelectedAthleteId(row.athlete.id)} className={`flex w-full items-center justify-between gap-3 p-4 text-left transition ${selectedAthleteId === row.athlete.id ? "bg-cyan-500/10" : "hover:bg-white/5"}`}>
-                  <div className="min-w-0"><p className="truncate font-medium text-white">{row.athlete.name}</p><p className="text-xs text-slate-500">{row.transactions.length} transaksi</p></div>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium text-white">{row.athlete.name}</p>
+                    <p className="text-xs text-slate-500">{row.transactions.length} transaksi</p>
+                    {plan && row.cicilan && (
+                      <div className="mt-1.5">
+                        <div className="h-1.5 w-36 overflow-hidden rounded-full bg-white/10">
+                          <div className="h-full rounded-full bg-amber-400" style={{ width: `${row.cicilan.pct}%` }} />
+                        </div>
+                        <p className="mt-1 text-[11px] text-amber-200/70">Cicilan {rupiah.format(row.cicilan.paid)} · {row.cicilan.pct}%</p>
+                      </div>
+                    )}
+                  </div>
                   <Balance amount={row.balance} />
                 </button>
               ))}
@@ -271,6 +362,24 @@ export default function AthleteSavingsPage() {
                   <div><h2 className="text-xl font-semibold">{selected.athlete.name}</h2><div className="mt-1"><Balance amount={selected.balance} large /></div></div>
                   {isAdmin && <Button size="sm" onClick={() => openCreate(selected.athlete)} className="bg-cyan-600 hover:bg-cyan-500">Tambah</Button>}
                 </div>
+                {plan && selected.cicilan && (
+                  <div className="border-b border-white/10 bg-amber-500/5 p-5">
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <h3 className="font-semibold text-amber-100">Cicilan {plan.name}</h3>
+                      <span className="text-sm text-slate-300">Terbayar {rupiah.format(selected.cicilan.paid)} · Sisa {rupiah.format(selected.cicilan.remaining)} · {selected.cicilan.pct}%</span>
+                    </div>
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-white/10">
+                      <div className="h-full rounded-full bg-amber-400" style={{ width: `${selected.cicilan.pct}%` }} />
+                    </div>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {selected.cicilan.terms.map((term) => (
+                        <span key={term.month} title={`${term.label}: ${rupiah.format(term.paid)} dari ${rupiah.format(term.expected)}`} className={`rounded-full border px-2.5 py-1 text-[11px] ${term.status === "lunas" ? "border-emerald-500/30 bg-emerald-500/15 text-emerald-300" : term.status === "sebagian" ? "border-amber-500/30 bg-amber-500/15 text-amber-300" : "border-white/10 bg-white/5 text-slate-400"}`}>
+                          {shortMonthLabel(term.month)} · {term.status === "lunas" ? "Lunas" : term.status === "sebagian" ? rupiah.format(term.paid) : "—"}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 <div className="divide-y divide-white/5">
                   {selected.transactions.map((transaction) => {
                     const transactionAudits = audits.filter((audit) => audit.transactionId === transaction.id);
@@ -279,7 +388,7 @@ export default function AthleteSavingsPage() {
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex gap-3">
                             {transaction.type === "DEPOSIT" ? <ArrowUpCircle className="mt-0.5 h-5 w-5 text-emerald-400" /> : <ArrowDownCircle className="mt-0.5 h-5 w-5 text-rose-400" />}
-                            <div><p className="font-medium text-white">{transaction.purpose} {!!transaction.cancelledAt && <span className="ml-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-300">Dibatalkan</span>}</p><p className="text-xs text-slate-400">{transaction.date}{transaction.note ? ` · ${transaction.note}` : ""}</p><p className="mt-1 text-[11px] text-slate-600">Dicatat oleh {transaction.createdByName || "Admin"}{transaction.cancelledAt ? ` · Dibatalkan: ${transaction.cancellationReason}` : ""}</p></div>
+                            <div><p className="font-medium text-white">{transaction.purpose} {transaction.planId && <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] text-amber-300">Cicilan</span>} {!!transaction.cancelledAt && <span className="ml-1 rounded bg-rose-500/20 px-1.5 py-0.5 text-[10px] text-rose-300">Dibatalkan</span>}</p><p className="text-xs text-slate-400">{transaction.date}{transaction.note ? ` · ${transaction.note}` : ""}</p><p className="mt-1 text-[11px] text-slate-600">Dicatat oleh {transaction.createdByName || "Admin"}{transaction.cancelledAt ? ` · Dibatalkan: ${transaction.cancellationReason}` : ""}</p></div>
                           </div>
                           <div className="text-right"><p className={`${transaction.cancelledAt ? "line-through text-slate-500" : transaction.type === "DEPOSIT" ? "text-emerald-400" : "text-rose-400"} font-semibold`}>{transaction.type === "DEPOSIT" ? "+" : "−"}{rupiah.format(transaction.amount)}</p>{isAdmin && !transaction.cancelledAt && <div className="mt-2 flex justify-end gap-2"><button onClick={() => openEdit(transaction)} className="inline-flex items-center gap-1 text-xs text-cyan-400 hover:text-cyan-300"><Pencil className="h-3 w-3" /> Edit</button><button onClick={() => openCancel(transaction)} className="text-xs text-rose-400 hover:text-rose-300">Batalkan</button></div>}</div>
                         </div>
@@ -321,8 +430,9 @@ export default function AthleteSavingsPage() {
           <DialogHeader><DialogTitle>{editing ? "Edit Transaksi" : "Tambah Transaksi"}</DialogTitle><DialogDescription className="text-slate-400">Penarikan boleh melebihi saldo dan akan tercatat sebagai hutang.</DialogDescription></DialogHeader>
           <form onSubmit={saveTransaction} className="space-y-4">
             <Field label="Atlet"><select value={form.athleteId} onChange={(event) => chooseAthlete(event.target.value)} required className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm"><option value="">Pilih atlet</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name}</option>)}</select></Field>
+            <Field label="Rencana"><select value={form.planId ?? ""} onChange={(event) => choosePlan(event.target.value)} className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm"><option value="">Tabungan biasa</option>{plan && <option value={INSTALLMENT_PLAN_ID}>{INSTALLMENT_PLAN_NAME}</option>}</select></Field>
             <div className="grid gap-3 sm:grid-cols-2"><Field label="Jenis"><select value={form.type} onChange={(event) => setForm({ ...form, type: event.target.value as SavingsTransactionType })} className="h-10 w-full rounded-md border border-white/10 bg-black/40 px-3 text-sm"><option value="DEPOSIT">Setoran</option><option value="WITHDRAWAL">Penarikan</option></select></Field><Field label="Nominal"><Input type="number" min="1" step="1" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} required className="border-white/10 bg-black/40" /></Field></div>
-            <div className="grid gap-3 sm:grid-cols-2"><Field label="Tujuan"><Input value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} placeholder="Kejurnas / Asia" required className="border-white/10 bg-black/40" /></Field><Field label="Tanggal"><Input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required className="border-white/10 bg-black/40 [color-scheme:dark]" /></Field></div>
+            <div className="grid gap-3 sm:grid-cols-2"><Field label="Tujuan"><Input value={form.purpose} onChange={(event) => setForm({ ...form, purpose: event.target.value })} placeholder="Kejurnas / Asia" required disabled={!!form.planId} className="border-white/10 bg-black/40" /></Field><Field label="Tanggal"><Input type="date" value={form.date} onChange={(event) => setForm({ ...form, date: event.target.value })} required className="border-white/10 bg-black/40 [color-scheme:dark]" /></Field></div>
             <Field label="Catatan"><Input value={form.note} onChange={(event) => setForm({ ...form, note: event.target.value })} placeholder="Opsional" className="border-white/10 bg-black/40" /></Field>
             {editing && <Field label="Alasan perubahan"><Input value={form.reason} onChange={(event) => setForm({ ...form, reason: event.target.value })} placeholder="Contoh: salah input nominal" required className="border-amber-500/30 bg-black/40" /></Field>}
             {error && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-3 text-sm text-rose-300">{error}</p>}
@@ -364,6 +474,10 @@ export default function AthleteSavingsPage() {
 function Summary({ label, value, tone }: { label: string; value: string; tone: "emerald" | "rose" | "cyan" }) {
   const colors = { emerald: "text-emerald-400 border-emerald-500/20", rose: "text-rose-400 border-rose-500/20", cyan: "text-cyan-400 border-cyan-500/20" };
   return <div className={`rounded-2xl border bg-white/5 p-4 ${colors[tone]}`}><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-xl font-bold">{value}</p></div>;
+}
+
+function PlanStat({ label, value }: { label: string; value: string }) {
+  return <div className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-xs text-slate-400">{label}</p><p className="mt-1 text-base font-bold text-white">{value}</p></div>;
 }
 
 function Balance({ amount, large = false }: { amount: number; large?: boolean }) {

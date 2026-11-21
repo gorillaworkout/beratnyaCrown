@@ -1,3 +1,5 @@
+import { planIdLabel } from "./installments";
+
 export type SavingsTransactionType = "DEPOSIT" | "WITHDRAWAL";
 
 export type SavingsTransaction = {
@@ -7,6 +9,8 @@ export type SavingsTransaction = {
   type: SavingsTransactionType;
   amount: number;
   purpose: string;
+  /** ID rencana cicilan; kosong berarti tabungan biasa. */
+  planId?: string;
   date: string;
   note: string;
   createdByUid?: string;
@@ -23,7 +27,7 @@ export type SavingsTransaction = {
 
 export type SavingsInput = Pick<
   SavingsTransaction,
-  "athleteId" | "athleteName" | "type" | "amount" | "purpose" | "date" | "note"
+  "athleteId" | "athleteName" | "type" | "amount" | "purpose" | "date" | "note" | "planId"
 >;
 
 export type SavingsAudit = {
@@ -73,6 +77,7 @@ export function getSavingsAuditChanges(
     { label: "Jenis", value: (transaction) => transaction.type === "DEPOSIT" ? "Setoran" : "Penarikan" },
     { label: "Nominal", value: (transaction) => transaction.amount },
     { label: "Tujuan", value: (transaction) => transaction.purpose },
+    { label: "Rencana", value: (transaction) => planIdLabel(transaction.planId) },
     { label: "Tanggal", value: (transaction) => transaction.date },
     { label: "Catatan", value: (transaction) => transaction.note || "—" },
     { label: "Status", value: (transaction) => transaction.cancelledAt ? "Dibatalkan" : "Aktif" },
@@ -92,6 +97,7 @@ export function validateSavingsInput(
   const athleteId = input.athleteId?.trim() ?? "";
   const athleteName = input.athleteName?.trim() ?? "";
   const purpose = input.purpose?.trim() ?? "";
+  const planId = typeof input.planId === "string" ? input.planId.trim() : "";
   const note = input.note?.trim() ?? "";
   const date = input.date?.trim() ?? "";
 
@@ -126,6 +132,7 @@ export function validateSavingsInput(
       purpose,
       date,
       note,
+      ...(planId ? { planId } : {}),
     },
   };
 }

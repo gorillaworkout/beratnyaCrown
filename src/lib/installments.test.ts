@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  calculateInstallmentProgress,
-  validateInstallmentPaymentInput,
+  calculateInstallmentProgressFromSavings,
+  planIdLabel,
+  shortMonthLabel,
   validateInstallmentPlan,
-  type InstallmentPayment,
   type InstallmentPlan,
+  type SavingsLikeTransaction,
 } from "./installments.ts";
 
 // Rencana Kejurda & Kejurnas yang sama dengan data seed — total 2.455.000.
@@ -61,59 +62,29 @@ test("rencana ditolak bila ada bulan termin ganda atau tidak urut", () => {
   assert.equal(validateInstallmentPlan(badMonth).ok, false);
 });
 
-const basePayment = {
-  planId: "kejurda-kejurnas-2027",
-  athleteId: "athlete-1",
-  athleteName: "Rani",
-  amount: 358_000,
-  date: "2026-12-05",
-  note: "",
-};
-
-test("pembayaran valid lolos validasi", () => {
-  const result = validateInstallmentPaymentInput(basePayment);
-  assert.equal(result.ok, true);
-  if (result.ok) assert.equal(result.value.amount, 358_000);
-});
-
-test("pembayaran ditolak bila nominal bukan bilangan bulat positif", () => {
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, amount: 0 }).ok, false);
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, amount: -1000 }).ok, false);
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, amount: 100.5 }).ok, false);
-});
-
-test("pembayaran ditolak bila tanggal tidak valid", () => {
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, date: "2026-02-30" }).ok, false);
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, date: "05-12-2026" }).ok, false);
-});
-
-test("pembayaran ditolak bila atlet atau rencana kosong, dan alasan wajib saat diminta", () => {
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, athleteId: "" }).ok, false);
-  assert.equal(validateInstallmentPaymentInput({ ...basePayment, planId: "" }).ok, false);
-  assert.equal(validateInstallmentPaymentInput(basePayment, { requireReason: true }).ok, false);
-  assert.equal(validateInstallmentPaymentInput(basePayment, { requireReason: true, reason: "salah input" }).ok, true);
-});
-
-const payment = (amount: number, date: string, cancelledAt?: unknown): InstallmentPayment => ({
-  planId: "kejurda-kejurnas-2027",
-  athleteId: "athlete-1",
-  athleteName: "Rani",
+const deposit = (amount: number, date: string, cancelledAt?: unknown): SavingsLikeTransaction => ({
+  type: "DEPOSIT",
   amount,
   date,
-  note: "",
   ...(cancelledAt ? { cancelledAt } : {}),
 });
 
-test("progres nol bila belum ada pembayaran", () => {
-  const progress = calculateInstallmentProgress(plan, []);
+const withdrawal = (amount: number, date: string): SavingsLikeTransaction => ({
+  type: "WITHDRAWAL",
+  amount,
+  date,
+});
+
+test("progres nol bila belum ada setoran cicilan", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, []);
   assert.equal(progress.paid, 0);
   assert.equal(progress.remaining, 2_455_000);
   assert.equal(progress.pct, 0);
   assert.ok(progress.terms.every((term) => term.status === "belum" && term.paid === 0));
 });
 
-test("waterfall: satu bayaran mengisi termin awal dulu dan boleh menutupi beberapa termin", () => {
-  const progress = calculateInstallmentProgress(plan, [payment(500_000, "2026-12-05")]);
+test("waterfall: satu setoran mengisi termin awal dulu dan boleh menutupi beberapa termin", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, [deposit(500_000, "2026-12-05")]);
   assert.equal(progress.paid, 500_000);
   assert.equal(progress.remaining, 1_955_000);
   assert.equal(progress.pct, 20);
@@ -122,10 +93,10 @@ test("waterfall: satu bayaran mengisi termin awal dulu dan boleh menutupi bebera
   assert.equal(progress.terms[2].status, "belum");
 });
 
-test("bayaran sebagian dan beberapa bayaran terakumulasi", () => {
-  const progress = calculateInstallmentProgress(plan, [
-    payment(100_000, "2026-12-05"),
-    payment(258_000, "2027-01-10"),
+test("setoran sebagian dan beberapa setoran terakumulasi", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, [
+    deposit(100_000, "2026-12-05"),
+    deposit(258_000, "2027-01-10"),
   ]);
   assert.equal(progress.paid, 358_000);
   assert.equal(progress.terms[0].status, "lunas");
@@ -133,19 +104,55 @@ test("bayaran sebagian dan beberapa bayaran terakumulasi", () => {
 });
 
 test("kelebihan bayar: sisa 0, persen mentok 100, semua termin lunas", () => {
-  const progress = calculateInstallmentProgress(plan, [payment(2_500_000, "2026-12-05")]);
+  const progress = calculateInstallmentProgressFromSavings(plan, [deposit(2_500_000, "2026-12-05")]);
   assert.equal(progress.paid, 2_500_000);
   assert.equal(progress.remaining, 0);
   assert.equal(progress.pct, 100);
   assert.ok(progress.terms.every((term) => term.status === "lunas"));
 });
 
-test("pembayaran yang dibatalkan tidak dihitung", () => {
-  const progress = calculateInstallmentProgress(plan, [
-    payment(358_000, "2026-12-05"),
-    payment(358_000, "2026-12-06", new Date()),
+test("setoran yang dibatalkan tidak dihitung", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, [
+    deposit(358_000, "2026-12-05"),
+    deposit(358_000, "2026-12-06", new Date()),
   ]);
   assert.equal(progress.paid, 358_000);
   assert.equal(progress.terms[0].status, "lunas");
   assert.equal(progress.terms[1].status, "belum");
+});
+
+test("penarikan mengurangi progres cicilan", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, [
+    deposit(358_000, "2026-12-05"),
+    withdrawal(100_000, "2026-12-20"),
+  ]);
+  assert.equal(progress.paid, 258_000);
+  assert.equal(progress.remaining, 2_197_000);
+  assert.equal(progress.pct, 11);
+  assert.deepEqual(progress.terms[0], { month: "2026-12", label: "Desember 2026", expected: 358_000, paid: 258_000, status: "sebagian" });
+});
+
+test("penarikan melebihi setoran: progres dijepit ke 0", () => {
+  const progress = calculateInstallmentProgressFromSavings(plan, [
+    deposit(100_000, "2026-12-05"),
+    withdrawal(150_000, "2026-12-20"),
+  ]);
+  assert.equal(progress.paid, 0);
+  assert.equal(progress.remaining, 2_455_000);
+  assert.equal(progress.pct, 0);
+  assert.ok(progress.terms.every((term) => term.status === "belum" && term.paid === 0));
+});
+
+test("label bulan singkat memakai singkatan Indonesia", () => {
+  assert.equal(shortMonthLabel("2026-12"), "Des 26");
+  assert.equal(shortMonthLabel("2027-06"), "Jun 27");
+  assert.equal(shortMonthLabel("2027-05"), "Mei 27");
+  assert.equal(shortMonthLabel("tidak-valid"), "tidak-valid");
+});
+
+test("label rencana: kosong berarti tabungan biasa", () => {
+  assert.equal(planIdLabel(undefined), "Tabungan biasa");
+  assert.equal(planIdLabel(""), "Tabungan biasa");
+  assert.equal(planIdLabel("kejurda-kejurnas-2027"), "Kejurda & Kejurnas");
+  assert.equal(planIdLabel("rencana-lain"), "rencana-lain");
 });

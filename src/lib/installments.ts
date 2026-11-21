@@ -1,9 +1,30 @@
 // Cicilan (installment) untuk biaya event — mis. Kejurda & Kejurnas.
-// Beda dengan tabungan: ada rencana (target total + termin bulanan) dan
-// progres per atlet dihitung dari rencana itu. Nominal bayar bebas —
-// atlet boleh bayar berapa saja tiap bulannya, tidak harus sama dengan
-// nominal termin; alokasi ke termin memakai waterfall (bayaran tertua
-// mengisi termin paling awal dulu).
+// Rencana (target total + termin bulanan) tinggal di koleksi
+// crown-installment-plans; pembayarannya dicatat sebagai transaksi
+// tabungan (crown-athlete-savings-transactions) dengan planId.
+// Nominal bayar bebas — atlet boleh bayar berapa saja tiap bulannya,
+// tidak harus sama dengan nominal termin; alokasi ke termin memakai
+// waterfall (bayaran tertua mengisi termin paling awal dulu).
+
+export const INSTALLMENT_PLAN_ID = "kejurda-kejurnas-2027";
+export const INSTALLMENT_PLAN_NAME = "Kejurda & Kejurnas";
+
+/** Label rencana untuk ditampilkan; tanpa planId berarti tabungan biasa. */
+export function planIdLabel(planId?: string): string {
+  if (!planId) return "Tabungan biasa";
+  if (planId === INSTALLMENT_PLAN_ID) return INSTALLMENT_PLAN_NAME;
+  return planId;
+}
+
+const MONTH_SHORT = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+
+/** "2026-12" -> "Des 26". */
+export function shortMonthLabel(month: string): string {
+  const [year, monthPart] = month.split("-");
+  const index = Number(monthPart) - 1;
+  if (!year || !Number.isInteger(index) || index < 0 || index > 11) return month;
+  return `${MONTH_SHORT[index]} ${year.slice(2)}`;
+}
 
 export type InstallmentItem = {
   label: string;
@@ -28,29 +49,6 @@ export type InstallmentPlan = {
   createdAt?: unknown;
 };
 
-export type InstallmentPayment = {
-  id?: string;
-  planId: string;
-  athleteId: string;
-  athleteName: string;
-  amount: number;
-  /** Tanggal bayar, format YYYY-MM-DD. */
-  date: string;
-  note: string;
-  createdByUid?: string;
-  createdByName?: string;
-  createdAt?: unknown;
-  cancelledAt?: unknown;
-  cancelledByUid?: string;
-  cancelledByName?: string;
-  cancellationReason?: string;
-};
-
-export type InstallmentPaymentInput = Pick<
-  InstallmentPayment,
-  "planId" | "athleteId" | "athleteName" | "amount" | "date" | "note"
->;
-
 export type InstallmentTermProgress = {
   month: string;
   label: string;
@@ -67,7 +65,6 @@ export type InstallmentProgress = {
   terms: InstallmentTermProgress[];
 };
 
-const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const MONTH_PATTERN = /^\d{4}-\d{2}$/;
 
 export function planItemsTotal(plan: Pick<InstallmentPlan, "items">): number {
@@ -133,44 +130,6 @@ export function validateInstallmentPlan(
   return { ok: true };
 }
 
-type PaymentValidationResult =
-  | { ok: true; value: InstallmentPaymentInput }
-  | { ok: false; error: string };
-
-export function validateInstallmentPaymentInput(
-  input: Partial<InstallmentPaymentInput>,
-  options: { requireReason?: boolean; reason?: string } = {},
-): PaymentValidationResult {
-  const planId = input.planId?.trim() ?? "";
-  const athleteId = input.athleteId?.trim() ?? "";
-  const athleteName = input.athleteName?.trim() ?? "";
-  const note = input.note?.trim() ?? "";
-  const date = input.date?.trim() ?? "";
-
-  if (!planId) return { ok: false, error: "Rencana cicilan wajib dipilih." };
-  if (!athleteId || !athleteName) return { ok: false, error: "Atlet wajib dipilih." };
-  const amount = input.amount;
-  if (amount === undefined || !Number.isSafeInteger(amount) || amount <= 0) {
-    return { ok: false, error: "Nominal harus berupa bilangan bulat positif." };
-  }
-  const parsedDate = new Date(`${date}T00:00:00Z`);
-  if (
-    !DATE_PATTERN.test(date)
-    || Number.isNaN(parsedDate.getTime())
-    || parsedDate.toISOString().slice(0, 10) !== date
-  ) {
-    return { ok: false, error: "Tanggal pembayaran tidak valid." };
-  }
-  if (options.requireReason && !options.reason?.trim()) {
-    return { ok: false, error: "Alasan perubahan wajib diisi." };
-  }
-
-  return {
-    ok: true,
-    value: { planId, athleteId, athleteName, amount, date, note },
-  };
-}
-
 /**
  * Progres cicilan satu atlet pada satu rencana. Pembayaran yang dibatalkan
  * tidak dihitung. Alokasi waterfall: bayaran tertua (urut tanggal) mengisi
@@ -180,7 +139,7 @@ export function validateInstallmentPaymentInput(
  */
 export function calculateInstallmentProgress(
   plan: Pick<InstallmentPlan, "totalTarget" | "terms">,
-  payments: Pick<InstallmentPayment, "amount" | "date" | "cancelledAt">[],
+  payments: { amount: number; date: string; cancelledAt?: unknown }[],
 ): InstallmentProgress {
   const active = payments.filter((payment) => !payment.cancelledAt);
   const paid = active.reduce((sum, payment) => sum + payment.amount, 0);
@@ -203,4 +162,33 @@ export function calculateInstallmentProgress(
   });
 
   return { paid, remaining, pct, terms };
+}
+
+/** Transaksi tabungan (bentuk minimal) yang dihitung ke progres cicilan. */
+export type SavingsLikeTransaction = {
+  type: "DEPOSIT" | "WITHDRAWAL";
+  amount: number;
+  date: string;
+  cancelledAt?: unknown;
+};
+
+/**
+ * Progres cicilan satu atlet dari transaksi tabungannya yang terikat
+ * rencana (planId). Setoran menambah, penarikan mengurangi; bila
+ * penarikan melebihi setoran, progres dijepit ke 0.
+ */
+export function calculateInstallmentProgressFromSavings(
+  plan: Pick<InstallmentPlan, "totalTarget" | "terms">,
+  transactions: SavingsLikeTransaction[],
+): InstallmentProgress {
+  const progress = calculateInstallmentProgress(
+    plan,
+    transactions.map((transaction) => ({
+      amount: transaction.type === "DEPOSIT" ? transaction.amount : -transaction.amount,
+      date: transaction.date,
+      cancelledAt: transaction.cancelledAt,
+    })),
+  );
+  if (progress.paid >= 0) return progress;
+  return { ...progress, paid: 0, remaining: plan.totalTarget, pct: 0 };
 }

@@ -25,6 +25,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { InstallPrompt, InstallLink } from "@/components/install-prompt";
 import { EditableInfoSection } from "@/components/editable-info-section";
+import { PlanInfoSection } from "@/components/plan-info-section";
 import { PaymentMethods } from "@/components/payment-methods";
 
 const glassCardClass =
@@ -333,6 +334,9 @@ export default function InfoDashboardPage() {
               Administrasi & Keuangan
             </h2>
 
+            <PlanInfoSection />
+
+            <p className="pt-2 text-xs font-semibold uppercase tracking-wider text-slate-500">Pengumuman</p>
             <EditableInfoSection category="finance" />
 
           </div>
@@ -344,6 +348,7 @@ export default function InfoDashboardPage() {
               Event & Kompetisi
             </h2>
 
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Pengumuman</p>
             <EditableInfoSection category="event" />
           </div>
         </div>
