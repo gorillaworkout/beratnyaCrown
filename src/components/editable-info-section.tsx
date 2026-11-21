@@ -39,7 +39,7 @@ export function EditableInfoSection({ category }: { category: InfoCategory }) {
         <Input value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Judul" className="bg-black/20 border-white/10" />
         <Input value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} placeholder="Keterangan" className="bg-black/20 border-white/10" />
         <div className="flex gap-2"><Button size="sm" onClick={() => save(item.id)}>Simpan</Button><Button size="sm" variant="outline" onClick={() => setEditing(null)}>Batal</Button></div>
-      </div> : <div className="flex justify-between gap-3"><div><h3 className="font-semibold text-white">{item.title}</h3>{item.description && <p className="text-sm text-slate-400 mt-1">{item.description}</p>}</div>
+      </div> : <div className="flex justify-between gap-3"><div><h3 className="font-semibold text-white">{item.title}</h3>{item.description && <p className="whitespace-pre-line text-sm text-slate-400 mt-1">{item.description}</p>}</div>
         {isAdmin && <div className="flex"><Button size="icon" variant="ghost" onClick={() => { setEditing(item.id); setForm({ title: item.title, description: item.description }); }}><Pencil className="h-4 w-4" /></Button><Button size="icon" variant="ghost" onClick={() => confirm("Hapus informasi ini?") && deleteDoc(doc(db, "crown-info-board", item.id))}><Trash2 className="h-4 w-4 text-rose-400" /></Button></div>}
       </div>}
     </CardContent></Card>)}

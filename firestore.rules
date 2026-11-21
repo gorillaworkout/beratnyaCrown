@@ -94,6 +94,12 @@ service cloud.firestore {
     match /crown-milestones/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-info-board/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
 
+    // Cicilan event (mis. Kejurda & Kejurnas): rencana dibaca semua anggota,
+    // pembayaran dicatat admin dari browser. Pembayaran tidak pernah dihapus
+    // — pembatalan lewat flag cancelledAt seperti tabungan.
+    match /crown-installment-plans/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    match /crown-installment-payments/{doc} { allow read: if hasProfile() || isAdmin(); allow create, update: if isAdmin(); allow delete: if false; }
+
     // Tabungan atlet: seluruh anggota boleh melihat ledger. Semua mutasi hanya
     // melalui API Admin SDK agar validasi, identitas editor, dan audit trail
     // tidak dapat dilewati dari DevTools. Transaksi tidak pernah dihapus.

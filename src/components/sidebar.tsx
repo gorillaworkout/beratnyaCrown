@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import Image from "next/image";
 import { useState } from "react";
-import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell, HeartPulse, Shirt, Wallet, UserPlus, PiggyBank, GraduationCap } from "lucide-react";
+import { Scale, Calendar, CalendarClock, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell, HeartPulse, Shirt, Wallet, UserPlus, PiggyBank, GraduationCap } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
 const getNavItems = (isAdmin: boolean) => [
@@ -52,6 +52,11 @@ const getNavItems = (isAdmin: boolean) => [
     label: "Tabungan Atlet",
     href: "/dashboard/savings",
     icon: PiggyBank,
+  },
+  {
+    label: "Cicilan",
+    href: "/dashboard/cicilan",
+    icon: CalendarClock,
   },
   {
     label: "Pesanan Danus",
