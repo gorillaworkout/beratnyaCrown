@@ -10,6 +10,7 @@ import {
   excusedNamesByDate,
   isExcusedOn,
   isDefaultAlpaRow,
+  kasDailyDocId,
 } from "./kas-payment.ts";
 
 test("legacy settled records remain fully paid", () => {
@@ -149,4 +150,11 @@ test("isDefaultAlpaRow only matches untouched kas-sync rows (Bundel A)", () => {
   assert.equal(isDefaultAlpaRow({ ...alpa, noNews: false }), false, "sudah dikoreksi");
   assert.equal(isDefaultAlpaRow({ ...alpa, isLate: true }), false, "sudah ditandai telat");
   assert.equal(isDefaultAlpaRow({ ...alpa, isExcusedWork: true }), false, "baris izin lama");
+});
+
+test("kas daily doc id is deterministic per athlete and date", () => {
+  assert.equal(kasDailyDocId("abc123", "2026-11-21"), "abc123_2026-11-21");
+  assert.equal(kasDailyDocId("abc123", "2026-11-21"), kasDailyDocId("abc123", "2026-11-21"));
+  assert.notEqual(kasDailyDocId("abc123", "2026-11-21"), kasDailyDocId("abc123", "2026-11-22"));
+  assert.notEqual(kasDailyDocId("abc123", "2026-11-21"), kasDailyDocId("xyz789", "2026-11-21"));
 });

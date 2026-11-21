@@ -15,6 +15,15 @@ export function kasOutstanding(record: KasPayment): number {
   return Math.max(0, (record.totalBilled ?? 0) - kasPaidAmount(record));
 }
 
+/**
+ * ID dokumen baris kas harian — deterministik per atlet + tanggal, sama seperti
+ * bulk-pay dan rollover. Dua proses kas-sync yang jalan bersamaan akan menulis
+ * dokumen yang sama (bukan dua baris), jadi tidak ada tagihan ganda.
+ */
+export function kasDailyDocId(athleteId: string, date: string): string {
+  return `${athleteId}_${date}`;
+}
+
 export type AthleteArrears = { amount: number; sessions: number };
 
 /** Tunggakan kas per atlet: jumlah sisa tagihan + berapa sesi menunggak. */

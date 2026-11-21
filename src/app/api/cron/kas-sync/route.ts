@@ -4,7 +4,7 @@ import { bearerMatches } from "@/lib/cron-auth";
 import { athleteJoinDate, chunkList, jakartaDateString, KAS_START, KAS_SYNC_BATCH } from "@/lib/jakarta-date";
 import { addIsoDays, listTrainingSessions, type StoredSchedule } from "@/lib/team-schedule";
 import { athletesForSession, hasSessionForAthlete, nextUnpaidTrainingDates } from "@/lib/kas-city";
-import { excusedNamesByDate, isExcusedOn } from "@/lib/kas-payment";
+import { excusedNamesByDate, isExcusedOn, kasDailyDocId } from "@/lib/kas-payment";
 
 // Dynamic import to avoid build issues
 let adminDb: any = null;
@@ -116,7 +116,7 @@ export async function GET(request: Request) {
         // denda Alpa Rp26.000 — sama seperti status "hadir" di Kas Harian.
         const excused = isExcusedOn(date, athlete.name, excusedByDate);
         pending.push({
-          ref: recordsRef.doc(),
+          ref: recordsRef.doc(kasDailyDocId(athlete.id, date)),
           data: {
             date,
             athleteId: athlete.id,
