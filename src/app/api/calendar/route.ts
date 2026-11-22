@@ -209,25 +209,6 @@ async function generateSchedule(monthsAhead: number = 6): Promise<ScheduleEntry[
     }
   }
 
-
-  // Inject Payment Reminders (Cicilan Kejurda/Kejurnas)
-  const paymentDates = [
-    { date: "2026-03-30", amount: "Rp 350.000", note: "Termin 3" },
-    { date: "2026-04-30", amount: "Rp 200.000", note: "Termin 4" },
-    { date: "2026-05-30", amount: "Rp 200.000", note: "Termin 5" },
-    { date: "2026-06-30", amount: "Rp 200.000", note: "Termin 6 (Pelunasan + Add Div)" },
-  ];
-
-  for (const p of paymentDates) {
-    schedule.push({
-      date: p.date,
-      status: "pembayaran",
-      timeStart: "08:00",
-      timeEnd: "10:00",
-      note: `Tagihan ${p.note}: ${p.amount}`,
-    });
-  }
-
   return schedule;
 
 }
