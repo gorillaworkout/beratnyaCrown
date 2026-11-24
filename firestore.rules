@@ -82,7 +82,6 @@ service cloud.firestore {
     match /crown-events/{doc}        { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-absences/{doc}      { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-attendance/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
-    match /crown-piket/{doc}         { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-p3k/{doc}           { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-kas-daily/{doc}     { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-kas-transactions/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
