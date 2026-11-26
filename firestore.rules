@@ -89,6 +89,8 @@ service cloud.firestore {
     match /crown-kas-bulk-requests/{doc} { allow read, write: if false; }
     // Uang pelatih: semua anggota boleh melihat, hanya admin yang mengubah.
     match /crown_coach_fees/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
+    // Pengambilan gaji pelatih: dicatat admin dari aplikasi, dibaca anggota.
+    match /crown-coach-payouts/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-gor-costs/{doc} { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }
     match /crown-milestones/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin() || isMemberWriter(); }
     match /crown-info-board/{doc}    { allow read: if hasProfile() || isAdmin(); allow write: if isAdmin(); }

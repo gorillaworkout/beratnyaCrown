@@ -33,3 +33,25 @@ export function summarizeFees(athletes: FeeAthlete[], records: Record<string, Fe
   }
   return s;
 }
+
+// Pengambilan gaji pelatih: dicatat admin, mengurangi sisa kas pelatih.
+// Koleksi `crown-coach-payouts` (auto-id): { amount, coachName, note?, createdAt, createdByName }.
+export const COACH_PAYOUT_COLLECTION = "crown-coach-payouts";
+export type CoachPayout = { amount: number; coachName: string; note?: string | null; createdAt?: { toDate?: () => Date } | null; createdByName?: string };
+
+export function monthsBetween(fromMonth: string, toMonth: string): string[] {
+  const out: string[] = [];
+  let [y, m] = fromMonth.split("-").map(Number);
+  const [ty, tm] = toMonth.split("-").map(Number);
+  while (y < ty || (y === ty && m <= tm)) {
+    out.push(`${y}-${String(m).padStart(2, "0")}`);
+    m++;
+    if (m > 12) { m = 1; y++; }
+  }
+  return out;
+}
+
+// Total uang pelatih yang sudah masuk dari fromMonth s.d. toMonth (inklusif).
+export function totalCollected(athletes: FeeAthlete[], records: Record<string, FeeRecord>, fromMonth: string, toMonth: string) {
+  return monthsBetween(fromMonth, toMonth).reduce((t, mm) => t + summarizeFees(athletes, records, mm).collected, 0);
+}

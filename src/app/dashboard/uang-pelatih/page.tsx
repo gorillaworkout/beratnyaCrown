@@ -1,15 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, doc, onSnapshot, query, serverTimestamp, where, writeBatch } from "firebase/firestore";
+import { addDoc, collection, doc, onSnapshot, orderBy, query, serverTimestamp, writeBatch } from "firebase/firestore";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/lib/auth-context";
-import { COACH_FEE, COACH_FEE_COLLECTION, feeDocId, isBillingMonth, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "@/lib/coach-fee";
+import { COACH_FEE, COACH_FEE_COLLECTION, COACH_FEE_START, COACH_PAYOUT_COLLECTION, feeDocId, isBillingMonth, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, totalCollected, type CoachPayout, type FeeAthlete, type FeeRecord } from "@/lib/coach-fee";
 
 type Athlete = FeeAthlete & { divisions: string[] };
 
 const rupiah = (n: number) => `Rp ${n.toLocaleString("id-ID")}`;
+const fmtPayoutDate = (p: CoachPayout) => {
+  const d = p.createdAt?.toDate?.();
+  return d ? new Intl.DateTimeFormat("id-ID", { day: "numeric", month: "short", year: "numeric" }).format(d) : "—";
+};
 const selectClass = "rounded-lg border border-white/10 bg-black px-3 py-2 text-sm";
 const ym = (y: number, m0: number) => `${y + Math.floor(m0 / 12)}-${String((m0 % 12) + 1).padStart(2, "0")}`;
 const monthNow = () => new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Jakarta", year: "numeric", month: "2-digit" }).format(new Date());
@@ -28,10 +32,11 @@ const BADGE = {
 const LABEL = { LUNAS: "Lunas", BELUM_BAYAR: "Belum bayar", GRATIS: "Gratis bulan ini", BEBAS: "Bebas (permanen)" } as const;
 
 export default function UangPelatihPage() {
-  const { user, isAdmin } = useAuth();
+  const { user, isAdmin, role, loading } = useAuth();
+  const canViewCoachFee = isAdmin || role === "coach";
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<Record<string, FeeRecord>>({});
-  const [loadedMonth, setLoadedMonth] = useState("");
+  const [ready, setReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [month, setMonth] = useState(() => { const m = monthNow(); return isBillingMonth(m) ? m : "2026-10"; });
   const [city, setCity] = useState("all");
@@ -40,17 +45,28 @@ export default function UangPelatihPage() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<{ ok: boolean; message: string } | null>(null);
+  const [payouts, setPayouts] = useState<(CoachPayout & { id: string })[]>([]);
+  const [payoutAmount, setPayoutAmount] = useState("");
+  const [payoutCoach, setPayoutCoach] = useState("");
+  const [payoutNote, setPayoutNote] = useState("");
 
   useEffect(() => onSnapshot(collection(db, "crown-athletes"), (s) => setAthletes(s.docs.map((d) => {
     const x = d.data() as Record<string, unknown>;
     return { id: d.id, name: String(x.name ?? ""), city: String(x.city || "Bandung"), role: String(x.role || "athlete"), coachFeeExempt: !!x.coachFeeExempt, vakum: !!x.vakum, divisions: Array.isArray(x.divisions) ? (x.divisions as string[]) : [] };
   }))), []);
+  // Langganan seluruh bulan sekaligus: tabel per bulan + total sejak Okt 2026
+  // dihitung dari data yang sama.
   useEffect(() => {
-    setRecords({}); setLoadedMonth(""); setLoadError(false);
-    return onSnapshot(query(collection(db, COACH_FEE_COLLECTION), where("month", "==", month)),
-      (s) => { setRecords(Object.fromEntries(s.docs.map((d) => [d.id, d.data() as FeeRecord]))); setLoadedMonth(month); },
+    setRecords({}); setReady(false); setLoadError(false);
+    return onSnapshot(collection(db, COACH_FEE_COLLECTION),
+      (s) => { setRecords(Object.fromEntries(s.docs.map((d) => [d.id, d.data() as FeeRecord]))); setReady(true); },
       (e) => { console.error(e); setLoadError(true); });
-  }, [month]);
+  }, []);
+  useEffect(() => {
+    return onSnapshot(query(collection(db, COACH_PAYOUT_COLLECTION), orderBy("createdAt", "desc")),
+      (s) => setPayouts(s.docs.map((d) => ({ id: d.id, ...(d.data() as CoachPayout) }))),
+      (e) => console.error(e));
+  }, []);
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(null), 3500); return () => clearTimeout(t); }, [toast]);
   useEffect(() => {
     if (!confirmOpen) return;
@@ -61,7 +77,6 @@ export default function UangPelatihPage() {
 
   const members = useMemo(() => athletes.filter((a) => a.role !== "coach").sort((a, b) => a.name.localeCompare(b.name)), [athletes]);
   const cities = useMemo(() => [...new Set(members.map((a) => a.city))].sort(), [members]);
-  const ready = loadedMonth === month;
   // Atlet bebas permanen (BEBAS) tidak muncul di list sama sekali.
   // Hitungan per status (mengikuti filter kota, sebelum filter status) untuk chip.
   const statusCounts = useMemo(() => {
@@ -86,6 +101,11 @@ export default function UangPelatihPage() {
       return ra - rb || a.name.localeCompare(b.name);
     }), [members, city, filter, records, month]);
   const summary = summarizeFees(members.filter((a) => city === "all" || a.city === city), records, month);
+  // Saldo gaji pelatih: total masuk sejak Okt 2026 (semua kota) dikurangi yang sudah diambil.
+  const collectedSinceOct = totalCollected(members, records, COACH_FEE_START, monthNow());
+  const totalPayout = payouts.reduce((t, p) => t + (Number(p.amount) || 0), 0);
+  const remaining = collectedSinceOct - totalPayout;
+  const coachNames = useMemo(() => athletes.filter((a) => a.role === "coach").map((a) => a.name).sort(), [athletes]);
   // Selama data bulan ini belum termuat semua atlet tampak "belum bayar" — jangan bisa dipilih/ditimpa.
   const unpaidVisible = ready ? rows.filter((a) => statusOf(a, records, month) === "BELUM_BAYAR") : [];
   const selectedRows = rows.filter((a) => selected.has(a.id));
@@ -101,6 +121,25 @@ export default function UangPelatihPage() {
   }, [unpaidVisible]);
 
   const toggle = (id: string) => setSelected((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+
+  async function recordPayout() {
+    const amount = Math.round(Number(payoutAmount));
+    if (!isAdmin || busy || !payoutCoach.trim() || !(amount > 0)) return;
+    setBusy(true);
+    try {
+      await addDoc(collection(db, COACH_PAYOUT_COLLECTION), {
+        amount, coachName: payoutCoach.trim(), note: payoutNote.trim() || null,
+        createdAt: serverTimestamp(), createdByName: user?.displayName || user?.email || "Admin",
+      });
+      setPayoutAmount(""); setPayoutNote("");
+      setToast({ ok: true, message: `Pengambilan ${payoutCoach.trim()} ${rupiah(amount)} tercatat — sisa ${rupiah(remaining - amount)}` });
+    } catch (error) {
+      console.error(error);
+      setToast({ ok: false, message: "Gagal mencatat pengambilan. Coba lagi." });
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function apply(targets: Athlete[], status: "LUNAS" | "GRATIS" | "BELUM_BAYAR", okMessage: string) {
     if (!isAdmin || busy || !ready || targets.length === 0 || !isBillingMonth(month)) return;
@@ -127,6 +166,17 @@ export default function UangPelatihPage() {
     }
   }
 
+  // Uang pelatih hanya untuk coach + admin. Atlet/viewer yang buka URL langsung
+  // dapat pesan ini, bukan daftarnya.
+  if (!loading && !canViewCoachFee) {
+    return <main className="min-h-screen bg-[#050505] p-4 pb-28 text-white md:p-8 md:pb-28"><div className="mx-auto max-w-5xl space-y-5">
+      <header>
+        <h1 className="text-2xl font-bold">Uang Pelatih</h1>
+        <p className="mt-2 text-sm text-slate-400">Halaman ini hanya bisa dilihat coach dan admin.</p>
+      </header>
+    </div></main>;
+  }
+
   return <main className="min-h-screen bg-[#050505] p-4 pb-28 text-white md:p-8 md:pb-28"><div className="mx-auto max-w-5xl space-y-5">
     <header>
       <h1 className="text-2xl font-bold">Uang Pelatih</h1>
@@ -151,7 +201,7 @@ export default function UangPelatihPage() {
       })}
     </div>
 
-    {loadError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">Gagal memuat pembayaran bulan ini. Muat ulang halaman; tombol bayar dikunci sampai data masuk.</p>}
+    {loadError && <p role="alert" className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200">Gagal memuat pembayaran uang pelatih. Muat ulang halaman; tombol bayar dikunci sampai data masuk.</p>}
     {!ready && !loadError && <p className="text-xs text-slate-500">Memuat pembayaran…</p>}
 
     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -159,6 +209,16 @@ export default function UangPelatihPage() {
       <Stat label="Belum masuk" value={rupiah(summary.outstanding)} tone="text-rose-300" />
       <Stat label="Sudah / belum bayar" value={`${summary.lunas} / ${summary.belum}`} />
       <Stat label="Gratis / bebas" value={`${summary.gratis} / ${summary.bebas}`} />
+    </div>
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <h2 className="text-sm font-semibold">Saldo Gaji Pelatih</h2>
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <Stat label="Terkumpul sejak Okt 2026" value={rupiah(collectedSinceOct)} tone="text-emerald-300" />
+        <Stat label="Sudah diambil pelatih" value={rupiah(totalPayout)} tone="text-amber-300" />
+        <Stat label="Sisa" value={rupiah(remaining)} tone={remaining < 0 ? "text-rose-300" : "text-emerald-300"} />
+      </div>
+      <p className="mt-2 text-xs text-slate-500">Saldo dihitung dari semua kota, dari Oktober 2026 sampai bulan ini. Pengambilan gaji mengurangi sisa langsung saat dicatat.</p>
     </div>
 
     <div className="overflow-x-auto rounded-xl border border-white/10"><table className="w-full text-left text-sm">
@@ -182,6 +242,33 @@ export default function UangPelatihPage() {
         </tr>;
       })}</tbody></table>
       {!rows.length && <p className="p-8 text-center text-slate-500">Tidak ada atlet untuk filter ini.</p>}
+    </div>
+
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <h2 className="text-sm font-semibold">Pengambilan Gaji Pelatih</h2>
+      <p className="mt-1 text-xs text-slate-500">Dicatat admin saat pelatih mengambil gaji dari kas yang terkumpul. Sisa di atas langsung berkurang.</p>
+      {isAdmin && (
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="flex flex-col gap-1 text-xs text-slate-400">Jumlah (Rp)
+            <input value={payoutAmount} onChange={(e) => setPayoutAmount(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" placeholder="2000000" className="w-40 rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white" />
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">Pelatih
+            <input value={payoutCoach} onChange={(e) => setPayoutCoach(e.target.value)} list="coach-names" placeholder="Nama pelatih" className="w-44 rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white" />
+            <datalist id="coach-names">{coachNames.map((n) => <option key={n} value={n} />)}</datalist>
+          </label>
+          <label className="flex flex-col gap-1 text-xs text-slate-400">Catatan (opsional)
+            <input value={payoutNote} onChange={(e) => setPayoutNote(e.target.value)} placeholder="cth: gaji November" className="w-44 rounded-lg border border-white/10 bg-black px-3 py-2 text-sm text-white" />
+          </label>
+          <button disabled={busy || !payoutCoach.trim() || !(Number(payoutAmount) > 0)} onClick={recordPayout} className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold hover:bg-amber-500 disabled:opacity-50">{busy ? "Menyimpan..." : "Catat pengambilan"}</button>
+        </div>
+      )}
+      <ul className="mt-3 divide-y divide-white/5 text-sm">
+        {payouts.length === 0 && <li className="py-2 text-slate-500">Belum ada pengambilan gaji.</li>}
+        {payouts.map((p) => <li key={p.id} className="flex items-center justify-between gap-3 py-2">
+          <span><span className="font-medium">{p.coachName}</span> <span className="text-slate-500">· {fmtPayoutDate(p)}{p.note ? ` · ${p.note}` : ""}</span></span>
+          <span className="font-semibold text-amber-300">−{rupiah(p.amount)}</span>
+        </li>)}
+      </ul>
     </div>
   </div>
 

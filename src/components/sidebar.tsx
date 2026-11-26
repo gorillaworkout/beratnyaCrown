@@ -7,7 +7,7 @@ import { useState } from "react";
 import { Scale, Calendar, Menu, X, ClipboardCheck, LogOut, Megaphone, ShieldAlert, Calculator, Dumbbell, HeartPulse, Shirt, Wallet, UserPlus, PiggyBank, GraduationCap } from "lucide-react";
 import { useAuth } from "@/lib/auth-context";
 
-const getNavItems = (isAdmin: boolean) => [
+const getNavItems = (isAdmin: boolean, isCoach: boolean) => [
   {
     label: "Info Board",
     href: "/dashboard",
@@ -38,11 +38,15 @@ const getNavItems = (isAdmin: boolean) => [
     href: "/dashboard/kas",
     icon: Calculator,
   },
-  {
-    label: "Uang Pelatih",
-    href: "/dashboard/uang-pelatih",
-    icon: GraduationCap,
-  },
+  ...(isAdmin || isCoach
+    ? [
+        {
+          label: "Uang Pelatih",
+          href: "/dashboard/uang-pelatih",
+          icon: GraduationCap,
+        },
+      ]
+    : []),
   {
     label: "Biaya Gor",
     href: "/dashboard/gor",
@@ -87,9 +91,9 @@ const getNavItems = (isAdmin: boolean) => [
 export function Sidebar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const { user, isAdmin, signOut } = useAuth();
+  const { user, isAdmin, role, signOut } = useAuth();
   
-  const navItems = getNavItems(isAdmin);
+  const navItems = getNavItems(isAdmin, role === "coach");
 
   return (
     <>

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { COACH_FEE, feeDocId, isBillingMonth, isPayer, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, type FeeAthlete, type FeeRecord } from "./coach-fee.ts";
+import { COACH_FEE, feeDocId, isBillingMonth, isPayer, monthsBetween, PAYMENT_STATUS_ORDER, statusOf, summarizeFees, totalCollected, type FeeAthlete, type FeeRecord } from "./coach-fee.ts";
 
 const A = (id: string, extra: Partial<FeeAthlete> = {}): FeeAthlete => ({ id, name: id, city: "Bandung", ...extra });
 
@@ -50,4 +50,22 @@ test("money already collected stays counted if athlete is later marked exempt", 
   const r = summarizeFees([A("c", { coachFeeExempt: true })], rec, "2026-10");
   assert.equal(r.collected, COACH_FEE);
   assert.equal(r.bebas, 1);
+});
+
+test("monthsBetween lists every month inclusive, across year boundary", () => {
+  assert.deepEqual(monthsBetween("2026-10", "2026-11"), ["2026-10", "2026-11"]);
+  assert.deepEqual(monthsBetween("2026-12", "2027-02"), ["2026-12", "2027-01", "2027-02"]);
+  assert.deepEqual(monthsBetween("2026-11", "2026-10"), []);
+});
+
+test("totalCollected sums across months and skips unpaid months", () => {
+  const athletes = [A("a"), A("b")];
+  const rec: Record<string, FeeRecord> = {
+    [feeDocId("a", "2026-10")]: { status: "LUNAS", amount: COACH_FEE },
+    [feeDocId("b", "2026-10")]: { status: "LUNAS", amount: COACH_FEE },
+    [feeDocId("a", "2026-11")]: { status: "LUNAS", amount: COACH_FEE },
+  };
+  assert.equal(totalCollected(athletes, rec, "2026-10", "2026-11"), 300000);
+  assert.equal(totalCollected(athletes, rec, "2026-10", "2026-10"), 200000);
+  assert.equal(totalCollected(athletes, rec, "2026-11", "2026-11"), 100000);
 });
