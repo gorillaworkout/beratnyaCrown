@@ -181,7 +181,49 @@ export async function GET(request: Request) {
     }
     const deletedCount = toDelete.length;
 
-    // 6. Rollover bayar di muka: tanggal yang sudah dibayar lalu jadi libur.
+    // 6. Bersihkan tagihan pre-join: baris kas untuk tanggal sebelum athlete
+    //    join tidak boleh ada. Backfill 24 Nov 2026 sempat membuat 453 baris
+    //    tanpa cek tanggal gabung, sehingga atlet baru ke-tagih sejak Oktober.
+    //    Hapus hanya baris default-alpa yang belum disentuh (belum lunas,
+    //    belum dibayar sebagian, masih Rp26.000 apa adanya). Baris yang sudah
+    //    lunas, sudah dibayar sebagian, atau sudah diubah manual tidak
+    //    disentuh. Tanggal join diambil dari SEMUA atlet (bukan hanya yang
+    //    masih ditagih) supaya baris atlet vakum/bebas kas ikut bersih.
+    const joinDateByAthleteId = new Map<string, string>();
+    for (const d of athSnap.docs as any[]) {
+      joinDateByAthleteId.set(
+        d.id,
+        athleteJoinDate({ createTime: d.createTime, createdAt: d.data().createdAt }),
+      );
+    }
+    const preJoinToDelete: Array<{ ref: ReturnType<typeof recordsRef.doc> }> = [];
+    for (const d of kasSnap.docs) {
+      const data = d.data();
+      if (!data.date || !data.athleteId) continue;
+      if (data.date < KAS_START || data.date > yesterday) continue;
+      if (data.isSettled || (data.paidAmount ?? 0) > 0) continue;
+      if (
+        data.totalBilled !== 26000 ||
+        data.paidKas !== true ||
+        data.isLate !== false ||
+        data.noNews !== true ||
+        data.isExcused !== false ||
+        data.isExcusedWork !== false ||
+        data.isExcusedOther !== false
+      ) continue;
+      const join = joinDateByAthleteId.get(data.athleteId);
+      if (join === undefined) continue; // atlet sudah dihapus: jangan sentuh
+      if (data.date >= join) continue;
+      preJoinToDelete.push({ ref: d.ref });
+    }
+    for (const group of chunkList(preJoinToDelete, KAS_SYNC_BATCH)) {
+      const batch = db.batch();
+      for (const item of group) batch.delete(item.ref);
+      await batch.commit();
+    }
+    const preJoinDeletedCount = preJoinToDelete.length;
+
+    // 7. Rollover bayar di muka: tanggal yang sudah dibayar lalu jadi libur.
     //    Atlet membeli N sesi latihan, bukan N tanggal — jadi pembayaran yang
     //    menempel di tanggal tanpa sesi dipindah ke latihan berikutnya untuk
     //    kota atlet itu (satu baris lunas Rp13.000 per sesi). Hanya baris
@@ -263,6 +305,7 @@ export async function GET(request: Request) {
       athletes: athletes.length,
       created: count,
       deleted: deletedCount,
+      preJoinDeleted: preJoinDeletedCount,
       rolled: rolledCount,
     });
   } catch (error: any) {
